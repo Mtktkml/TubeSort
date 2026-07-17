@@ -24,6 +24,7 @@ namespace TubeSort.Game
         private Board board;
         private ColorPalette palette;
         private Sprite unitSprite;
+        private Material liquidMaterial;
         private readonly List<TubeView> tubeViews = new List<TubeView>();
 
         private int selectedIndex = -1;
@@ -42,8 +43,32 @@ namespace TubeSort.Game
             palette = new ColorPalette();
             unitSprite = CreateSquareSprite();
 
+            liquidMaterial = CreateLiquidMaterial();
+            if (liquidMaterial == null)
+            {
+                enabled = false;
+                return;
+            }
+
             board = CreateTestBoard();
             BuildViews();
+        }
+
+        /// <summary>
+        /// Sıvı malzemesi. Tüm tüpler aynı malzemeyi paylaşır; tüpe özel değerler
+        /// (doluluk, katman renkleri) MaterialPropertyBlock ile gönderilir.
+        /// Shader Resources altında olduğu için build'e de dahil edilir.
+        /// </summary>
+        private static Material CreateLiquidMaterial()
+        {
+            var shader = Resources.Load<Shader>("Liquid");
+            if (shader == null)
+            {
+                Debug.LogError("Liquid shader bulunamadı (Assets/Resources/Liquid.shader).");
+                return null;
+            }
+
+            return new Material(shader);
         }
 
         /// <summary>
@@ -74,7 +99,7 @@ namespace TubeSort.Game
                 go.transform.position = LayoutPosition(i);
 
                 var view = go.AddComponent<TubeView>();
-                view.Initialize(i, board[i], palette, unitSprite);
+                view.Initialize(i, board[i], palette, unitSprite, liquidMaterial);
                 tubeViews.Add(view);
             }
         }
