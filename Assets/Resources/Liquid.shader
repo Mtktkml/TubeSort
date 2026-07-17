@@ -9,10 +9,12 @@ Shader "TubeSort/Liquid"
 {
     Properties
     {
-        _WaveAmplitude ("Dalga yüksekliği", Float) = 0.012
+        // Dalga ve yüzey ölçüleri dünya birimindedir, tüpün oranı değil:
+        // dalga fiziksel bir şeydir, tüp uzadı diye büyümemeli.
+        _WaveAmplitude ("Dalga yüksekliği (dünya birimi)", Float) = 0.024
         _WaveFrequency ("Dalga sıklığı", Float) = 16
         _WaveSpeed ("Dalga hızı", Float) = 2.5
-        _EdgeSoftness ("Yüzey yumuşaklığı", Float) = 0.006
+        _EdgeSoftness ("Yüzey yumuşaklığı (dünya birimi)", Float) = 0.012
         _SideShading ("Kenar gölgesi", Range(0, 1)) = 0.35
         _Glossiness ("Parlaklık", Range(0, 1)) = 0.25
         _WallThickness ("Cam et kalınlığı", Float) = 0.05
@@ -40,8 +42,11 @@ Shader "TubeSort/Liquid"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "TubeShape.hlsl"
 
-            // Bir tüpte en fazla bu kadar katman olabilir. Kapasite 4 olsa da
-            // ileride artabilir diye pay bıraktık.
+            // Bir tüpte en fazla bu kadar katman olabilir; TubeView.MaxLayers ile
+            // aynı olmak zorunda. En kötü durumda katman sayısı tüp kapasitesine
+            // eşittir (hiçbir bitişik renk aynı değilse), o yüzden bu sınır aynı
+            // zamanda desteklenen en büyük kapasitedir. Döngü her piksel için
+            // bu kadar tur döndüğünden gereğinden büyük tutulmaz.
             #define MAX_LAYERS 8
 
             CBUFFER_START(UnityPerMaterial)
@@ -60,9 +65,13 @@ Shader "TubeSort/Liquid"
             float _LayerTops[MAX_LAYERS];
             float _FillLevel;
             int _LayerCount;
-            float4 _TubeSize;
+            float4 _QuadSize;
+            float4 _BodySize;
+            float4 _MouthSize;
             float _TopRadius;
             float _BottomRadius;
+            float _MouthRadius;
+            float _MouthBlend;
 
             struct Attributes
             {
@@ -86,19 +95,19 @@ Shader "TubeSort/Liquid"
 
             half4 Fragment(Varyings input) : SV_Target
             {
-                // uv.y: 0 = tüpün dibi, 1 = ağzı. uv.x: 0 = sol kenar, 1 = sağ.
-                float2 uv = input.uv;
-
                 // Tüp tamamen boşsa hiçbir şey çizme.
                 if (_FillLevel <= 0.0001)
                     discard;
+
+                float2 p = QuadPoint(input.uv, _QuadSize.xy);
 
                 // Sıvı camın içinde kalmalı. Camla aynı şekli hesaplayıp mesafeye
                 // et kalınlığı ekliyoruz: SDF'de mesafeye sabit eklemek şekli
                 // içeri doğru daraltır. Böylece sıvı camın bir tık içinden başlar
                 // ve yuvarlak dibe kusursuz oturur - ayrı bir maske dokusu ve
                 // piksel hizalama derdi olmadan.
-                float glassDistance = SdTube(uv, _TubeSize.xy, _TopRadius, _BottomRadius);
+                float glassDistance = SdTube(p, _QuadSize.xy, _BodySize.xy, _MouthSize.xy,
+                    _TopRadius, _BottomRadius, _MouthRadius, _MouthBlend);
                 float innerDistance = glassDistance + _WallThickness;
 
                 float innerEdge = fwidth(innerDistance);
@@ -106,13 +115,24 @@ Shader "TubeSort/Liquid"
                 if (insideGlass <= 0.001)
                     discard;
 
+                // Bundan sonraki hesaplar gövdenin kendi uzayında: uv.y 0 = dip,
+                // 1 = gövdenin tepesi. Dörtgen ağız için fazladan uzun olduğundan
+                // dörtgenin uv'siyle çalışsaydık doluluk ve katman sınırları kayardı.
+                float2 uv = BodyUV(p, _QuadSize.xy, _BodySize.xy);
+
+                // Dalga ve yumuşaklık dünya biriminde tanımlıdır; burada gövdenin
+                // oranına çevriliyorlar. Doğrudan uv'de kullanılsalardı uzun tüpte
+                // dalga da uzardı: 12 birimlik tüpte 4 birimliğin üç katı.
+                float waveAmplitude = _WaveAmplitude / _BodySize.y;
+                float edgeSoftness = _EdgeSoftness / _BodySize.y;
+
                 // Sıvının yüzeyi düz bir çizgi değil, yavaşça salınan bir dalga.
-                float wave = sin(uv.x * _WaveFrequency + _Time.y * _WaveSpeed) * _WaveAmplitude;
+                float wave = sin(uv.x * _WaveFrequency + _Time.y * _WaveSpeed) * waveAmplitude;
                 float surface = _FillLevel + wave;
 
                 // Yüzeyin altındaysak 1, üstündeysek 0. Aradaki dar bant
                 // kenarın testere gibi görünmesini engeller.
-                float inside = smoothstep(surface, surface - _EdgeSoftness, uv.y);
+                float inside = smoothstep(surface, surface - edgeSoftness, uv.y);
                 if (inside <= 0.001)
                     discard;
 
