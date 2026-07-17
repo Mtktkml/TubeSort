@@ -1,0 +1,17 @@
+{
+    "name": "TubeSort.Game",
+    "rootNamespace": "TubeSort.Game",
+    "references": [
+        "TubeSort.Core",
+        "Unity.InputSystem"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
