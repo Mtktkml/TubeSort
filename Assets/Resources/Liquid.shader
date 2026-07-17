@@ -15,6 +15,7 @@ Shader "TubeSort/Liquid"
         _EdgeSoftness ("Yüzey yumuşaklığı", Float) = 0.006
         _SideShading ("Kenar gölgesi", Range(0, 1)) = 0.35
         _Glossiness ("Parlaklık", Range(0, 1)) = 0.25
+        _WallThickness ("Cam et kalınlığı", Float) = 0.05
     }
 
     SubShader
@@ -37,6 +38,7 @@ Shader "TubeSort/Liquid"
             #pragma fragment Fragment
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "TubeShape.hlsl"
 
             // Bir tüpte en fazla bu kadar katman olabilir. Kapasite 4 olsa da
             // ileride artabilir diye pay bıraktık.
@@ -49,6 +51,7 @@ Shader "TubeSort/Liquid"
                 float _EdgeSoftness;
                 float _SideShading;
                 float _Glossiness;
+                float _WallThickness;
             CBUFFER_END
 
             // Bu değerler her tüp için farklı; MaterialPropertyBlock ile
@@ -57,6 +60,9 @@ Shader "TubeSort/Liquid"
             float _LayerTops[MAX_LAYERS];
             float _FillLevel;
             int _LayerCount;
+            float4 _TubeSize;
+            float _TopRadius;
+            float _BottomRadius;
 
             struct Attributes
             {
@@ -85,6 +91,19 @@ Shader "TubeSort/Liquid"
 
                 // Tüp tamamen boşsa hiçbir şey çizme.
                 if (_FillLevel <= 0.0001)
+                    discard;
+
+                // Sıvı camın içinde kalmalı. Camla aynı şekli hesaplayıp mesafeye
+                // et kalınlığı ekliyoruz: SDF'de mesafeye sabit eklemek şekli
+                // içeri doğru daraltır. Böylece sıvı camın bir tık içinden başlar
+                // ve yuvarlak dibe kusursuz oturur - ayrı bir maske dokusu ve
+                // piksel hizalama derdi olmadan.
+                float glassDistance = SdTube(uv, _TubeSize.xy, _TopRadius, _BottomRadius);
+                float innerDistance = glassDistance + _WallThickness;
+
+                float innerEdge = fwidth(innerDistance);
+                float insideGlass = 1.0 - smoothstep(-innerEdge, innerEdge, innerDistance);
+                if (insideGlass <= 0.001)
                     discard;
 
                 // Sıvının yüzeyi düz bir çizgi değil, yavaşça salınan bir dalga.
@@ -123,7 +142,7 @@ Shader "TubeSort/Liquid"
                 float highlight = smoothstep(highlightWidth, 0.0, abs(uv.x - highlightCenter));
                 color.rgb += highlight * _Glossiness * 0.5;
 
-                color.a *= inside;
+                color.a *= inside * insideGlass;
                 return color;
             }
             ENDHLSL

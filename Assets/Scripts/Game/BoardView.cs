@@ -24,6 +24,7 @@ namespace TubeSort.Game
         private Board board;
         private ColorPalette palette;
         private Sprite unitSprite;
+        private Material glassMaterial;
         private Material liquidMaterial;
         private readonly List<TubeView> tubeViews = new List<TubeView>();
 
@@ -43,8 +44,10 @@ namespace TubeSort.Game
             palette = new ColorPalette();
             unitSprite = CreateSquareSprite();
 
-            liquidMaterial = CreateLiquidMaterial();
-            if (liquidMaterial == null)
+            glassMaterial = CreateMaterial("Glass");
+            liquidMaterial = CreateMaterial("Liquid");
+
+            if (glassMaterial == null || liquidMaterial == null)
             {
                 enabled = false;
                 return;
@@ -55,16 +58,16 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// Sıvı malzemesi. Tüm tüpler aynı malzemeyi paylaşır; tüpe özel değerler
-        /// (doluluk, katman renkleri) MaterialPropertyBlock ile gönderilir.
-        /// Shader Resources altında olduğu için build'e de dahil edilir.
+        /// Tüm tüpler aynı malzemeleri paylaşır; tüpe özel değerler (doluluk,
+        /// katman renkleri, ölçüler) MaterialPropertyBlock ile gönderilir.
+        /// Shader'lar Resources altında olduğu için build'e de dahil edilir.
         /// </summary>
-        private static Material CreateLiquidMaterial()
+        private static Material CreateMaterial(string shaderName)
         {
-            var shader = Resources.Load<Shader>("Liquid");
+            var shader = Resources.Load<Shader>(shaderName);
             if (shader == null)
             {
-                Debug.LogError("Liquid shader bulunamadı (Assets/Resources/Liquid.shader).");
+                Debug.LogError($"{shaderName} shader bulunamadı (Assets/Resources/{shaderName}.shader).");
                 return null;
             }
 
@@ -99,7 +102,7 @@ namespace TubeSort.Game
                 go.transform.position = LayoutPosition(i);
 
                 var view = go.AddComponent<TubeView>();
-                view.Initialize(i, board[i], palette, unitSprite, liquidMaterial);
+                view.Initialize(i, board[i], palette, unitSprite, glassMaterial, liquidMaterial);
                 tubeViews.Add(view);
             }
         }
@@ -117,6 +120,22 @@ namespace TubeSort.Game
             float y = ((totalRows - 1) * 0.5f - row) * verticalSpacing;
 
             return new Vector3(x, y, 0f);
+        }
+
+        /// <summary>
+        /// Çalışma anında yaratılan malzeme ve dokuları temizler.
+        /// Unity nesnelerini C#'ın çöp toplayıcısı toplamaz; elle yok edilmezlerse
+        /// bu bileşen her yeniden kurulduğunda (level geçişi, test) birikirler.
+        /// </summary>
+        private void OnDestroy()
+        {
+            Destroy(glassMaterial);
+            Destroy(liquidMaterial);
+
+            if (unitSprite != null)
+                Destroy(unitSprite.texture);
+
+            Destroy(unitSprite);
         }
 
         private void Update()
