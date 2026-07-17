@@ -90,6 +90,7 @@ namespace TubeSort.Game
         private SpriteRenderer liquid;
         private MaterialPropertyBlock properties;
         private Vector3 restPosition;
+        private bool isSelected;
 
         // Shader'a gönderilecek diziler. Her yenilemede yeniden ayırmamak için
         // bir kez oluşturulup tekrar tekrar doldurulur.
@@ -106,7 +107,6 @@ namespace TubeSort.Game
             this.tube = tube;
             this.palette = palette;
             this.unitSprite = unitSprite;
-            restPosition = transform.position;
 
             // Kapasite katman sınırını aşarsa sıvı sessizce yanlış çizilir:
             // sığmayan katmanlar shader'a hiç gitmez, ama doluluk seviyesi
@@ -151,8 +151,18 @@ namespace TubeSort.Game
             return renderer;
         }
 
+        /// <summary>
+        /// Tüpün ekranda kapladığı toplam genişlik: genişleyen ağız ve yumuşak
+        /// birleşimin taşma payı dahil. Yerleşimi hesaplayan taraf bunu bilmeli,
+        /// yoksa tüpler birbirine girer.
+        /// </summary>
+        public static float FullWidth => MouthWidth + 2f * MouthBlend;
+
+        /// <summary>Verilen kapasitedeki bir tüpün ekranda kaplayacağı yükseklik.</summary>
+        public static float HeightFor(int capacity) => capacity * UnitHeight;
+
         /// <summary>Sıvının durduğu gövdenin yüksekliği; tüpün tam boyu.</summary>
-        private float BodyHeight => tube.Capacity * UnitHeight;
+        private float BodyHeight => HeightFor(tube.Capacity);
 
         /// <summary>Sıvı gövdenin en fazla bu kadarını kaplar. Gövde uzadıkça 1'e yaklaşır.</summary>
         private float FillSpan => 1f - FillHeadroom / BodyHeight;
@@ -162,7 +172,7 @@ namespace TubeSort.Game
         /// kavis oluştururken şekli bir miktar dışarı taşırdığı için ayrıca
         /// harmanlama payı kadar boşluk bırakılır; yoksa kavis kenardan kırpılır.
         /// </summary>
-        private static float QuadWidth => MouthWidth + 2f * MouthBlend;
+        private static float QuadWidth => FullWidth;
 
         /// <summary>
         /// Ağız gövdenin üstüne biner, üstüne eklenmez: tüpün boyu gövdenin boyudur.
@@ -251,7 +261,30 @@ namespace TubeSort.Game
         /// <summary>Seçili tüp yukarı kalkar; oyuncu neyi seçtiğini görsün.</summary>
         public void SetSelected(bool selected)
         {
-            transform.position = selected
+            isSelected = selected;
+            ApplyPosition();
+        }
+
+        /// <summary>
+        /// Tüpün duracağı yeri değiştirir. Yerleşim ekran değiştikçe yeniden
+        /// hesaplandığı için konum bir kez verilip unutulamaz.
+        ///
+        /// Dünya konumu değil yerel konum: tahta ekrana sığsın diye
+        /// ölçeklendiğinde tüpün yeri de onunla birlikte kaymalı.
+        /// </summary>
+        public void SetRestPosition(Vector3 localPosition)
+        {
+            restPosition = localPosition;
+            ApplyPosition();
+        }
+
+        /// <summary>
+        /// Seçim durumu ile dinlenme yerini birleştirir. İkisi de değişebildiği
+        /// için tek yerden uygulanır: yeniden yerleşen seçili bir tüp kalkık kalmalı.
+        /// </summary>
+        private void ApplyPosition()
+        {
+            transform.localPosition = isSelected
                 ? restPosition + Vector3.up * SelectedLift
                 : restPosition;
         }
