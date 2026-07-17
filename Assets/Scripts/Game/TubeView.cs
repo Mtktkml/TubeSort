@@ -19,7 +19,15 @@ namespace TubeSort.Game
         private const int MaxLayers = 8;
 
         private const float SelectedLift = 0.3f;
-        private const float LayerInset = 0.06f;
+
+        /// <summary>Üstteki köşelerin yuvarlaklığı. Dünya birimi.</summary>
+        private const float TopRadius = 0.08f;
+
+        /// <summary>
+        /// Dibin yuvarlaklığı. Genişliğin yarısına eşit olduğu için dip
+        /// tam yarım daire olur - deney tüpü gibi.
+        /// </summary>
+        private const float BottomRadius = Width * 0.5f;
 
         /// <summary>
         /// Tüp ağzına kadar dolu olsa bile sıvı dörtgenin en fazla bu kadarını kaplar.
@@ -32,6 +40,9 @@ namespace TubeSort.Game
         private static readonly int LayerTopsId = Shader.PropertyToID("_LayerTops");
         private static readonly int FillLevelId = Shader.PropertyToID("_FillLevel");
         private static readonly int LayerCountId = Shader.PropertyToID("_LayerCount");
+        private static readonly int TubeSizeId = Shader.PropertyToID("_TubeSize");
+        private static readonly int TopRadiusId = Shader.PropertyToID("_TopRadius");
+        private static readonly int BottomRadiusId = Shader.PropertyToID("_BottomRadius");
 
         private Tube tube;
         private ColorPalette palette;
@@ -50,7 +61,8 @@ namespace TubeSort.Game
         /// <summary>Bu görünümün tahtadaki tüp sırası. Tıklama olayında kullanılır.</summary>
         public int Index { get; private set; }
 
-        public void Initialize(int index, Tube tube, ColorPalette palette, Sprite unitSprite, Material liquidMaterial)
+        public void Initialize(int index, Tube tube, ColorPalette palette, Sprite unitSprite,
+            Material glassMaterial, Material liquidMaterial)
         {
             Index = index;
             this.tube = tube;
@@ -60,56 +72,61 @@ namespace TubeSort.Game
 
             properties = new MaterialPropertyBlock();
 
-            CreateGlass();
-            CreateLiquid(liquidMaterial);
+            glass = CreateQuad("Glass", glassMaterial, sortingOrder: 0);
+            liquid = CreateQuad("Liquid", liquidMaterial, sortingOrder: 1);
+
+            ApplyShape(glass);
             CreateClickArea();
             Refresh();
         }
 
-        /// <summary>Tüpün arka planı: sıvının nerede durduğunu belli eden koyu bir gövde.</summary>
-        private void CreateGlass()
+        /// <summary>
+        /// Cam ve sıvı aynı boyutta iki dörtgendir. Aynı olmaları şart: ikisi de
+        /// şekli kendi uv'sinden hesapladığı için, boyutları farklı olsaydı
+        /// sıvı camın şekline oturmazdı.
+        /// </summary>
+        private SpriteRenderer CreateQuad(string name, Material material, int sortingOrder)
         {
-            var go = new GameObject("Glass");
+            var go = new GameObject(name);
             go.transform.SetParent(transform, false);
 
-            glass = go.AddComponent<SpriteRenderer>();
-            glass.sprite = unitSprite;
-            glass.color = new Color(0.16f, 0.18f, 0.20f);
-            glass.sortingOrder = 0;
+            var renderer = go.AddComponent<SpriteRenderer>();
+            renderer.sprite = unitSprite;
+            renderer.sharedMaterial = material;
+            renderer.sortingOrder = sortingOrder;
 
-            float height = tube.Capacity * UnitHeight;
+            float height = TubeHeight;
             go.transform.localScale = new Vector3(Width, height, 1f);
             // Sprite'ın merkezi ortada; tüpün dibi yerel sıfır noktasında dursun.
             go.transform.localPosition = new Vector3(0f, height * 0.5f, 0f);
+
+            return renderer;
         }
 
-        /// <summary>
-        /// Sıvının tamamını kaplayan tek dörtgen. Tüpün boyu kadar uzundur;
-        /// içinde ne kadarının dolu göründüğüne shader karar verir.
-        /// </summary>
-        private void CreateLiquid(Material liquidMaterial)
+        private float TubeHeight => tube.Capacity * UnitHeight;
+
+        /// <summary>Şekil ölçülerini shader'a bildirir. Cam için bir kez yeter; boyutu değişmez.</summary>
+        private void ApplyShape(SpriteRenderer renderer)
         {
-            var go = new GameObject("Liquid");
-            go.transform.SetParent(transform, false);
+            renderer.GetPropertyBlock(properties);
+            WriteShape();
+            renderer.SetPropertyBlock(properties);
+        }
 
-            liquid = go.AddComponent<SpriteRenderer>();
-            liquid.sprite = unitSprite;
-            liquid.sharedMaterial = liquidMaterial;
-            liquid.sortingOrder = 1;
-
-            float height = tube.Capacity * UnitHeight;
-            go.transform.localScale = new Vector3(Width - LayerInset, height, 1f);
-            go.transform.localPosition = new Vector3(0f, height * 0.5f, 0f);
+        private void WriteShape()
+        {
+            properties.SetVector(TubeSizeId, new Vector4(Width, TubeHeight, 0f, 0f));
+            properties.SetFloat(TopRadiusId, TopRadius);
+            properties.SetFloat(BottomRadiusId, BottomRadius);
         }
 
         /// <summary>Tıklamayı yakalayacak görünmez alan. Cam gövdenin tamamını kaplar.</summary>
         private void CreateClickArea()
         {
             var box = gameObject.AddComponent<BoxCollider2D>();
-            float height = tube.Capacity * UnitHeight;
 
-            box.size = new Vector2(Width, height);
-            box.offset = new Vector2(0f, height * 0.5f);
+            box.size = new Vector2(Width, TubeHeight);
+            box.offset = new Vector2(0f, TubeHeight * 0.5f);
         }
 
         /// <summary>
@@ -130,7 +147,7 @@ namespace TubeSort.Game
                 {
                     if (layerCount >= MaxLayers) break;
 
-                    layerColors[layerCount] = palette.Get(color);
+                    layerColors[layerCount] = ToShaderColor(palette.Get(color));
                     layerCount++;
                 }
 
@@ -139,11 +156,28 @@ namespace TubeSort.Game
             }
 
             liquid.GetPropertyBlock(properties);
+            WriteShape();
             properties.SetVectorArray(LayerColorsId, layerColors);
             properties.SetFloatArray(LayerTopsId, layerTops);
             properties.SetFloat(FillLevelId, tube.Count / (float)tube.Capacity * FillSpan);
             properties.SetInt(LayerCountId, layerCount);
             liquid.SetPropertyBlock(properties);
+        }
+
+        /// <summary>
+        /// Rengi shader'ın beklediği uzaya çevirir.
+        ///
+        /// SetColor çağrılsaydı Unity bunu kendisi yapardı, ama katman renklerini
+        /// dizi olarak gönderiyoruz ve SetVectorArray bunların renk olduğunu
+        /// bilmez - dört sayı olarak geçirir. Linear projede çevirmezsek shader
+        /// sRGB değerleri linear sanır ve her renk olduğundan açık çıkar:
+        /// kırmızı pembeye döner, paletteki tonlar birbirine yaklaşır.
+        /// </summary>
+        private static Vector4 ToShaderColor(Color color)
+        {
+            return QualitySettings.activeColorSpace == ColorSpace.Linear
+                ? (Vector4)color.linear
+                : (Vector4)color;
         }
 
         /// <summary>Seçili tüp yukarı kalkar; oyuncu neyi seçtiğini görsün.</summary>
