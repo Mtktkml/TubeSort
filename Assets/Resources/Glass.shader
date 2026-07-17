@@ -41,9 +41,13 @@ Shader "TubeSort/Glass"
             CBUFFER_END
 
             // Tüpe özel ölçüler; MaterialPropertyBlock ile gönderilir.
-            float4 _TubeSize;
+            float4 _QuadSize;
+            float4 _BodySize;
+            float4 _MouthSize;
             float _TopRadius;
             float _BottomRadius;
+            float _MouthRadius;
+            float _MouthBlend;
 
             struct Attributes
             {
@@ -67,8 +71,10 @@ Shader "TubeSort/Glass"
 
             half4 Fragment(Varyings input) : SV_Target
             {
-                float2 uv = input.uv;
-                float distance = SdTube(uv, _TubeSize.xy, _TopRadius, _BottomRadius);
+                float2 p = QuadPoint(input.uv, _QuadSize.xy);
+
+                float distance = SdTube(p, _QuadSize.xy, _BodySize.xy, _MouthSize.xy,
+                    _TopRadius, _BottomRadius, _MouthRadius, _MouthBlend);
 
                 // fwidth: bu pikselden komşusuna geçerken mesafe ne kadar değişiyor?
                 // Kenarı tam o kadarlık bir bantta yumuşatırsak, kaç piksele
@@ -83,15 +89,17 @@ Shader "TubeSort/Glass"
                     discard;
 
                 // Kenara yakın piksellerden ince bir çerçeve: camın et kalınlığı.
+                // Şekil tek parça olduğu için çerçeve de ağzın etrafından
+                // kesintisiz dolaşır.
                 float rim = 1.0 - smoothstep(_RimWidth - edge, _RimWidth + edge, abs(distance));
-
                 half4 color = lerp(_BodyColor, _RimColor, rim);
 
                 // Solda dikey bir parlama şeridi; camın kendi yansıması.
-                float gloss = smoothstep(0.06, 0.0, abs(uv.x - 0.22));
+                float2 bodyUV = BodyUV(p, _QuadSize.xy, _BodySize.xy);
+                float gloss = smoothstep(0.06, 0.0, abs(bodyUV.x - 0.22));
                 color.rgb += gloss * _GlossStrength * (1.0 - rim);
 
-                color.a *= inside;
+                color.a = inside;
                 return color;
             }
             ENDHLSL
