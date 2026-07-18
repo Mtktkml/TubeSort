@@ -258,6 +258,58 @@ namespace TubeSort.Game
                 : (Vector4)color;
         }
 
+        // ────────────────────────────────────────────────────────────────
+        // SDF — TubeShape.hlsl'deki fonksiyonların C# karşılığı.
+        // Tıklamanın tüp şekli içinde olup olmadığını doğrulamak için kullanılır.
+        // ────────────────────────────────────────────────────────────────
+
+        /// <summary>Dünya koordinatındaki bir noktanın tüp şekli içinde olup olmadığını döner.</summary>
+        public bool ContainsPoint(Vector3 worldPoint)
+        {
+            Vector3 local = transform.InverseTransformPoint(worldPoint);
+            // Dörtgenin merkezi (0, QuadHeight/2) yerel konumunda; noktayı oraya taşı.
+            Vector2 p = new Vector2(local.x, local.y - QuadHeight * 0.5f);
+
+            return SdTube(p) <= 0f;
+        }
+
+        private float SdTube(Vector2 p)
+        {
+            Vector2 quadSize = new Vector2(QuadWidth, QuadHeight);
+            Vector2 bodySize = new Vector2(Width, BodyHeight);
+            Vector2 mouthSize = new Vector2(MouthWidth, MouthHeight);
+
+            Vector2 bodyCenter = new Vector2(0f, -quadSize.y * 0.5f + bodySize.y * 0.5f);
+            float bodyDist = SdRoundedBox(p - bodyCenter, bodySize * 0.5f,
+                TopRadius, BottomRadius);
+
+            Vector2 mouthCenter = new Vector2(0f, quadSize.y * 0.5f - mouthSize.y * 0.5f);
+            float mouthDist = SdRoundedBox(p - mouthCenter, mouthSize * 0.5f,
+                MouthRadius, MouthRadius);
+
+            return SdSmoothUnion(bodyDist, mouthDist, MouthBlend);
+        }
+
+        /// <summary>Yuvarlak köşeli dikdörtgenin SDF'i. Üst ve alt köşe yarıçapları ayrı.</summary>
+        private static float SdRoundedBox(Vector2 p, Vector2 halfSize,
+            float topRadius, float bottomRadius)
+        {
+            float r = p.y > 0f ? topRadius : bottomRadius;
+
+            Vector2 q = new Vector2(Mathf.Abs(p.x) - halfSize.x + r,
+                                    Mathf.Abs(p.y) - halfSize.y + r);
+
+            return Mathf.Min(Mathf.Max(q.x, q.y), 0f)
+                + new Vector2(Mathf.Max(q.x, 0f), Mathf.Max(q.y, 0f)).magnitude
+                - r;
+        }
+
+        private static float SdSmoothUnion(float d1, float d2, float k)
+        {
+            float h = Mathf.Clamp01(0.5f + 0.5f * (d2 - d1) / k);
+            return Mathf.Lerp(d2, d1, h) - k * h * (1f - h);
+        }
+
         /// <summary>Seçili tüp yukarı kalkar; oyuncu neyi seçtiğini görsün.</summary>
         public void SetSelected(bool selected)
         {

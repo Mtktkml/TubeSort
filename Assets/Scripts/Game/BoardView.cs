@@ -291,13 +291,21 @@ namespace TubeSort.Game
                 HandleTubeClick(clicked.Index);
         }
 
-        /// <summary>Ekran koordinatındaki dokunuşun hangi tüpe denk geldiğini bulur.</summary>
+        /// <summary>
+        /// Ekran koordinatındaki dokunuşun hangi tüpe denk geldiğini bulur.
+        /// BoxCollider2D hızlı eleme yapar; ardından SDF ile tıklamanın gerçekten
+        /// tüp şekli içinde olup olmadığı doğrulanır.
+        /// </summary>
         private TubeView RaycastTube(Vector2 screenPosition)
         {
             Vector3 worldPoint = mainCamera.ScreenToWorldPoint(screenPosition);
             Collider2D hit = Physics2D.OverlapPoint(worldPoint);
+            if (hit == null) return null;
 
-            return hit != null ? hit.GetComponent<TubeView>() : null;
+            var view = hit.GetComponent<TubeView>();
+            if (view == null) return null;
+
+            return view.ContainsPoint(worldPoint) ? view : null;
         }
 
         private void HandleTubeClick(int index)
