@@ -90,6 +90,11 @@ katman sayısı kapasiteye eşittir, yani bu sayı aynı zamanda **desteklenen e
 büyük tüp kapasitesi**. Aşılırsa `TubeView.Initialize` hata basar (sessizce
 yanlış çizmek yerine).
 
+**SDF formülleri iki yerde:** `TubeShape.hlsl` (shader, piksel boyama) ve
+`TubeView.cs` (C#, tıklama doğrulama). GPU ile CPU arasında kod paylaşılamadığı
+için tekrar kaçınılmaz. Tüp şekli değişirse ikisi birlikte güncellenmelidir:
+`SdRoundedBox`, `SdSmoothUnion` ve `SdTube`.
+
 **Sabitleri ölçüden türet, uydurma.** `horizontalSpacing = 1.2f` ve
 `maxTubesPerRow = 5` gibi ekranla/ölçüyle ilgisiz sayılar iki kez sorun çıkardı.
 Aralık artık `TubeView.FullWidth`'ten, sütun sayısı kameranın görüş alanından
@@ -149,6 +154,37 @@ doğrulamaz. Görsel doğrulama gözle yapılır.
 - Sahne hâlâ `SampleScene` adında; içindeki `BoardView` nesnesi `GameObject`.
 - Asset yok ve neredeyse gerekmiyor. Ses, ikon ve yazı tipi cila adımında
   (Kenney.nl, freesound.org, Google Fonts).
+
+### Bilinen hatalar
+
+- **Deadlock tespiti yetersiz:** `Board.HasAnyValidMove` yalnızca "yapılabilecek
+  hamle var mı" sorusunu soruyor. Hamle var ama oyun kazanılamaz (gerçek çıkmaz)
+  durumunu yakalamıyor. Tam çözülebilirlik analizi BFS/DFS ile durum uzayını
+  aramayı gerektirir; `Board.Clone()` buna hazır. Level üreticiyle birlikte
+  ele alınmalı.
+
+### Device Simulator sınırlamaları
+
+- **Hızlı tıklamada donma:** Device Simulator'da art arda hızlı tıklayınca
+  Input System dokunuş "bırakma" olayını kaybedebiliyor; `isPressed` true'da
+  takılı kalıyor ve yeni basış algılanmıyor. Game penceresinde ve gerçek
+  cihazda bu sorun **yok**. Oyunun hatası değil, simülatörün bilinen sınırı.
+
+### Kod okuma sırası
+
+Basit görsel (adım 2) sonrasını anlamak için aşağıdan yukarı:
+
+1. `Assets/Scripts/Core/Tube.cs` — tüpün veri modeli (tazeleme)
+2. `Assets/Scripts/Core/Board.cs` — hamle kuralları (tazeleme)
+3. `Assets/Scripts/Core/PourResult.cs` — hamle raporu (tazeleme)
+4. **`Assets/Resources/TubeShape.hlsl`** — şekil matematiği (SDF), cam ve sıvı ortak
+5. **`Assets/Resources/Glass.shader`** — cam tüp
+6. **`Assets/Resources/Liquid.shader`** — sıvı, katmanlar, dalga
+7. **`Assets/Scripts/Game/ColorPalette.cs`** — int renk → ekran rengi
+8. **`Assets/Scripts/Game/TubeView.cs`** — Core → shader köprüsü
+9. **`Assets/Scripts/Game/BoardView.cs`** — tahta, dokunuş, yerleşim
+10. `Assets/Tests/EditMode/` — Core testleri
+11. `Assets/Tests/PlayMode/` — görsel testler
 
 ### Sonraki adım için hazır olanlar
 
