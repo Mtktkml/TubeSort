@@ -90,6 +90,11 @@ katman sayısı kapasiteye eşittir, yani bu sayı aynı zamanda **desteklenen e
 büyük tüp kapasitesi**. Aşılırsa `TubeView.Initialize` hata basar (sessizce
 yanlış çizmek yerine).
 
+**SDF formülleri iki yerde:** `TubeShape.hlsl` (shader, piksel boyama) ve
+`TubeView.cs` (C#, tıklama doğrulama). GPU ile CPU arasında kod paylaşılamadığı
+için tekrar kaçınılmaz. Tüp şekli değişirse ikisi birlikte güncellenmelidir:
+`SdRoundedBox`, `SdSmoothUnion` ve `SdTube`.
+
 **Sabitleri ölçüden türet, uydurma.** `horizontalSpacing = 1.2f` ve
 `maxTubesPerRow = 5` gibi ekranla/ölçüyle ilgisiz sayılar iki kez sorun çıkardı.
 Aralık artık `TubeView.FullWidth`'ten, sütun sayısı kameranın görüş alanından
