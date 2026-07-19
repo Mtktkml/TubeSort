@@ -245,42 +245,41 @@ namespace TubeSort.Game
             liquid.SetPropertyBlock(properties);
         }
 
+        /// <summary>Tube'un güncel verisine göre doluluk seviyesinin olması gereken değer.</summary>
+        public float TargetFillLevel => tube.Count / (float)tube.Capacity * FillSpan;
+
+        /// <summary>Shader'a en son gönderilen doluluk seviyesi.</summary>
+        public float CurrentFill => currentFill;
+
         /// <summary>
         /// Sıvı seviyesini mevcut değerden hedef değere pürüzsüz kaydırır.
-        /// Katman renkleri ve sınırları animasyonun başında güncellenir:
-        /// böylece renk hemen doğru olur, sadece seviye yavaşça kayar.
+        /// Katman güncellemeyi (Refresh) kendisi yapmaz; çağıran taraf
+        /// kaynak ve hedef tüp için farklı zamanlarda Refresh çağırır.
         /// </summary>
-        public IEnumerator AnimateFill(float duration)
+        public IEnumerator AnimateFill(float targetFill, float duration)
         {
-            // Animasyonun hedefi: Board hamleyi çoktan yaptı, tube.Count yeni değeri tutuyor.
-            // Katmanları hemen güncelle ki renk doğru olsun.
             float startFill = currentFill;
-            Refresh();
-            float endFill = currentFill;
 
-            // Fark yoksa animasyon gereksiz (ör. geçersiz hamle).
-            if (Mathf.Approximately(startFill, endFill))
+            if (Mathf.Approximately(startFill, targetFill))
                 yield break;
 
-            // Seviyeyi başa al, sonra her karede hedefe doğru kaydır.
             float elapsed = 0f;
             while (elapsed < duration)
             {
                 elapsed += Time.deltaTime;
                 float t = Mathf.Clamp01(elapsed / duration);
-                // SmoothStep: başta ve sonda yavaşlar, ortada hızlanır. Doğrusal geçişten daha doğal.
+                // SmoothStep: başta ve sonda yavaşlar, ortada hızlanır.
                 t = t * t * (3f - 2f * t);
 
-                SetFillLevel(Mathf.Lerp(startFill, endFill, t));
+                SetFillLevel(Mathf.Lerp(startFill, targetFill, t));
                 yield return null;
             }
 
-            // Son kareyi tam değere sabitle (kayan nokta sapması olmasın).
-            SetFillLevel(endFill);
+            SetFillLevel(targetFill);
         }
 
         /// <summary>Shader'a sadece doluluk seviyesini gönderir. Animasyon döngüsünde her kare çağrılır.</summary>
-        private void SetFillLevel(float fill)
+        public void SetFillLevel(float fill)
         {
             currentFill = fill;
             liquid.GetPropertyBlock(properties);
