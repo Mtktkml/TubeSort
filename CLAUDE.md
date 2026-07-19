@@ -186,13 +186,31 @@ Basit görsel (adım 2) sonrasını anlamak için aşağıdan yukarı:
 10. `Assets/Tests/EditMode/` — Core testleri
 11. `Assets/Tests/PlayMode/` — görsel testler
 
-### Sonraki adım: dökme akış görseli
+### Dökme animasyonu — tamamlanan ve sıradaki
 
-Seviye animasyonu tamamlandı (coroutine ile `_FillLevel` pürüzsüz kayıyor,
-`isAnimating` ile girdi kilitleniyor). Sırada **akış görseli** var.
+**Tamamlanan: seviye animasyonu**
 
-LineRenderer ile düz çizgi yaklaşımı denendi ve reddedildi (yapay görünüyordu).
-Gerçekçi yaklaşım planlandı:
+Coroutine ile `_FillLevel` pürüzsüz kayıyor, `isAnimating` ile girdi
+kilitleniyor. Kaynak ve hedef tüp paralel animasyonlanır.
+
+Önemli mimari karar: kaynak ve hedef tüpün katman güncellemesi farklı
+zamanlarda yapılır. `AnimateFill` katman güncellemez; `BoardView.AnimatePour`
+yönetir:
+
+| | Kaynak tüp | Hedef tüp |
+|---|---|---|
+| Katmanlar | Animasyon sonrası `Refresh()` | Animasyon öncesi `Refresh()` |
+| Seviye | Eski yerden kademeli düşer | Eski yerden kademeli yükselir |
+
+Neden: kaynak tüpte katmanlar erken güncellenirse dökülen renk anında
+kaybolur ve alttaki renk azalıyor gibi görünür.
+
+**Denenen ve reddedilen: LineRenderer akış**
+
+LineRenderer ile tüpler arası eğri çizgi denendi. Yapay göründüğü için
+reddedildi (`feature/pour-stream` branch'i silindi).
+
+**Sıradaki: gerçekçi dökme animasyonu**
 
 1. Kaynak tüp kalkar ve hedefin yanına kayar
 2. ~30° eğilir
@@ -205,3 +223,5 @@ Zorluklar:
   kalması için shader'a döndürme bilgisi geçmek gerekebilir.
 - Gerçek sıvı fiziği (Obi Fluid vb.) mobil için ağır; piyasadaki Water
   Sort oyunları animasyon hilesiyle aynı etkiyi yaratıyor.
+- `TubeView.MouthWorldPosition` property'si eklenmişti ama `feature/pour-stream`
+  ile birlikte gitti; tekrar eklenecek.
