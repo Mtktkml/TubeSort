@@ -366,27 +366,50 @@ namespace TubeSort.Game
 
         /// <summary>
         /// Dökme animasyonu. Board hamleyi zaten yaptı; bu coroutine sadece
-        /// görsel geçişi yönetir:
-        /// 1. Girdiyi kilitler (isAnimating = true)
-        /// 2. İki tüpün seviyesini paralel kaydırır
-        /// 3. Girdiyi açar
+        /// görsel geçişi yönetir.
+        ///
+        /// Kaynak ve hedef tüp farklı davranır:
+        /// - Kaynak: eski katmanları korur (dökülen renk görünmeye devam eder),
+        ///   seviye düştükçe o renk kaybolur. Animasyon bitince katmanlar güncellenir.
+        /// - Hedef: katmanlar hemen güncellenir (yeni renk eklenir), seviye eski
+        ///   yerinden yükselmeye başlar.
         /// </summary>
         private IEnumerator AnimatePour(PourResult result)
         {
-            const float duration = 0.35f;
+            const float duration = 1.5f;
 
             isAnimating = true;
             ClearSelection();
 
             Debug.Log($"{result.Amount} birim renk#{result.Color}: tüp {result.FromIndex} -> tüp {result.ToIndex}");
 
-            // İki coroutine'i paralel başlat: kaynak düşerken hedef yükselir.
-            Coroutine from = StartCoroutine(tubeViews[result.FromIndex].AnimateFill(duration));
-            Coroutine to = StartCoroutine(tubeViews[result.ToIndex].AnimateFill(duration));
+            TubeView fromView = tubeViews[result.FromIndex];
+            TubeView toView = tubeViews[result.ToIndex];
 
-            // İkisi de bitene kadar bekle.
+            // Board hamleyi zaten uyguladı; tube verileri yeni durumu yansıtıyor.
+            // Hedef fill'leri şimdi hesapla.
+            float fromTarget = fromView.TargetFillLevel;
+            float toTarget = toView.TargetFillLevel;
+
+            // Hedef tüp: katmanları şimdi güncelle (yeni renk görünsün),
+            // ama seviyeyi eski yerine geri al (oradan yükselecek).
+            float toStart = toView.CurrentFill;
+            toView.Refresh();
+            toView.SetFillLevel(toStart);
+
+            // Kaynak tüp: katmanları güncelleme! Eski renkler görünmeye devam
+            // etsin, seviye düştükçe dökülen renk kaybolsun.
+
+            // İki animasyonu paralel başlat.
+            Coroutine from = StartCoroutine(fromView.AnimateFill(fromTarget, duration));
+            Coroutine to = StartCoroutine(toView.AnimateFill(toTarget, duration));
+
             yield return from;
             yield return to;
+
+            // Kaynak tüpün katmanlarını şimdi güncelle: dökülen renk artık
+            // veride yok, görseli de temizlensin.
+            fromView.Refresh();
 
             isAnimating = false;
             ReportBoardState();

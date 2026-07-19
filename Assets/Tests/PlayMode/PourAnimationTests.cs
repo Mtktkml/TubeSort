@@ -110,7 +110,7 @@ namespace TubeSort.Tests.PlayMode
             tube.Pop(2);
 
             // Animasyonu başlat ve tamamlanmasını bekle.
-            yield return tubeView.AnimateFill(0.2f);
+            yield return tubeView.AnimateFill(tubeView.TargetFillLevel, 0.2f);
 
             float fillAfter = ReadFillLevel();
 
@@ -132,7 +132,7 @@ namespace TubeSort.Tests.PlayMode
             tube.Push(0, 2);
 
             // Animasyonu başlat ve tamamlanmasını bekle.
-            yield return tubeView.AnimateFill(0.2f);
+            yield return tubeView.AnimateFill(tubeView.TargetFillLevel, 0.2f);
 
             float fillAfter = ReadFillLevel();
 
@@ -154,7 +154,7 @@ namespace TubeSort.Tests.PlayMode
             tube.Pop(4);
 
             // Animasyonu uzun tutuyoruz ki ara kareleri yakalayabilelim.
-            var routine = tubeView.AnimateFill(0.5f);
+            var routine = tubeView.AnimateFill(tubeView.TargetFillLevel, 0.5f);
             // İlk kareyi çalıştır.
             tubeView.StartCoroutine(routine);
             yield return null;
