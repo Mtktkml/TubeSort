@@ -1,3 +1,4 @@
+using System.Collections;
 using TubeSort.Core;
 using UnityEngine;
 
@@ -91,6 +92,7 @@ namespace TubeSort.Game
         private MaterialPropertyBlock properties;
         private Vector3 restPosition;
         private bool isSelected;
+        private float currentFill;
 
         // Shader'a gönderilecek diziler. Her yenilemede yeniden ayırmamak için
         // bir kez oluşturulup tekrar tekrar doldurulur.
@@ -237,8 +239,52 @@ namespace TubeSort.Game
             WriteShape();
             properties.SetVectorArray(LayerColorsId, layerColors);
             properties.SetFloatArray(LayerTopsId, layerTops);
-            properties.SetFloat(FillLevelId, tube.Count / (float)tube.Capacity * FillSpan);
+            currentFill = tube.Count / (float)tube.Capacity * FillSpan;
+            properties.SetFloat(FillLevelId, currentFill);
             properties.SetInt(LayerCountId, layerCount);
+            liquid.SetPropertyBlock(properties);
+        }
+
+        /// <summary>
+        /// Sıvı seviyesini mevcut değerden hedef değere pürüzsüz kaydırır.
+        /// Katman renkleri ve sınırları animasyonun başında güncellenir:
+        /// böylece renk hemen doğru olur, sadece seviye yavaşça kayar.
+        /// </summary>
+        public IEnumerator AnimateFill(float duration)
+        {
+            // Animasyonun hedefi: Board hamleyi çoktan yaptı, tube.Count yeni değeri tutuyor.
+            // Katmanları hemen güncelle ki renk doğru olsun.
+            float startFill = currentFill;
+            Refresh();
+            float endFill = currentFill;
+
+            // Fark yoksa animasyon gereksiz (ör. geçersiz hamle).
+            if (Mathf.Approximately(startFill, endFill))
+                yield break;
+
+            // Seviyeyi başa al, sonra her karede hedefe doğru kaydır.
+            float elapsed = 0f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / duration);
+                // SmoothStep: başta ve sonda yavaşlar, ortada hızlanır. Doğrusal geçişten daha doğal.
+                t = t * t * (3f - 2f * t);
+
+                SetFillLevel(Mathf.Lerp(startFill, endFill, t));
+                yield return null;
+            }
+
+            // Son kareyi tam değere sabitle (kayan nokta sapması olmasın).
+            SetFillLevel(endFill);
+        }
+
+        /// <summary>Shader'a sadece doluluk seviyesini gönderir. Animasyon döngüsünde her kare çağrılır.</summary>
+        private void SetFillLevel(float fill)
+        {
+            currentFill = fill;
+            liquid.GetPropertyBlock(properties);
+            properties.SetFloat(FillLevelId, fill);
             liquid.SetPropertyBlock(properties);
         }
 

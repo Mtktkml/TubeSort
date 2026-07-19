@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using TubeSort.Core;
 using UnityEngine;
@@ -35,6 +36,7 @@ namespace TubeSort.Game
         private readonly List<TubeView> tubeViews = new List<TubeView>();
 
         private int selectedIndex = -1;
+        private bool isAnimating;
         private Camera mainCamera;
 
         /// <summary>
@@ -284,6 +286,7 @@ namespace TubeSort.Game
             Pointer pointer = Pointer.current;
             if (pointer == null) return;
 
+            if (isAnimating) return;
             if (!pointer.press.wasPressedThisFrame) return;
 
             TubeView clicked = RaycastTube(pointer.position.ReadValue());
@@ -331,12 +334,7 @@ namespace TubeSort.Game
 
             if (result.Success)
             {
-                tubeViews[result.FromIndex].Refresh();
-                tubeViews[result.ToIndex].Refresh();
-                Debug.Log($"{result.Amount} birim renk#{result.Color}: tüp {result.FromIndex} -> tüp {result.ToIndex}");
-
-                ClearSelection();
-                ReportBoardState();
+                StartCoroutine(AnimatePour(result));
                 return;
             }
 
@@ -364,6 +362,34 @@ namespace TubeSort.Game
                 Debug.Log("<color=lime>Tahta çözüldü!</color>");
             else if (!board.HasAnyValidMove)
                 Debug.Log("<color=orange>Çıkmaz: oynanacak hamle kalmadı.</color>");
+        }
+
+        /// <summary>
+        /// Dökme animasyonu. Board hamleyi zaten yaptı; bu coroutine sadece
+        /// görsel geçişi yönetir:
+        /// 1. Girdiyi kilitler (isAnimating = true)
+        /// 2. İki tüpün seviyesini paralel kaydırır
+        /// 3. Girdiyi açar
+        /// </summary>
+        private IEnumerator AnimatePour(PourResult result)
+        {
+            const float duration = 0.35f;
+
+            isAnimating = true;
+            ClearSelection();
+
+            Debug.Log($"{result.Amount} birim renk#{result.Color}: tüp {result.FromIndex} -> tüp {result.ToIndex}");
+
+            // İki coroutine'i paralel başlat: kaynak düşerken hedef yükselir.
+            Coroutine from = StartCoroutine(tubeViews[result.FromIndex].AnimateFill(duration));
+            Coroutine to = StartCoroutine(tubeViews[result.ToIndex].AnimateFill(duration));
+
+            // İkisi de bitene kadar bekle.
+            yield return from;
+            yield return to;
+
+            isAnimating = false;
+            ReportBoardState();
         }
 
         /// <summary>
