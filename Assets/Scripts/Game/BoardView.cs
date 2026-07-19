@@ -376,7 +376,7 @@ namespace TubeSort.Game
         /// </summary>
         private IEnumerator AnimatePour(PourResult result)
         {
-            const float duration = 1.5f;
+            const float duration = 0.35f;
 
             isAnimating = true;
             ClearSelection();
