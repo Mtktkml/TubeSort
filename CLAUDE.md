@@ -118,7 +118,7 @@ Unity Editor **kapalı** olmalı; açıksa proje kilitli olur ve batchmode başl
 
 `-testPlatform PlayMode` ile de aynısı. Editor'dan: **Window → General → Test Runner**.
 
-Mevcut durum: **EditMode 12/12**, **PlayMode 8/8**.
+Mevcut durum: **EditMode 12/12**, **PlayMode 11/11**.
 
 EditMode'u tercih et: sahne kurmadığı için saniyeler sürer. PlayMode'u yalnızca
 gerçek oyun ortamı gerektiğinde kullan.
@@ -140,7 +140,7 @@ doğrulamaz. Görsel doğrulama gözle yapılır.
 2. ~~Basit görsel~~
 3. ~~Sıvı shader'ı~~ (SDF, cam, genişleyen ağız)
 4. ~~Ekrana uyarlanan yerleşim~~
-5. **Dökme animasyonu** ← sıradaki
+5. **Dökme animasyonu** ← devam ediyor (seviye animasyonu tamam, akış görseli sırada)
 6. Level üretici
 7. Cila + meta (undo, +1 tüp, kapak animasyonu, ses)
 8. Build
@@ -186,11 +186,22 @@ Basit görsel (adım 2) sonrasını anlamak için aşağıdan yukarı:
 10. `Assets/Tests/EditMode/` — Core testleri
 11. `Assets/Tests/PlayMode/` — görsel testler
 
-### Sonraki adım için hazır olanlar
+### Sonraki adım: dökme akış görseli
 
-Dökme animasyonu için gereken parçalar yol boyunca yerleştirildi:
-`PourResult` (ne aktı), `_FillLevel`'in float olması (seviye pürüzsüz düşebilsin),
-`IEnumerator`/`yield` (PlayMode testlerinde kullanıldı).
+Seviye animasyonu tamamlandı (coroutine ile `_FillLevel` pürüzsüz kayıyor,
+`isAnimating` ile girdi kilitleniyor). Sırada **akış görseli** var.
 
-Çözülecek mimari soru: animasyon sürerken `Board` hamleyi çoktan yapmış olacak
-ama ekran henüz göstermemiş olacak. Bu arada gelen dokunuşlar yönetilmeli.
+LineRenderer ile düz çizgi yaklaşımı denendi ve reddedildi (yapay görünüyordu).
+Gerçekçi yaklaşım planlandı:
+
+1. Kaynak tüp kalkar ve hedefin yanına kayar
+2. ~30° eğilir
+3. Sıvı akar (seviyeler değişir + akış görseli)
+4. Tüp doğrulur
+5. Tüp yerine döner
+
+Zorluklar:
+- Tüp eğildiğinde shader'daki sıvı yüzeyi de döner; yüzeyin yatay
+  kalması için shader'a döndürme bilgisi geçmek gerekebilir.
+- Gerçek sıvı fiziği (Obi Fluid vb.) mobil için ağır; piyasadaki Water
+  Sort oyunları animasyon hilesiyle aynı etkiyi yaratıyor.
