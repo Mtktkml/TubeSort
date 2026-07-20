@@ -61,6 +61,8 @@ bulamaz; `Resources` altındakiler garanti dahil edilir.
   genişler (`SdSmoothUnion` ile kaynatılmış iki yuvarlak dikdörtgen).
 - `Liquid.shader` — sıvı. Camın şeklini alıp et kalınlığı kadar daraltarak
   kırpar, içine katmanları ve yüzey dalgasını çizer.
+- `Stream.shader` — dökme akışı. Kuadratik Bezier eğrisini SDF ile çizer,
+  kaynakta geniş hedefte daralır, akış yönünde parlaklık dalgası kayar.
 
 Elle HLSL yazıldı, Shader Graph değil: katman renkleri **dizi** ve döngüyle
 işleniyor, Shader Graph'ta dizi/döngü yok.
@@ -140,7 +142,7 @@ doğrulamaz. Görsel doğrulama gözle yapılır.
 2. ~~Basit görsel~~
 3. ~~Sıvı shader'ı~~ (SDF, cam, genişleyen ağız)
 4. ~~Ekrana uyarlanan yerleşim~~
-5. **Dökme animasyonu** ← devam ediyor (seviye animasyonu tamam, akış görseli sırada)
+5. ~~Dökme animasyonu~~ (seviye, tüp eğilme, SDF akış görseli)
 6. Level üretici
 7. Cila + meta (undo, +1 tüp, kapak animasyonu, ses)
 8. Build
@@ -182,46 +184,34 @@ Basit görsel (adım 2) sonrasını anlamak için aşağıdan yukarı:
 6. **`Assets/Resources/Liquid.shader`** — sıvı, katmanlar, dalga
 7. **`Assets/Scripts/Game/ColorPalette.cs`** — int renk → ekran rengi
 8. **`Assets/Scripts/Game/TubeView.cs`** — Core → shader köprüsü
-9. **`Assets/Scripts/Game/BoardView.cs`** — tahta, dokunuş, yerleşim
-10. `Assets/Tests/EditMode/` — Core testleri
-11. `Assets/Tests/PlayMode/` — görsel testler
+9. **`Assets/Scripts/Game/StreamView.cs`** — dökme akış görseli
+10. **`Assets/Scripts/Game/BoardView.cs`** — tahta, dokunuş, yerleşim
+11. `Assets/Tests/EditMode/` — Core testleri
+12. `Assets/Tests/PlayMode/` — görsel testler
 
-### Dökme animasyonu — tamamlanan ve sıradaki
+### Dökme animasyonu — tamamlandı
 
-**Tamamlanan: seviye animasyonu**
+Beş fazlı coroutine (`AnimatePour`): kayma → eğilme → dökme → doğrulma → dönüş.
 
-Coroutine ile `_FillLevel` pürüzsüz kayıyor, `isAnimating` ile girdi
-kilitleniyor. Kaynak ve hedef tüp paralel animasyonlanır.
+**Tüp eğilme:**
+- `_TiltAngle` uniform'u Liquid.shader'a geçer; sıvı yüzeyi ve katman
+  sınırları dünya uzayında yatay kalır (`sin/cos` oranı, ±0.2 clamp).
+- Transform döner, pivot telafisi ile ağızdan dönme illüzyonu sağlanır.
+- Eğim açısı sıvı miktarına göre dinamik: dolu tüp 50°, boş tüp 90°.
+  Dökme sırasında sıvı azaldıkça açı kademeli artar.
 
-Önemli mimari karar: kaynak ve hedef tüpün katman güncellemesi farklı
-zamanlarda yapılır. `AnimateFill` katman güncellemez; `BoardView.AnimatePour`
-yönetir:
+**Katman güncelleme zamanlaması:**
 
 | | Kaynak tüp | Hedef tüp |
 |---|---|---|
-| Katmanlar | Animasyon sonrası `Refresh()` | Animasyon öncesi `Refresh()` |
+| Katmanlar | Dökme sonrası `Refresh()` | Dökme öncesi `Refresh()` |
 | Seviye | Eski yerden kademeli düşer | Eski yerden kademeli yükselir |
 
-Neden: kaynak tüpte katmanlar erken güncellenirse dökülen renk anında
-kaybolur ve alttaki renk azalıyor gibi görünür.
+**Akış görseli (Stream.shader + StreamView):**
 
-**Denenen ve reddedilen: LineRenderer akış**
+SDF Bezier eğrisi: tek quad üzerinde kuadratik Bezier, 10 doğru parçasıyla
+yaklaşık hesaplanır. Kaynakta geniş, hedefte daralır (taper). Akış yönünde
+kayan parlaklık dalgası hareket hissi verir. Bitiş noktası her kare hedef
+tüpün sıvı seviyesiyle güncellenir (saydam tüpte sıvıya kadar uzanır).
 
-LineRenderer ile tüpler arası eğri çizgi denendi. Yapay göründüğü için
-reddedildi (`feature/pour-stream` branch'i silindi).
-
-**Sıradaki: gerçekçi dökme animasyonu**
-
-1. Kaynak tüp kalkar ve hedefin yanına kayar
-2. ~30° eğilir
-3. Sıvı akar (seviyeler değişir + akış görseli)
-4. Tüp doğrulur
-5. Tüp yerine döner
-
-Zorluklar:
-- Tüp eğildiğinde shader'daki sıvı yüzeyi de döner; yüzeyin yatay
-  kalması için shader'a döndürme bilgisi geçmek gerekebilir.
-- Gerçek sıvı fiziği (Obi Fluid vb.) mobil için ağır; piyasadaki Water
-  Sort oyunları animasyon hilesiyle aynı etkiyi yaratıyor.
-- `TubeView.MouthWorldPosition` property'si eklenmişti ama `feature/pour-stream`
-  ile birlikte gitti; tekrar eklenecek.
+**Denenen ve reddedilen:** LineRenderer akış — yapay göründüğü için reddedildi.
