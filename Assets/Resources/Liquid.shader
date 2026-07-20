@@ -129,9 +129,12 @@ Shader "TubeSort/Liquid"
 
                 // Tüp döndüğünde sıvı yüzeyi dünya uzayında yatay kalmalı.
                 // UV uzayında bunu sağlamak için yüzeyi eğim açısına göre
-                // ters yöne eğiyoruz. sin kullanılır çünkü büyük açılarda
-                // (70° gibi) tan patlar; sin doğal olarak 1'de durur.
-                float tiltOffset = (0.5 - uv.x) * sin(_TiltAngle)
+                // ters yöne eğiyoruz. sin/cos oranı (tan) geometrik olarak doğru
+                // eğimi verir. cos küçüldükçe oran büyür; 0.2'nin altına inmemesi
+                // yüzeyin tüp dışına taşmasını önler. sin'in işareti her açıda
+                // doğru yönü korur (tan 90°'de işaret değiştirir, bu formül değiştirmez).
+                float tiltSlope = sin(_TiltAngle) / max(abs(cos(_TiltAngle)), 0.2);
+                float tiltOffset = (0.5 - uv.x) * tiltSlope
                     * (_BodySize.x / _BodySize.y);
 
                 // Sıvının yüzeyi düz bir çizgi değil, yavaşça salınan bir dalga.

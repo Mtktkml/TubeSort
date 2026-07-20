@@ -50,7 +50,7 @@ namespace TubeSort.Game
         /// Tüp ağzına doğru yatayda genişler. Ağız gövdeden bu kadar geniştir;
         /// ayrı bir parça değil, camın devamıdır.
         /// </summary>
-        private const float MouthWidth = Width * 1.16f;
+        public const float MouthWidth = Width * 1.16f;
 
         /// <summary>Genişlemenin başladığı yükseklik: tüpün üst ucundan bu kadar aşağısı.</summary>
         private const float MouthHeight = 0.22f;

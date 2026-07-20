@@ -33,7 +33,9 @@ namespace TubeSort.Game
         private Sprite unitSprite;
         private Material glassMaterial;
         private Material liquidMaterial;
+        private Material streamMaterial;
         private readonly List<TubeView> tubeViews = new List<TubeView>();
+        private StreamView streamView;
 
         private int selectedIndex = -1;
         private bool isAnimating;
@@ -61,8 +63,9 @@ namespace TubeSort.Game
 
             glassMaterial = CreateMaterial("Glass");
             liquidMaterial = CreateMaterial("Liquid");
+            streamMaterial = CreateMaterial("Stream");
 
-            if (glassMaterial == null || liquidMaterial == null)
+            if (glassMaterial == null || liquidMaterial == null || streamMaterial == null)
             {
                 enabled = false;
                 return;
@@ -70,6 +73,7 @@ namespace TubeSort.Game
 
             board = CreateTestBoard();
             BuildViews();
+            BuildStreamView();
             ApplyLayout();
         }
 
@@ -120,6 +124,14 @@ namespace TubeSort.Game
                 view.Initialize(i, board[i], palette, unitSprite, glassMaterial, liquidMaterial);
                 tubeViews.Add(view);
             }
+        }
+
+        private void BuildStreamView()
+        {
+            var go = new GameObject("Stream");
+            go.transform.SetParent(transform, false);
+            streamView = go.AddComponent<StreamView>();
+            streamView.Initialize(unitSprite, streamMaterial);
         }
 
         /// <summary>
@@ -271,6 +283,7 @@ namespace TubeSort.Game
         {
             Destroy(glassMaterial);
             Destroy(liquidMaterial);
+            Destroy(streamMaterial);
 
             if (unitSprite != null)
                 Destroy(unitSprite.texture);
@@ -382,11 +395,9 @@ namespace TubeSort.Game
         /// </summary>
         private IEnumerator AnimatePour(PourResult result)
         {
-            const float slideDuration = 0.25f;
-            const float tiltDuration = 0.20f;
-            const float pourDuration = 0.35f;
-            const float pourAngle = 70f * Mathf.Deg2Rad;
-
+            const float slideDuration = 0.4f;
+            const float tiltDuration = 0.3f;
+            const float pourDuration = 0.5f;
             isAnimating = true;
             ClearSelection();
 
@@ -408,6 +419,10 @@ namespace TubeSort.Game
             // Kaynak tüpü üstte çiz.
             fromView.SetSortingOffset(10);
 
+            // Eğim açısı sıvı miktarına göre değişir: az sıvıda fazla eğilme,
+            // çok sıvıda az eğilme. Böylece sıvı her zaman ağza ulaşır.
+            float pourAngle = CalculatePourAngle(fromView);
+
             // Eğilme yönü: hedefe doğru eğil.
             // Aynı sütundaysa (dx ≈ 0) sağa doğru eğil.
             float dx = toView.RestPosition.x - fromView.RestPosition.x;
@@ -426,12 +441,26 @@ namespace TubeSort.Game
             yield return StartCoroutine(
                 AnimateTilt(fromView, 0f, signedAngle, tiltDuration, pourPos, pivotHeight));
 
-            // --- Faz 3: Dökme (seviye animasyonu) ---
-            // Eğik konumdaki son pozisyonu koru.
+            // --- Faz 3: Dökme (seviye animasyonu + akış görseli + dinamik eğilme) ---
+            Color streamColor = palette.Get(result.Color);
+            streamView.Show(streamColor,
+                CalculateSourceMouth(fromView, signedAngle),
+                CalculateDestSurface(toView, toStart));
+
             Coroutine from = StartCoroutine(fromView.AnimateFill(fromTarget, pourDuration));
             Coroutine to = StartCoroutine(toView.AnimateFill(toTarget, pourDuration));
+            Coroutine stream = StartCoroutine(
+                AnimateStream(streamColor, fromView, toView, direction,
+                    pourPos, pivotHeight, pourDuration));
+
             yield return from;
             yield return to;
+            yield return stream;
+
+            // Nihai eğim açısını sakla — doğrulma bu açıdan başlayacak.
+            signedAngle = -CalculatePourAngle(fromView) * direction;
+
+            streamView.Hide();
 
             // Kaynak tüpün katmanlarını şimdi güncelle: dökülen renk artık
             // veride yok. Doğrulma fazına eski renkle girersek dalga
@@ -477,6 +506,81 @@ namespace TubeSort.Game
             float yTarget = destMouthY - mouthRise + bodyHeight * 0.35f;
 
             return new Vector3(xTarget, yTarget, 0f);
+        }
+
+        /// <summary>
+        /// Tüpteki sıvı miktarına göre eğim açısını hesaplar.
+        /// Az sıvıda sıvının ağza ulaşması için daha fazla eğilme gerekir.
+        /// Dolu tüpte 50°, neredeyse boş tüpte 110°'ye kadar çıkar.
+        /// </summary>
+        private static float CalculatePourAngle(TubeView fromView)
+        {
+            const float minAngle = 50f * Mathf.Deg2Rad;
+            const float maxAngle = 90f * Mathf.Deg2Rad;
+
+            // Dökme öncesi doluluk oranı (0 = boş, 1 = dolu).
+            // CurrentFill henüz güncellenmedi, eski (dökme öncesi) değeri gösterir.
+            float fillSpan = 1f - 0.2f / fromView.Height; // FillHeadroom = 0.2
+            float fillRatio = Mathf.Clamp01(fromView.CurrentFill / fillSpan);
+
+            return Mathf.Lerp(maxAngle, minAngle, fillRatio);
+        }
+
+        /// <summary>
+        /// Eğik kaynak tüpün döken ağız ucunun board-local konumu.
+        /// TransformPoint tilt ve pivot telafisini otomatik hesaplar.
+        /// </summary>
+        private Vector3 CalculateSourceMouth(TubeView fromView, float signedAngle)
+        {
+            // Döken taraf: tüp sağa eğiliyorsa (negatif açı) sağ kenar döker.
+            float lipSide = -Mathf.Sign(signedAngle);
+            Vector3 lipLocal = new Vector3(
+                TubeView.MouthWidth * 0.5f * lipSide, fromView.Height, 0f);
+
+            // TransformPoint: tüpün eğimi ve pozisyon telafisini hesaba katar.
+            Vector3 lipWorld = fromView.transform.TransformPoint(lipLocal);
+            return transform.InverseTransformPoint(lipWorld);
+        }
+
+        /// <summary>
+        /// Dökme sırasında her kare: eğim açısını sıvı seviyesine göre artır,
+        /// akışın uç noktalarını güncelle. Fill animasyonlarıyla paralel çalışır.
+        /// </summary>
+        private IEnumerator AnimateStream(Color color, TubeView fromView, TubeView toView,
+            float direction, Vector3 pourPos, float pivotHeight, float duration)
+        {
+            float elapsed = 0f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+
+                // Sıvı azaldıkça eğim artar — sıvı her zaman ağza ulaşır.
+                float angle = -CalculatePourAngle(fromView) * direction;
+                ApplyTiltWithPivot(fromView, angle, pourPos, pivotHeight);
+
+                Vector3 sourceMouth = CalculateSourceMouth(fromView, angle);
+                Vector3 destSurface = CalculateDestSurface(toView, toView.CurrentFill);
+
+                // Kaynak ağız hedef yüzeyinin üstündeyse akış göster,
+                // altına düştüyse gizle (ters Bezier olur).
+                if (sourceMouth.y > destSurface.y)
+                    streamView.Show(color, sourceMouth, destSurface);
+                else
+                    streamView.Hide();
+
+                yield return null;
+            }
+        }
+
+        /// <summary>
+        /// Hedef tüpteki sıvı yüzeyinin board-local konumu.
+        /// Tüpler saydam olduğu için akış ağızda değil, sıvının
+        /// olduğu seviyede bitmeli.
+        /// </summary>
+        private static Vector3 CalculateDestSurface(TubeView toView, float fillLevel)
+        {
+            float surfaceY = fillLevel * toView.Height;
+            return toView.RestPosition + new Vector3(0f, surfaceY, 0f);
         }
 
         /// <summary>Tüpü A noktasından B noktasına pürüzsüzce kaydırır.</summary>
