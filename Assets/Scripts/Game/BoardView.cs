@@ -257,6 +257,7 @@ namespace TubeSort.Game
         /// </summary>
         private void RefitIfViewChanged()
         {
+            if (isAnimating) return;
             if (CameraView != lastFittedView)
                 ApplyLayout();
         }
@@ -368,15 +369,23 @@ namespace TubeSort.Game
         /// Dökme animasyonu. Board hamleyi zaten yaptı; bu coroutine sadece
         /// görsel geçişi yönetir.
         ///
-        /// Kaynak ve hedef tüp farklı davranır:
-        /// - Kaynak: eski katmanları korur (dökülen renk görünmeye devam eder),
-        ///   seviye düştükçe o renk kaybolur. Animasyon bitince katmanlar güncellenir.
-        /// - Hedef: katmanlar hemen güncellenir (yeni renk eklenir), seviye eski
-        ///   yerinden yükselmeye başlar.
+        /// Beş fazda çalışır:
+        /// 1. Kaynak tüp kalkıp hedefin yanına kayar.
+        /// 2. Hedefe doğru ~70° eğilir.
+        /// 3. Seviyeler değişir (kaynak düşer, hedef yükselir).
+        /// 4. Tüp doğrulur.
+        /// 5. Yerine geri kayar.
+        ///
+        /// Katman güncelleme zamanlaması:
+        /// - Hedef: animasyon öncesi Refresh (yeni renk hemen görünsün).
+        /// - Kaynak: dökme sonrası Refresh (dökülen renk seviye düştükçe kaybolsun).
         /// </summary>
         private IEnumerator AnimatePour(PourResult result)
         {
-            const float duration = 0.35f;
+            const float slideDuration = 0.25f;
+            const float tiltDuration = 0.20f;
+            const float pourDuration = 0.35f;
+            const float pourAngle = 70f * Mathf.Deg2Rad;
 
             isAnimating = true;
             ClearSelection();
@@ -387,7 +396,6 @@ namespace TubeSort.Game
             TubeView toView = tubeViews[result.ToIndex];
 
             // Board hamleyi zaten uyguladı; tube verileri yeni durumu yansıtıyor.
-            // Hedef fill'leri şimdi hesapla.
             float fromTarget = fromView.TargetFillLevel;
             float toTarget = toView.TargetFillLevel;
 
@@ -397,22 +405,129 @@ namespace TubeSort.Game
             toView.Refresh();
             toView.SetFillLevel(toStart);
 
-            // Kaynak tüp: katmanları güncelleme! Eski renkler görünmeye devam
-            // etsin, seviye düştükçe dökülen renk kaybolsun.
+            // Kaynak tüpü üstte çiz.
+            fromView.SetSortingOffset(10);
 
-            // İki animasyonu paralel başlat.
-            Coroutine from = StartCoroutine(fromView.AnimateFill(fromTarget, duration));
-            Coroutine to = StartCoroutine(toView.AnimateFill(toTarget, duration));
+            // Eğilme yönü: hedefe doğru eğil.
+            // Aynı sütundaysa (dx ≈ 0) sağa doğru eğil.
+            float dx = toView.RestPosition.x - fromView.RestPosition.x;
+            float direction = Mathf.Abs(dx) < 0.01f ? 1f : Mathf.Sign(dx);
+            float signedAngle = -pourAngle * direction;
 
+            // Dönüş noktası tüpün ağzına yakın olmalı; dipten döndürmek doğal durmaz.
+            float pivotHeight = fromView.Height * 0.8f;
+
+            // --- Faz 1: Kalkış + Kayma ---
+            Vector3 startPos = fromView.RestPosition;
+            Vector3 pourPos = CalculatePourPosition(fromView, toView, signedAngle, pivotHeight);
+            yield return StartCoroutine(AnimateMove(fromView, startPos, pourPos, slideDuration));
+
+            // --- Faz 2: Eğilme ---
+            yield return StartCoroutine(
+                AnimateTilt(fromView, 0f, signedAngle, tiltDuration, pourPos, pivotHeight));
+
+            // --- Faz 3: Dökme (seviye animasyonu) ---
+            // Eğik konumdaki son pozisyonu koru.
+            Coroutine from = StartCoroutine(fromView.AnimateFill(fromTarget, pourDuration));
+            Coroutine to = StartCoroutine(toView.AnimateFill(toTarget, pourDuration));
             yield return from;
             yield return to;
 
             // Kaynak tüpün katmanlarını şimdi güncelle: dökülen renk artık
-            // veride yok, görseli de temizlensin.
+            // veride yok. Doğrulma fazına eski renkle girersek dalga
+            // bölgesinde bir önceki rengin izi kısa süreliğine görünür.
             fromView.Refresh();
 
+            // --- Faz 4: Doğrulma ---
+            yield return StartCoroutine(
+                AnimateTilt(fromView, signedAngle, 0f, tiltDuration, pourPos, pivotHeight));
+
+            // --- Faz 5: Geri dönüş ---
+            yield return StartCoroutine(AnimateMove(fromView, pourPos, startPos, slideDuration));
+
+            fromView.SetSortingOffset(0);
             isAnimating = false;
             ReportBoardState();
+        }
+
+        /// <summary>
+        /// Kaynak tüpün dökme sırasında duracağı konum.
+        /// Eğildikten sonra kaynak ağzı hedefin ağzının biraz üstüne düşer.
+        /// </summary>
+        private Vector3 CalculatePourPosition(TubeView from, TubeView to,
+            float signedAngle, float pivotHeight)
+        {
+            Vector3 dest = to.RestPosition;
+            float bodyHeight = from.Height;
+
+            // --- X: eğildikten sonra ağız hedefin üstüne düşsün ---
+            // Pivot sabit kalır; ağız (BH - pH) uzaklıkta döner.
+            // Kaynak tüpü biraz geriye çekerek tüplerin iç içe girmesini önle.
+            // signedAngle'dan yönü çıkar: negatif açı → sağa eğilir → kaynak soldan gelir.
+            float side = signedAngle < 0f ? -1f : 1f;
+            float pullBack = side * TubeView.FullWidth * 0.2f;
+            float mouthReach = (bodyHeight - pivotHeight) * Mathf.Sin(signedAngle);
+            float xTarget = dest.x + mouthReach + pullBack;
+
+            // --- Y: kaynak ağzı hedefin ağzının üstünde kalsın ---
+            // Eğilmiş ağzın Y'si: pourPos.y + pH + (BH-pH)*cos(angle).
+            // Hedefin ağzının biraz üstüne koyuyoruz ki sıvı aşağı aksın.
+            float mouthRise = pivotHeight + (bodyHeight - pivotHeight) * Mathf.Cos(signedAngle);
+            float destMouthY = dest.y + TallestTube;
+            float yTarget = destMouthY - mouthRise + bodyHeight * 0.35f;
+
+            return new Vector3(xTarget, yTarget, 0f);
+        }
+
+        /// <summary>Tüpü A noktasından B noktasına pürüzsüzce kaydırır.</summary>
+        private static IEnumerator AnimateMove(TubeView view, Vector3 from, Vector3 to, float duration)
+        {
+            float elapsed = 0f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(elapsed / duration));
+                view.transform.localPosition = Vector3.Lerp(from, to, t);
+                yield return null;
+            }
+
+            view.transform.localPosition = to;
+        }
+
+        /// <summary>
+        /// Tüpü verilen açıdan hedef açıya eğer. Dönüş noktası tüpün dibinde
+        /// değil ağzına yakın bir noktada olmalı: pivotHeight kadar yukarıda
+        /// sanal bir eksen etrafında döner gibi pozisyon telafisi uygulanır.
+        /// </summary>
+        private static IEnumerator AnimateTilt(TubeView view, float fromAngle, float toAngle,
+            float duration, Vector3 basePosition, float pivotHeight)
+        {
+            float elapsed = 0f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(elapsed / duration));
+                float angle = Mathf.Lerp(fromAngle, toAngle, t);
+
+                ApplyTiltWithPivot(view, angle, basePosition, pivotHeight);
+                yield return null;
+            }
+
+            ApplyTiltWithPivot(view, toAngle, basePosition, pivotHeight);
+        }
+
+        /// <summary>
+        /// Eğim açısını ve pivot telafisini tek seferde uygular.
+        /// Unity dönüşü transform.position (tüpün dibi) etrafında yapar;
+        /// ağızdan eğilmiş gibi görünsün diye pozisyonu kaydırırız.
+        /// </summary>
+        private static void ApplyTiltWithPivot(TubeView view, float angle,
+            Vector3 basePosition, float pivotHeight)
+        {
+            view.SetTiltAngle(angle);
+            float ox = pivotHeight * Mathf.Sin(angle);
+            float oy = pivotHeight * (1f - Mathf.Cos(angle));
+            view.transform.localPosition = basePosition + new Vector3(ox, oy, 0f);
         }
 
         /// <summary>

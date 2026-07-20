@@ -19,8 +19,9 @@ namespace TubeSort.Tests.PlayMode
         private TubeView tubeView;
         private Tube tube;
 
-        // Shader'a gönderilen _FillLevel'i okumak için property ID.
+        // Shader'a gönderilen property'leri okumak için ID'ler.
         private static readonly int FillLevelId = Shader.PropertyToID("_FillLevel");
+        private static readonly int TiltAngleId = Shader.PropertyToID("_TiltAngle");
 
         [UnitySetUp]
         public IEnumerator SetUp()
@@ -76,26 +77,39 @@ namespace TubeSort.Tests.PlayMode
             yield return null;
         }
 
-        /// <summary>Liquid renderer'dan shader'a gönderilen _FillLevel'i okur.</summary>
-        private float ReadFillLevel()
+        /// <summary>
+        /// Liquid renderer'ı bulur. İsme göre arar: sortingOrder
+        /// SetSortingOffset ile değişebileceği için güvenilmez.
+        /// </summary>
+        private SpriteRenderer FindLiquidRenderer()
         {
-            // TubeView iki çocuk oluşturur: Glass (order 0) ve Liquid (order 1).
-            // Liquid'in MaterialPropertyBlock'undan okuyoruz.
             var renderers = tubeObject.GetComponentsInChildren<SpriteRenderer>();
-            var props = new MaterialPropertyBlock();
-
-            // sortingOrder'ı 1 olan Liquid renderer'ı bul.
             foreach (var r in renderers)
             {
-                if (r.sortingOrder == 1)
-                {
-                    r.GetPropertyBlock(props);
-                    return props.GetFloat(FillLevelId);
-                }
+                if (r.gameObject.name == "Liquid")
+                    return r;
             }
 
             Assert.Fail("Liquid renderer bulunamadı");
-            return 0f;
+            return null;
+        }
+
+        /// <summary>Liquid renderer'dan shader'a gönderilen _FillLevel'i okur.</summary>
+        private float ReadFillLevel()
+        {
+            var r = FindLiquidRenderer();
+            var props = new MaterialPropertyBlock();
+            r.GetPropertyBlock(props);
+            return props.GetFloat(FillLevelId);
+        }
+
+        /// <summary>Liquid renderer'dan shader'a gönderilen _TiltAngle'ı okur.</summary>
+        private float ReadTiltAngle()
+        {
+            var r = FindLiquidRenderer();
+            var props = new MaterialPropertyBlock();
+            r.GetPropertyBlock(props);
+            return props.GetFloat(TiltAngleId);
         }
 
         [UnityTest]
@@ -165,6 +179,95 @@ namespace TubeSort.Tests.PlayMode
             // animasyon kademeli ilerliyorsa arada bir yerde durur.
             Assert.Less(fillMid, fillBefore, "Seviye hâlâ başlangıçta — animasyon başlamadı");
             Assert.Greater(fillMid, 0f, "Seviye anında sıfıra düştü — animasyon yok");
+        }
+
+        [UnityTest]
+        public IEnumerator SetTiltAngle_SendsAngleToShader()
+        {
+            yield return BuildTubeView(new Tube(4, 0, 0));
+
+            float before = ReadTiltAngle();
+            Assert.AreEqual(0f, before, 0.001f, "Başlangıçta eğim sıfır olmalı");
+
+            tubeView.SetTiltAngle(0.5f);
+
+            float after = ReadTiltAngle();
+            Assert.AreEqual(0.5f, after, 0.001f, "Shader'a gönderilen eğim yanlış");
+        }
+
+        [UnityTest]
+        public IEnumerator SetTiltAngle_RotatesTransform()
+        {
+            yield return BuildTubeView(new Tube(4, 0, 0));
+
+            tubeView.SetTiltAngle(30f * Mathf.Deg2Rad);
+
+            float z = tubeView.transform.localRotation.eulerAngles.z;
+            // Unity açıyı 0-360 aralığında verir; 30°'ye yakın olmalı.
+            Assert.AreEqual(30f, z, 0.5f, "Transform dönmedi");
+        }
+
+        [UnityTest]
+        public IEnumerator SetTiltAngle_PreservedAfterRefresh()
+        {
+            yield return BuildTubeView(new Tube(4, 0, 0));
+
+            tubeView.SetTiltAngle(0.3f);
+            tubeView.Refresh();
+
+            float angle = ReadTiltAngle();
+            Assert.AreEqual(0.3f, angle, 0.001f,
+                "Refresh sonrası eğim kaybolmamalı");
+        }
+
+        [UnityTest]
+        public IEnumerator SetTiltAngle_PreservedAfterSetFillLevel()
+        {
+            yield return BuildTubeView(new Tube(4, 0, 0));
+
+            tubeView.SetTiltAngle(0.4f);
+            tubeView.SetFillLevel(0.5f);
+
+            float angle = ReadTiltAngle();
+            Assert.AreEqual(0.4f, angle, 0.001f,
+                "SetFillLevel sonrası eğim kaybolmamalı");
+        }
+
+        [UnityTest]
+        public IEnumerator SetSortingOffset_ChangesSortingOrder()
+        {
+            yield return BuildTubeView(new Tube(4, 0, 0));
+
+            tubeView.SetSortingOffset(10);
+
+            var renderers = tubeObject.GetComponentsInChildren<SpriteRenderer>();
+            bool foundGlass = false, foundLiquid = false;
+
+            foreach (var r in renderers)
+            {
+                if (r.gameObject.name == "Glass")
+                {
+                    Assert.AreEqual(10, r.sortingOrder, "Glass sorting order yanlış");
+                    foundGlass = true;
+                }
+                else if (r.gameObject.name == "Liquid")
+                {
+                    Assert.AreEqual(11, r.sortingOrder, "Liquid sorting order yanlış");
+                    foundLiquid = true;
+                }
+            }
+
+            Assert.IsTrue(foundGlass && foundLiquid, "Renderer bulunamadı");
+
+            // Sıfırla ve kontrol et.
+            tubeView.SetSortingOffset(0);
+            foreach (var r in renderers)
+            {
+                if (r.gameObject.name == "Glass")
+                    Assert.AreEqual(0, r.sortingOrder);
+                else if (r.gameObject.name == "Liquid")
+                    Assert.AreEqual(1, r.sortingOrder);
+            }
         }
     }
 }
