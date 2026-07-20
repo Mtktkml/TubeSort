@@ -395,9 +395,9 @@ namespace TubeSort.Game
         /// </summary>
         private IEnumerator AnimatePour(PourResult result)
         {
-            const float slideDuration = 0.4f;
-            const float tiltDuration = 0.3f;
-            const float pourDuration = 0.5f;
+            const float slideDuration = 2f;
+            const float tiltDuration = 2f;
+            const float pourDuration = 2f;
             isAnimating = true;
             ClearSelection();
 
@@ -437,39 +437,100 @@ namespace TubeSort.Game
             Vector3 pourPos = CalculatePourPosition(fromView, toView, signedAngle, pivotHeight);
             yield return StartCoroutine(AnimateMove(fromView, startPos, pourPos, slideDuration));
 
-            // --- Faz 2: Eğilme ---
-            yield return StartCoroutine(
-                AnimateTilt(fromView, 0f, signedAngle, tiltDuration, pourPos, pivotHeight));
-
-            // --- Faz 3: Dökme (seviye animasyonu + akış görseli + dinamik eğilme) ---
+            // --- Faz 2+3: Eğilme ve dökme paralel ---
+            // Eğilme tamamlanana kadar açı pürüzsüz interpolasyondan gelir.
+            // Eğilme bitince CalculatePourAngle devralır: sıvının her an ağızda
+            // kalmasını garanti eden fiziksel doğru açı.
             Color streamColor = palette.Get(result.Color);
-            streamView.Show(streamColor,
-                CalculateSourceMouth(fromView, signedAngle),
-                CalculateDestSurface(toView, toStart));
+            bool pourStarted = false;
+            float tiltElapsed = 0f;
+            float pourElapsed = 0f;
+            float fromStart = fromView.CurrentFill;
 
-            Coroutine from = StartCoroutine(fromView.AnimateFill(fromTarget, pourDuration));
-            Coroutine to = StartCoroutine(toView.AnimateFill(toTarget, pourDuration));
-            Coroutine stream = StartCoroutine(
-                AnimateStream(streamColor, fromView, toView, direction,
-                    pourPos, pivotHeight, pourDuration));
+            float currentAngle = 0f;
 
-            yield return from;
-            yield return to;
-            yield return stream;
+            while (true)
+            {
+                float dt = Time.deltaTime;
+                bool tiltDone = tiltElapsed >= tiltDuration;
 
-            // Nihai eğim açısını sakla — doğrulma bu açıdan başlayacak.
-            signedAngle = -CalculatePourAngle(fromView) * direction;
+                // --- Eğilme: her zaman tamamlanana kadar çalışır ---
+                if (!tiltDone)
+                {
+                    tiltElapsed += dt;
+                    float tiltT = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(tiltElapsed / tiltDuration));
+                    currentAngle = Mathf.Lerp(0f, signedAngle, tiltT);
+                    tiltDone = tiltElapsed >= tiltDuration;
+                }
+
+                // Sıvı ağza ulaştığında dökmeyi başlat.
+                if (!pourStarted)
+                {
+                    if (HasLiquidReachedMouth(fromView, currentAngle) || tiltDone)
+                        pourStarted = true;
+                }
+
+                // --- Dökme: sıvı ağza ulaştıysa seviyeler güncellenir ---
+                if (pourStarted)
+                {
+                    pourElapsed += dt;
+                    float pourT = Mathf.Clamp01(pourElapsed / pourDuration);
+                    pourT = pourT * pourT * (3f - 2f * pourT); // SmoothStep
+
+                    float currentFromFill = Mathf.Lerp(fromStart, fromTarget, pourT);
+                    fromView.SetFillLevel(currentFromFill);
+                    toView.SetFillLevel(Mathf.Lerp(toStart, toTarget, pourT));
+
+                    // Eğilme bittikten sonra açı, sıvının ağızda kalmasını
+                    // garanti eden fiziksel doğru değeri izler. Fill pürüzsüz
+                    // değiştiği için açı da pürüzsüz değişir.
+                    // Tüm katmanlar — üst, ara, alt — aynı mantıkla çalışır.
+                    if (tiltDone)
+                        currentAngle = -CalculatePourAngle(fromView) * direction;
+                }
+
+                ApplyTiltWithPivot(fromView, currentAngle, pourPos, pivotHeight);
+
+                // Akış görseli: kaynak sıvı yüzeyinden başlar, lip'ten değil.
+                if (pourStarted)
+                {
+                    Vector3 sourcePoint = CalculateStreamSource(fromView, currentAngle);
+                    Vector3 destSurface = CalculateDestSurface(toView, toView.CurrentFill);
+                    if (sourcePoint.y > destSurface.y)
+                        streamView.Show(streamColor, sourcePoint, destSurface);
+                    else
+                        streamView.Hide();
+                }
+
+                if (pourStarted && pourElapsed >= pourDuration && tiltDone)
+                    break;
+
+                yield return null;
+            }
+
+            // Son değerleri kesin uygula.
+            fromView.SetFillLevel(fromTarget);
+            toView.SetFillLevel(toTarget);
 
             streamView.Hide();
 
-            // Kaynak tüpün katmanlarını şimdi güncelle: dökülen renk artık
-            // veride yok. Doğrulma fazına eski renkle girersek dalga
-            // bölgesinde bir önceki rengin izi kısa süreliğine görünür.
-            fromView.Refresh();
+            if (fromTarget < 0.001f)
+            {
+                // Tüp tamamen boşaldı: tilt'i hemen sıfırla, doğrulma animasyonu
+                // gereksiz. fill=0 + büyük açı shader'da artefakt gösterirdi.
+                ApplyTiltWithPivot(fromView, 0f, pourPos, pivotHeight);
+                fromView.Refresh();
+            }
+            else
+            {
+                currentAngle = -CalculatePourAngle(fromView) * direction;
+                ApplyTiltWithPivot(fromView, currentAngle, pourPos, pivotHeight);
+                fromView.Refresh();
 
-            // --- Faz 4: Doğrulma ---
-            yield return StartCoroutine(
-                AnimateTilt(fromView, signedAngle, 0f, tiltDuration, pourPos, pivotHeight));
+                // --- Faz 4: Doğrulma (sadece sıvı kalıyorsa) ---
+                yield return StartCoroutine(
+                    AnimateTilt(fromView, currentAngle, 0f, tiltDuration, pourPos, pivotHeight));
+            }
 
             // --- Faz 5: Geri dönüş ---
             yield return StartCoroutine(AnimateMove(fromView, pourPos, startPos, slideDuration));
@@ -515,15 +576,31 @@ namespace TubeSort.Game
         /// </summary>
         private static float CalculatePourAngle(TubeView fromView)
         {
-            const float minAngle = 50f * Mathf.Deg2Rad;
-            const float maxAngle = 90f * Mathf.Deg2Rad;
+            const float minAngle = 60f * Mathf.Deg2Rad;
+            const float maxAngle = 100f * Mathf.Deg2Rad;
 
-            // Dökme öncesi doluluk oranı (0 = boş, 1 = dolu).
-            // CurrentFill henüz güncellenmedi, eski (dökme öncesi) değeri gösterir.
+            // Doluluk oranı (0 = boş, 1 = dolu). Açı aralığı, eğik sıvının
+            // tüpün fiziksel ağız ucuna (1.0) ulaşması için yeterli marjla
+            // seçildi. Eski 50-90° aralığı FillSpan eşiğine göre tasarlanmıştı;
+            // 1.0 eşiğiyle yarı dolu tüpte 0.001 eksik kalıp deadlock'a giriyordu.
             float fillSpan = 1f - 0.2f / fromView.Height; // FillHeadroom = 0.2
             float fillRatio = Mathf.Clamp01(fromView.CurrentFill / fillSpan);
 
             return Mathf.Lerp(maxAngle, minAngle, fillRatio);
+        }
+
+        /// <summary>
+        /// Verilen eğim açısında sıvının tüpün ağzına ulaşıp ulaşmadığını kontrol eder.
+        /// Shader'daki tiltOffset formülünün C# karşılığı: eğik taraftaki
+        /// sıvı yüzeyi FillSpan'e ulaştıysa sıvı ağızdan taşmaya hazır demektir.
+        /// </summary>
+        private static bool HasLiquidReachedMouth(TubeView view, float angle)
+        {
+            // Eşik FillSpan değil 1.0: sıvı tüpün fiziksel ağız ucuna (genişleyen
+            // kısmın en tepesine) ulaşmalı, FillHeadroom sınırına değil.
+            float tiltSlope = Mathf.Sin(angle) / Mathf.Max(Mathf.Abs(Mathf.Cos(angle)), 0.2f);
+            float maxOffset = Mathf.Abs(0.5f * tiltSlope * (TubeView.Width / view.Height));
+            return view.CurrentFill + maxOffset >= 1f;
         }
 
         /// <summary>
@@ -540,6 +617,36 @@ namespace TubeSort.Game
             // TransformPoint: tüpün eğimi ve pozisyon telafisini hesaba katar.
             Vector3 lipWorld = fromView.transform.TransformPoint(lipLocal);
             return transform.InverseTransformPoint(lipWorld);
+        }
+
+        /// <summary>
+        /// Akış kaynağı: sıvı yüzeyinin döken kenardaki konumu.
+        /// Sıvı ağızdaysa lip ile aynıdır. Sıvı ağzın altındaysa akış
+        /// sıvı yüzeyinden başlar — böylece akış her zaman sıvıya bağlı kalır.
+        /// </summary>
+        private Vector3 CalculateStreamSource(TubeView fromView, float signedAngle)
+        {
+            float lipSide = -Mathf.Sign(signedAngle);
+
+            // Eğik sıvı yüzeyinin döken kenardaki yüksekliği (normalize, 0-1).
+            // HasLiquidReachedMouth'daki formülün aynısı: maxOffset döken taraftaki
+            // yükselmeyi verir. tiltSlope zaten signedAngle'dan işaretli geldiği
+            // için lipSide ile çarpmak işareti iki kez çevirir — bunun yerine
+            // mutlak değer alıp ekliyoruz (döken taraf her zaman yüksek taraftır).
+            float tiltSlope = Mathf.Sin(signedAngle)
+                / Mathf.Max(Mathf.Abs(Mathf.Cos(signedAngle)), 0.2f);
+            float maxOffset = Mathf.Abs(0.5f * tiltSlope * (TubeView.Width / fromView.Height));
+            float surfaceNorm = fromView.CurrentFill + maxOffset;
+
+            // Tüp tepesini (1.0) aşamaz, tabandan (0) inemez.
+            surfaceNorm = Mathf.Clamp(surfaceNorm, 0f, 1f);
+
+            Vector3 localPos = new Vector3(
+                TubeView.MouthWidth * 0.5f * lipSide,
+                surfaceNorm * fromView.Height, 0f);
+
+            Vector3 worldPos = fromView.transform.TransformPoint(localPos);
+            return transform.InverseTransformPoint(worldPos);
         }
 
         /// <summary>
