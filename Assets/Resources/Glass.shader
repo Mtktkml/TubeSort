@@ -5,10 +5,10 @@ Shader "TubeSort/Glass"
 {
     Properties
     {
-        _BodyColor ("Gövde rengi", Color) = (0.16, 0.18, 0.20, 1)
-        _RimColor ("Kenar rengi", Color) = (0.30, 0.33, 0.36, 1)
+        _BodyColor ("Gövde rengi", Color) = (0.75, 0.82, 0.90, 0.18)
+        _RimColor ("Kenar rengi", Color) = (0.85, 0.90, 0.95, 0.6)
         _RimWidth ("Kenar kalınlığı", Float) = 0.035
-        _GlossStrength ("Parlama şiddeti", Range(0, 1)) = 0.18
+        _GlossStrength ("Parlama şiddeti", Range(0, 1)) = 0.08
     }
 
     SubShader
@@ -99,7 +99,7 @@ Shader "TubeSort/Glass"
                 float gloss = smoothstep(0.06, 0.0, abs(bodyUV.x - 0.22));
                 color.rgb += gloss * _GlossStrength * (1.0 - rim);
 
-                color.a = inside;
+                color.a *= inside;
                 return color;
             }
             ENDHLSL

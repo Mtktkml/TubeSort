@@ -10,14 +10,14 @@ namespace TubeSort.Game
     {
         private static readonly Color[] Colors =
         {
-            new Color(0.90f, 0.22f, 0.21f),   // 0 kırmızı
-            new Color(0.99f, 0.80f, 0.09f),   // 1 sarı
-            new Color(0.13f, 0.59f, 0.95f),   // 2 mavi
-            new Color(0.30f, 0.75f, 0.31f),   // 3 yeşil
-            new Color(1.00f, 0.60f, 0.20f),   // 4 turuncu
-            new Color(0.95f, 0.95f, 0.95f),   // 5 beyaz
-            new Color(0.61f, 0.35f, 0.71f),   // 6 mor
-            new Color(0.91f, 0.60f, 0.55f),   // 7 somon
+            new Color(0.90f, 0.28f, 0.28f),   // 0 kırmızı
+            new Color(0.95f, 0.78f, 0.15f),   // 1 sarı
+            new Color(0.28f, 0.58f, 0.90f),   // 2 mavi
+            new Color(0.35f, 0.78f, 0.38f),   // 3 yeşil
+            new Color(0.95f, 0.58f, 0.22f),   // 4 turuncu
+            new Color(0.92f, 0.92f, 0.92f),   // 5 beyaz
+            new Color(0.62f, 0.38f, 0.75f),   // 6 mor
+            new Color(0.88f, 0.55f, 0.48f),   // 7 somon
         };
 
         public int Count => Colors.Length;
