@@ -82,6 +82,7 @@ namespace TubeSort.Game
         private static readonly int BottomRadiusId = Shader.PropertyToID("_BottomRadius");
         private static readonly int MouthRadiusId = Shader.PropertyToID("_MouthRadius");
         private static readonly int MouthBlendId = Shader.PropertyToID("_MouthBlend");
+        private static readonly int TiltAngleId = Shader.PropertyToID("_TiltAngle");
 
         private Tube tube;
         private ColorPalette palette;
@@ -93,6 +94,7 @@ namespace TubeSort.Game
         private Vector3 restPosition;
         private bool isSelected;
         private float currentFill;
+        private float tiltAngle;
 
         // Shader'a gönderilecek diziler. Her yenilemede yeniden ayırmamak için
         // bir kez oluşturulup tekrar tekrar doldurulur.
@@ -242,6 +244,7 @@ namespace TubeSort.Game
             currentFill = tube.Count / (float)tube.Capacity * FillSpan;
             properties.SetFloat(FillLevelId, currentFill);
             properties.SetInt(LayerCountId, layerCount);
+            properties.SetFloat(TiltAngleId, tiltAngle);
             liquid.SetPropertyBlock(properties);
         }
 
@@ -284,6 +287,7 @@ namespace TubeSort.Game
             currentFill = fill;
             liquid.GetPropertyBlock(properties);
             properties.SetFloat(FillLevelId, fill);
+            properties.SetFloat(TiltAngleId, tiltAngle);
             liquid.SetPropertyBlock(properties);
         }
 
@@ -353,6 +357,37 @@ namespace TubeSort.Game
         {
             float h = Mathf.Clamp01(0.5f + 0.5f * (d2 - d1) / k);
             return Mathf.Lerp(d2, d1, h) - k * h * (1f - h);
+        }
+
+        /// <summary>Tüpün dinlenme konumu. Animasyon sırasında hedef hesaplamak için.</summary>
+        public Vector3 RestPosition => restPosition;
+
+        /// <summary>Tüpün gövde yüksekliği. Dökme pozisyonu hesaplamak için.</summary>
+        public float Height => BodyHeight;
+
+        /// <summary>
+        /// Tüpü verilen açıda eğer (radyan). Transform döner ve aynı açı
+        /// shader'a gönderilir. Shader bu açıyla yüzeyi ters yöne eğerek
+        /// sıvının dünya uzayında yatay kalmasını sağlar.
+        /// </summary>
+        public void SetTiltAngle(float angleRadians)
+        {
+            tiltAngle = angleRadians;
+            transform.localRotation = Quaternion.Euler(0f, 0f, angleRadians * Mathf.Rad2Deg);
+
+            liquid.GetPropertyBlock(properties);
+            properties.SetFloat(TiltAngleId, angleRadians);
+            liquid.SetPropertyBlock(properties);
+        }
+
+        /// <summary>
+        /// Cam ve sıvının çizim sırasını geçici olarak yükseltir. Dökme sırasında
+        /// kaynak tüp diğerlerinin üstünde görünmeli.
+        /// </summary>
+        public void SetSortingOffset(int offset)
+        {
+            glass.sortingOrder = 0 + offset;
+            liquid.sortingOrder = 1 + offset;
         }
 
         /// <summary>Seçili tüp yukarı kalkar; oyuncu neyi seçtiğini görsün.</summary>

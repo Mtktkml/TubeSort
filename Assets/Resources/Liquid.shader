@@ -72,6 +72,7 @@ Shader "TubeSort/Liquid"
             float _BottomRadius;
             float _MouthRadius;
             float _MouthBlend;
+            float _TiltAngle;
 
             struct Attributes
             {
@@ -126,9 +127,16 @@ Shader "TubeSort/Liquid"
                 float waveAmplitude = _WaveAmplitude / _BodySize.y;
                 float edgeSoftness = _EdgeSoftness / _BodySize.y;
 
+                // Tüp döndüğünde sıvı yüzeyi dünya uzayında yatay kalmalı.
+                // UV uzayında bunu sağlamak için yüzeyi eğim açısına göre
+                // ters yöne eğiyoruz. sin kullanılır çünkü büyük açılarda
+                // (70° gibi) tan patlar; sin doğal olarak 1'de durur.
+                float tiltOffset = (0.5 - uv.x) * sin(_TiltAngle)
+                    * (_BodySize.x / _BodySize.y);
+
                 // Sıvının yüzeyi düz bir çizgi değil, yavaşça salınan bir dalga.
                 float wave = sin(uv.x * _WaveFrequency + _Time.y * _WaveSpeed) * waveAmplitude;
-                float surface = _FillLevel + wave;
+                float surface = _FillLevel + tiltOffset + wave;
 
                 // Yüzeyin altındaysak 1, üstündeysek 0. Aradaki dar bant
                 // kenarın testere gibi görünmesini engeller.
@@ -138,10 +146,12 @@ Shader "TubeSort/Liquid"
 
                 // Bu piksel hangi katmanda? Katman sınırları dipten yukarı sıralı,
                 // o yüzden "üstünde kaldığım son sınır" katman indeksini verir.
+                // Tüp eğildiğinde katman sınırları da yüzeyle aynı açıda eğilir:
+                // yerçekimi tüm sıvılara eşit etki eder.
                 int layerIndex = 0;
                 for (int k = 0; k < MAX_LAYERS; k++)
                 {
-                    if (k < _LayerCount && uv.y >= _LayerTops[k])
+                    if (k < _LayerCount && uv.y >= _LayerTops[k] + tiltOffset)
                         layerIndex = k + 1;
                 }
                 layerIndex = clamp(layerIndex, 0, _LayerCount - 1);
