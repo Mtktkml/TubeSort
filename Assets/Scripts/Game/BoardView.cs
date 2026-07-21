@@ -395,12 +395,12 @@ namespace TubeSort.Game
         /// </summary>
         private IEnumerator AnimatePour(PourResult result)
         {
-            const float slideDuration = 1f;
-            const float pourDuration = 1f;
+            const float slideDuration = 0.25f;
+            const float pourDuration = 0.4f;
 
             // SmoothDamp tepki süresi. Kritik sönümleme: aşım yok, hızlı yakınsama.
             // Hem ilk eğilme hem dökme sırasındaki açı değişimi tek parametre.
-            const float angleSmoothTime = 1f;
+            const float angleSmoothTime = 0.12f;
 
             isAnimating = true;
             ClearSelection();
@@ -428,8 +428,8 @@ namespace TubeSort.Game
             float dx = toView.RestPosition.x - fromView.RestPosition.x;
             float direction = Mathf.Abs(dx) < 0.01f ? 1f : Mathf.Sign(dx);
 
-            // Dönüş noktası tüpün ağzına yakın olmalı; dipten döndürmek doğal durmaz.
-            float pivotHeight = fromView.Height * 0.8f;
+            // Dönüş noktası tüpün ortasında.
+            float pivotHeight = fromView.Height * 0.5f;
 
             // --- Faz 1+2+3: Kayma, eğilme ve dökme eş zamanlı ---
             // Kayma ve eğilme aynı anda başlar. Tilt'in pivot offset'i tüpü
@@ -580,7 +580,7 @@ namespace TubeSort.Game
             // Böylece kayma sırasında (henüz eğilmeden) gövdeler çakışmaz.
             // Eğilince ağız hedefin üstüne doğru iner.
             float destMouthY = dest.y + TallestTube;
-            float yTarget = destMouthY - 1.0f;
+            float yTarget = destMouthY - 0.5f;
 
             return new Vector3(xTarget, yTarget, 0f);
         }
