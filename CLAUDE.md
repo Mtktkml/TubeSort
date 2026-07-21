@@ -166,6 +166,19 @@ doğrulamaz. Görsel doğrulama gözle yapılır.
   tahtalarda da hızlı çalışacak algoritma araştırılıyor.
   `feature/deadlock-detection` branch'inde çalışılıyor.
 
+  **Değerlendirilen algoritmalar:**
+  1. **Basit BFS** — garantili, en kısa çözüm. Ama durum uzayı 9×9'da
+     patlar. ❌ pratik değil.
+  2. **DFS + Derinlik Sınırı (IDDFS)** — bellek verimli. Budama olmadan
+     yavaş, aynı durumu tekrar ziyaret eder. ⚠️
+  3. **DFS + Budama + Durum Önbelleği** — önerilen yaklaşım. Budama
+     kuralları: tamamlanmış tüpten dökme yok, boştan boşa taşıma yok,
+     son hamlenin tersi yok, eşdeğer boş tüp eleme. Pratikte durum
+     uzayını %90+ azaltır. 9×9'da saniyeler. ✅
+  4. **A\*** — heuristik ile BFS. İyi heuristik bulması zor, bellek yüksek. ⚠️
+  5. **Bidirectional BFS** — durum uzayını karekök kadar küçültür. Birden
+     fazla çözülmüş durum ve geriye hamle üretme karmaşıklığı. ⚠️
+
 - **Son katman dökme artefaktı — çözüldü:** Shader'da surface-based
   `survivalScore` ile son ~1 birim sıvıda ağız tarafına doğru çekilme
   uygulandı. Sadece eğik tüplerde etkin (`tiltAmount`), dik hedef tüpler
