@@ -142,7 +142,7 @@ doğrulamaz. Görsel doğrulama gözle yapılır.
 2. ~~Basit görsel~~
 3. ~~Sıvı shader'ı~~ (SDF, cam, genişleyen ağız)
 4. ~~Ekrana uyarlanan yerleşim~~
-5. **Dökme animasyonu** ← cila devam ediyor (`fix/pour-stream` branch'i)
+5. ~~Dökme animasyonu~~
 6. Level üretici
 7. Cila + meta (undo, +1 tüp, kapak animasyonu, ses)
 8. Build
@@ -165,16 +165,10 @@ doğrulamaz. Görsel doğrulama gözle yapılır.
   aramayı gerektirir; `Board.Clone()` buna hazır. Level üreticiyle birlikte
   ele alınmalı.
 
-- **Son katman dökme artefaktı:** Tüpteki son renk tamamen boşaltılırken
-  dipte sıvı kalıntısı görünüyor. Kök neden: shader'ın eğik düzlem modeli
-  `fill≈0 + büyük açı` kombinasyonunda tüpün bir yarısında sıvı çiziyor.
-  `CalculatePourAngle` fill→0'da açıyı 100°'ye çıkarıyor, `sin(100°)/0.2`
-  ile tilt offset ≈1.0 → fill=0 olsa bile eğik tarafta yüzey 0'ın üstünde.
-  Denenip sorun çıkaran yaklaşımlar: (1) fade ile açıyı son %15'te sıfıra
-  indirmek — stream kopuyor ve akış sapıtıyor, (2) tilt'i anında sıfırlamak —
-  görsel sıçrama. Shader'da fill=0 iken tilt offset'i sıfırlayan bir `step`
-  veya C# tarafında dökme sırasında fill=0'a ulaşıldığında tilt'i de sıfıra
-  getiren bir geçiş denenebilir. `fix/pour-stream` branch'inde çözülecek.
+- **Son katman dökme artefaktı — çözüldü:** Shader'da surface-based
+  `survivalScore` ile son ~1 birim sıvıda ağız tarafına doğru çekilme
+  uygulandı. Sadece eğik tüplerde etkin (`tiltAmount`), dik hedef tüpler
+  etkilenmiyor.
 
 ### Device Simulator sınırlamaları
 
@@ -202,16 +196,23 @@ Basit görsel (adım 2) sonrasını anlamak için aşağıdan yukarı:
 
 ### Dökme animasyonu — tamamlandı
 
-Beş fazlı coroutine (`AnimatePour`): kayma → eğilme → dökme → doğrulma → dönüş.
+Beş fazlı coroutine (`AnimatePour`): kayma → eğilme+dökme → doğrulma → dönüş.
 
-**Tüp eğilme:**
+**Tek açı sistemi (SmoothDamp):**
+- Ayrı eğilme/dökme fazları yok. Açı her zaman `CalculatePourAngle`'dan
+  gelir, `SmoothDamp` ile pürüzsüz takip edilir. Tüp doğal hızında eğilir,
+  sıvı ağza ulaşınca (`HasLiquidReachedMouth`) dökme başlar.
 - `_TiltAngle` uniform'u Liquid.shader'a geçer; sıvı yüzeyi ve katman
   sınırları dünya uzayında yatay kalır (`sin/cos` oranı, ±0.2 clamp).
 - Transform döner, pivot telafisi ile ağızdan dönme illüzyonu sağlanır.
 - Eğim açısı sıvı miktarına göre dinamik: dolu tüp 60°, boş tüp 100°
-  (`CalculatePourAngle`). Eğilme fazı tamamlanana kadar pürüzsüz
-  interpolasyon, sonra `CalculatePourAngle` devralır — sıvı azaldıkça
-  açı kademeli artar.
+  (`CalculatePourAngle`).
+- Fill interpolasyonu lineer (SmoothStep ortada hızlanıyordu).
+
+**Denenen ve reddedilen açı sistemleri:** (1) İki fazlı interpolasyon +
+CalculatePourAngle — geçiş anında sıçrama, çok birim döküldüğünde hızlanma.
+(2) fillFade ile açıyı sıfıra indirmek — sıvı dibe çöküyor. (3) Üstel
+yumuşatma (Lerp dt*8) — geçişi yumuşatıyor ama kök nedeni çözmüyor.
 
 **Katman güncelleme zamanlaması:**
 
@@ -226,5 +227,14 @@ SDF Bezier eğrisi: tek quad üzerinde kuadratik Bezier, 10 doğru parçasıyla
 yaklaşık hesaplanır. Kaynakta geniş, hedefte daralır (taper). Akış yönünde
 kayan parlaklık dalgası hareket hissi verir. Bitiş noktası her kare hedef
 tüpün sıvı seviyesiyle güncellenir (saydam tüpte sıvıya kadar uzanır).
+
+**Son katman drain (Liquid.shader):**
+Fill < 0.2 ve tüp eğikken (`tiltAmount`) etkin. `survivalScore = surface /
+maxSurface`: ağız tarafı (yüksek score) kalır, kapalı uç önce kaybolur.
+Dik tüplerde (hedef) etki yok. Denenen ve reddedilen drain yaklaşımları:
+(1) Yatay floor — üçgen artefakt. (2) Orantılı floor — merkez şerit
+tabana bağlı kalıyor. (3) Cam SDF wallProximity — çapraz daralma, yanlış
+yön. (4) İkisinin karışımı (proportional+constant lerp) — karmaşık, hâlâ
+yapay. Surface-based score en doğal sonucu verdi.
 
 **Denenen ve reddedilen:** LineRenderer akış — yapay göründüğü için reddedildi.
