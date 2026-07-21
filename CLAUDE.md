@@ -159,11 +159,12 @@ doğrulamaz. Görsel doğrulama gözle yapılır.
 
 ### Bilinen hatalar
 
-- **Deadlock tespiti yetersiz:** `Board.HasAnyValidMove` yalnızca "yapılabilecek
-  hamle var mı" sorusunu soruyor. Hamle var ama oyun kazanılamaz (gerçek çıkmaz)
-  durumunu yakalamıyor. Tam çözülebilirlik analizi BFS/DFS ile durum uzayını
-  aramayı gerektirir; `Board.Clone()` buna hazır. Level üreticiyle birlikte
-  ele alınmalı.
+- **Deadlock tespiti yetersiz — algoritma araştırma aşamasında:**
+  `Board.HasAnyValidMove` yalnızca "yapılabilecek hamle var mı" sorusunu
+  soruyor. Hamle var ama oyun kazanılamaz (gerçek çıkmaz) durumunu
+  yakalamıyor. `Board.Clone()` ve `UndoPour()` hazır. 9×9 tüp gibi büyük
+  tahtalarda da hızlı çalışacak algoritma araştırılıyor.
+  `feature/deadlock-detection` branch'inde çalışılıyor.
 
 - **Son katman dökme artefaktı — çözüldü:** Shader'da surface-based
   `survivalScore` ile son ~1 birim sıvıda ağız tarafına doğru çekilme
