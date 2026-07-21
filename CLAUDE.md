@@ -196,12 +196,21 @@ Basit görsel (adım 2) sonrasını anlamak için aşağıdan yukarı:
 
 ### Dökme animasyonu — tamamlandı
 
-Beş fazlı coroutine (`AnimatePour`): kayma → eğilme+dökme → doğrulma → dönüş.
+Üç fazlı coroutine (`AnimatePour`): kayma+eğilme+dökme (eş zamanlı) →
+doğrulma+geri dönüş (eş zamanlı).
+
+**Eş zamanlı kayma+eğilme (çakışma çözümü):**
+- Ayrı kayma fazı yok. Kayma ve eğilme aynı anda başlar: tüp hedefe
+  kaydıkça eğilir, pivot offset tabanı kaldırır → hedef tüple çakışma olmaz.
+- `pourPos` her kare güncel `currentAngle`'a göre yeniden hesaplanır
+  (`CalculatePourPosition`): ağız her açıda hedefin üstüne düşer.
+- Stream kaynağı her zaman lip'ten (`CalculateSourceMouth`), sıvı
+  yüzeyinden değil. Pour hızı açıya bağlı: fill düşürülmeden önce açının
+  sıvıyı lip'te tutmaya yetip yetmediği kontrol edilir.
 
 **Tek açı sistemi (SmoothDamp):**
-- Ayrı eğilme/dökme fazları yok. Açı her zaman `CalculatePourAngle`'dan
-  gelir, `SmoothDamp` ile pürüzsüz takip edilir. Tüp doğal hızında eğilir,
-  sıvı ağza ulaşınca (`HasLiquidReachedMouth`) dökme başlar.
+- Açı her zaman `CalculatePourAngle`'dan gelir, `SmoothDamp` ile pürüzsüz
+  takip edilir. Sıvı ağza ulaşınca (`HasLiquidReachedMouth`) dökme başlar.
 - `_TiltAngle` uniform'u Liquid.shader'a geçer; sıvı yüzeyi ve katman
   sınırları dünya uzayında yatay kalır (`sin/cos` oranı, ±0.2 clamp).
 - Transform döner, pivot telafisi ile ağızdan dönme illüzyonu sağlanır.
