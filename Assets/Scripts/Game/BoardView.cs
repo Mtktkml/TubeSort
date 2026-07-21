@@ -395,12 +395,12 @@ namespace TubeSort.Game
         /// </summary>
         private IEnumerator AnimatePour(PourResult result)
         {
-            const float slideDuration = 0.25f;
-            const float pourDuration = 0.4f;
+            const float slideDuration = 1f;
+            const float pourDuration = 1f;
 
             // SmoothDamp tepki süresi. Kritik sönümleme: aşım yok, hızlı yakınsama.
             // Hem ilk eğilme hem dökme sırasındaki açı değişimi tek parametre.
-            const float angleSmoothTime = 0.12f;
+            const float angleSmoothTime = 1f;
 
             isAnimating = true;
             ClearSelection();
@@ -580,7 +580,7 @@ namespace TubeSort.Game
             // Böylece kayma sırasında (henüz eğilmeden) gövdeler çakışmaz.
             // Eğilince ağız hedefin üstüne doğru iner.
             float destMouthY = dest.y + TallestTube;
-            float yTarget = destMouthY + bodyHeight * 0.1f;
+            float yTarget = destMouthY - 1.0f;
 
             return new Vector3(xTarget, yTarget, 0f);
         }
