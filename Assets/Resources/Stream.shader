@@ -128,10 +128,10 @@ Shader "TubeSort/Stream"
                 float flow = sin(closestT * _FlowFreq - _Time.y * _FlowSpeed)
                     * _FlowStrength + 1.0;
 
-                half4 color = _Color;
+                float4 color = _Color;
                 color.rgb *= flow;
                 color.a *= alpha;
-                return color;
+                return (half4)color;
             }
             ENDHLSL
         }

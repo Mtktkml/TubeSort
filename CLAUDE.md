@@ -142,7 +142,7 @@ doğrulamaz. Görsel doğrulama gözle yapılır.
 2. ~~Basit görsel~~
 3. ~~Sıvı shader'ı~~ (SDF, cam, genişleyen ağız)
 4. ~~Ekrana uyarlanan yerleşim~~
-5. ~~Dökme animasyonu~~ (seviye, tüp eğilme, SDF akış görseli)
+5. **Dökme animasyonu** ← cila devam ediyor (`fix/pour-stream` branch'i)
 6. Level üretici
 7. Cila + meta (undo, +1 tüp, kapak animasyonu, ses)
 8. Build
@@ -164,6 +164,17 @@ doğrulamaz. Görsel doğrulama gözle yapılır.
   durumunu yakalamıyor. Tam çözülebilirlik analizi BFS/DFS ile durum uzayını
   aramayı gerektirir; `Board.Clone()` buna hazır. Level üreticiyle birlikte
   ele alınmalı.
+
+- **Son katman dökme artefaktı:** Tüpteki son renk tamamen boşaltılırken
+  dipte sıvı kalıntısı görünüyor. Kök neden: shader'ın eğik düzlem modeli
+  `fill≈0 + büyük açı` kombinasyonunda tüpün bir yarısında sıvı çiziyor.
+  `CalculatePourAngle` fill→0'da açıyı 100°'ye çıkarıyor, `sin(100°)/0.2`
+  ile tilt offset ≈1.0 → fill=0 olsa bile eğik tarafta yüzey 0'ın üstünde.
+  Denenip sorun çıkaran yaklaşımlar: (1) fade ile açıyı son %15'te sıfıra
+  indirmek — stream kopuyor ve akış sapıtıyor, (2) tilt'i anında sıfırlamak —
+  görsel sıçrama. Shader'da fill=0 iken tilt offset'i sıfırlayan bir `step`
+  veya C# tarafında dökme sırasında fill=0'a ulaşıldığında tilt'i de sıfıra
+  getiren bir geçiş denenebilir. `fix/pour-stream` branch'inde çözülecek.
 
 ### Device Simulator sınırlamaları
 
@@ -197,14 +208,16 @@ Beş fazlı coroutine (`AnimatePour`): kayma → eğilme → dökme → doğrulm
 - `_TiltAngle` uniform'u Liquid.shader'a geçer; sıvı yüzeyi ve katman
   sınırları dünya uzayında yatay kalır (`sin/cos` oranı, ±0.2 clamp).
 - Transform döner, pivot telafisi ile ağızdan dönme illüzyonu sağlanır.
-- Eğim açısı sıvı miktarına göre dinamik: dolu tüp 50°, boş tüp 90°.
-  Dökme sırasında sıvı azaldıkça açı kademeli artar.
+- Eğim açısı sıvı miktarına göre dinamik: dolu tüp 60°, boş tüp 100°
+  (`CalculatePourAngle`). Eğilme fazı tamamlanana kadar pürüzsüz
+  interpolasyon, sonra `CalculatePourAngle` devralır — sıvı azaldıkça
+  açı kademeli artar.
 
 **Katman güncelleme zamanlaması:**
 
 | | Kaynak tüp | Hedef tüp |
 |---|---|---|
-| Katmanlar | Dökme sonrası `Refresh()` | Dökme öncesi `Refresh()` |
+| Katmanlar | Doğrulma sonrası `Refresh()` | Dökme öncesi `Refresh()` |
 | Seviye | Eski yerden kademeli düşer | Eski yerden kademeli yükselir |
 
 **Akış görseli (Stream.shader + StreamView):**

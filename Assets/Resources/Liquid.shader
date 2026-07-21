@@ -147,6 +147,25 @@ Shader "TubeSort/Liquid"
                 if (inside <= 0.001)
                     discard;
 
+                // Son ~1 birim sıvıda, ağız tarafına doğru çekilme.
+                // Eğik yüzey zaten pour tarafında yüksek, kapalı uçta düşük.
+                // Surface'ı normalize edip score olarak kullanırsak: yüksek
+                // score (ağız) kalır, düşük score (kapalı uç) önce kaybolur.
+                // Sadece eğik tüplerde etkin; dik tüplerde (hedef) sıfır.
+                float tiltAmount = smoothstep(0.0, 0.3, abs(_TiltAngle));
+                float drainProgress = (1.0 - saturate(_FillLevel / 0.2)) * tiltAmount;
+                if (drainProgress > 0.001)
+                {
+                    float maxSurface = _FillLevel
+                        + abs(0.5 * tiltSlope * (_BodySize.x / _BodySize.y));
+                    float survivalScore = saturate(surface / max(maxSurface, 0.001));
+                    float drainClip = smoothstep(drainProgress - 0.05,
+                                                 drainProgress + 0.05, survivalScore);
+                    inside *= drainClip;
+                    if (inside <= 0.001)
+                        discard;
+                }
+
                 // Bu piksel hangi katmanda? Katman sınırları dipten yukarı sıralı,
                 // o yüzden "üstünde kaldığım son sınır" katman indeksini verir.
                 // Tüp eğildiğinde katman sınırları da yüzeyle aynı açıda eğilir:
@@ -159,7 +178,7 @@ Shader "TubeSort/Liquid"
                 }
                 layerIndex = clamp(layerIndex, 0, _LayerCount - 1);
 
-                half4 color = _LayerColors[layerIndex];
+                float4 color = _LayerColors[layerIndex];
 
                 // Silindir yanılsaması: kenarlara doğru koyulaşma.
                 float distanceFromCenter = abs(uv.x - 0.5) * 2.0;
@@ -176,7 +195,7 @@ Shader "TubeSort/Liquid"
                 color.rgb += highlight * _Glossiness * 0.5;
 
                 color.a *= inside * insideGlass;
-                return color;
+                return (half4)color;
             }
             ENDHLSL
         }
