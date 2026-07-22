@@ -120,7 +120,7 @@ Unity Editor **kapalı** olmalı; açıksa proje kilitli olur ve batchmode başl
 
 `-testPlatform PlayMode` ile de aynısı. Editor'dan: **Window → General → Test Runner**.
 
-Mevcut durum: **EditMode 12/12**, **PlayMode 11/11**.
+Mevcut durum: **EditMode 12/12**, **PlayMode 22/22**.
 
 EditMode'u tercih et: sahne kurmadığı için saniyeler sürer. PlayMode'u yalnızca
 gerçek oyun ortamı gerektiğinde kullan.
@@ -150,9 +150,10 @@ doğrulamaz. Görsel doğrulama gözle yapılır.
 ### Bilinen eksikler
 
 - `BoardView.CreateTestBoard()` elle kurulmuş geçici bir tahta; çözülebilirliği
-  garanti değil. Level üreticiyle silinecek.
-- `BoardView` tahtasını kendi kuruyor, dışarıdan alamıyor. Bu yüzden testler tüp
-  sayısını kesin iddia edemiyor. Level üreticiyle birlikte enjekte edilmeli.
+  garanti değil. Level üreticiyle silinecek. (Dışarıdan tahta verme kapısı
+  hazır: `BoardView.LoadBoard` — Start öncesi çağrılırsa kurulum onunla
+  yapılır, oyun sırasında çağrılırsa görünümler yıkılıp yeniden kurulur.
+  Level üretici ve level geçişi bu kapıyı kullanacak.)
 - Sahne hâlâ `SampleScene` adında; içindeki `BoardView` nesnesi `GameObject`.
 - Asset yok ve neredeyse gerekmiyor. Ses, ikon ve yazı tipi cila adımında
   (Kenney.nl, freesound.org, Google Fonts).
