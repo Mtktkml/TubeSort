@@ -120,7 +120,7 @@ Unity Editor **kapalı** olmalı; açıksa proje kilitli olur ve batchmode başl
 
 `-testPlatform PlayMode` ile de aynısı. Editor'dan: **Window → General → Test Runner**.
 
-Mevcut durum: **EditMode 12/12**, **PlayMode 11/11**.
+Mevcut durum: **EditMode 18/18**, **PlayMode 11/11**.
 
 EditMode'u tercih et: sahne kurmadığı için saniyeler sürer. PlayMode'u yalnızca
 gerçek oyun ortamı gerektiğinde kullan.
@@ -159,25 +159,49 @@ doğrulamaz. Görsel doğrulama gözle yapılır.
 
 ### Bilinen hatalar
 
-- **Deadlock tespiti yetersiz — algoritma araştırma aşamasında:**
+- **Deadlock tespiti — karar verildi, uygulanıyor:**
   `Board.HasAnyValidMove` yalnızca "yapılabilecek hamle var mı" sorusunu
   soruyor. Hamle var ama oyun kazanılamaz (gerçek çıkmaz) durumunu
-  yakalamıyor. `Board.Clone()` ve `UndoPour()` hazır. 9×9 tüp gibi büyük
-  tahtalarda da hızlı çalışacak algoritma araştırılıyor.
-  `feature/deadlock-detection` branch'inde çalışılıyor.
+  yakalamıyor. `feature/deadlock-detection` branch'inde çalışılıyor.
 
-  **Değerlendirilen algoritmalar:**
-  1. **Basit BFS** — garantili, en kısa çözüm. Ama durum uzayı 9×9'da
-     patlar. ❌ pratik değil.
-  2. **DFS + Derinlik Sınırı (IDDFS)** — bellek verimli. Budama olmadan
-     yavaş, aynı durumu tekrar ziyaret eder. ⚠️
-  3. **DFS + Budama + Durum Önbelleği** — önerilen yaklaşım. Budama
-     kuralları: tamamlanmış tüpten dökme yok, boştan boşa taşıma yok,
-     son hamlenin tersi yok, eşdeğer boş tüp eleme. Pratikte durum
-     uzayını %90+ azaltır. 9×9'da saniyeler. ✅
-  4. **A\*** — heuristik ile BFS. İyi heuristik bulması zor, bellek yüksek. ⚠️
-  5. **Bidirectional BFS** — durum uzayını karekök kadar küçültür. Birden
-     fazla çözülmüş durum ve geriye hamle üretme karmaşıklığı. ⚠️
+  **Karar — mimari: generate-and-test.** Deadlock oyun sırasında
+  yakalanmaz; level üretiminden **sonra** solver ile "bu tahta çözülebilir
+  mi?" doğrulanır, çözülemeyen tahta atılıp yenisi üretilir. Bu, PCG
+  literatüründe belgelenmiş standart pratik (De Kegel & Haahr, IEEE ToG
+  2020). Alternatif olan yapısal garanti (yeterince boş tüp) kanıtlı ama
+  pratik değil: kapasite 4'te her 4 dolu tüpe ~3 boş tüp gerekir
+  (Ito et al., FUN 2022).
+
+  **Karar — algoritma: DFS + budama + kanonik durum önbelleği.**
+  Çözülebilirlik testi *herhangi bir* çözüm arar, en kısasını değil;
+  DFS bunun en hızlı ve bellek açısından en ucuz yolu. Dayanaklar
+  (Ito et al., arXiv:2202.09495):
+  - Çözülebilirlik kararı **NP-tam** → budama tercih değil, zorunluluk.
+  - **Ball sort ↔ water sort eşdeğer** (Corollary 4): ball-sort solver
+    literatürü kısmi-dökme mekaniğine aynen uygulanır. (Teorem başlangıç
+    konfigürasyonları için; oyun ortası kısmi tüplü tahtalar formal
+    kapsam dışı.)
+  - Her çözülebilir tahtanın **polinom uzunlukta çözümü** kanıtlı →
+    sınıra kadar arayıp bulamamak doğru bir "çözülemez" kararıdır.
+
+  **Uygulama detayları:**
+  - **Kanonikleştirme** — asıl kazanç buradan: durum hash'lenmeden önce
+    tüpler kanonik sıraya sokulur; tüp sırası permütasyonları ve eşdeğer
+    boş tüpler tek duruma iner.
+  - Budama: tamamlanmış tüpten dökme yok, tek renkli tüpü boş tüpe
+    taşıma yok, kaynak başına yalnız bir boş hedef. (Ters hamle ve
+    döngüler kanonik önbellek tarafından zaten elenir.)
+  - **Bütçe loglaması:** düğüm bütçesi aşılırsa sonuç "bilinmiyor"dur,
+    "çözülemez" değil — ikisi ayrı raporlanır. Yoksa zayıf doğrulayıcı
+    level havuzunu sessizce kolaya yamultur (Murase 1996 dersi).
+
+  **Elenen alternatifler:** BFS (üstel bellek), naif DFS (durum tekrarı),
+  Bidirectional BFS (geriye hamle üretme karmaşıklığı), boş tüp garantisi
+  (oyun tasarımını bozar). **A\*/IDA\*** çözülebilirlik için elendi ama
+  ileride zorluk metriği (en kısa çözüm uzunluğu) istenirse kabul edilen
+  levellerde ikinci katman olur: kabul edilebilir "color break" heuristiği
+  (farklı renk üstüne oturan renk geçişi sayısı) ile A\* build-time'da,
+  IDA\*+transpozisyon runtime'da.
 
 - **Son katman dökme artefaktı — çözüldü:** Shader'da surface-based
   `survivalScore` ile son ~1 birim sıvıda ağız tarafına doğru çekilme
