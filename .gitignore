@@ -9,6 +9,8 @@
 # Tools altindaki dotnet projelerinin derleme ciktilari
 /Tools/**/bin/
 /Tools/**/obj/
+# crosscheck.py'nin uretilen raporu
+/Tools/SolverBenchmark/py_results.md
 /[Ll]ibrary/
 /[Tt]emp/
 /[Oo]bj/
