@@ -372,7 +372,8 @@ MonoBehaviour:
   horizontalGap: 0.35
   verticalGap: 1
   screenMargin: 0.1
-  useUnsolvableBoard: 0
+  levelNumber: 5
+  useUnsolvableBoard: 1
 --- !u!4 &826710510
 Transform:
   m_ObjectHideFlags: 0

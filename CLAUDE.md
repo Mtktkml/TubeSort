@@ -147,6 +147,26 @@ doğrulamaz. Görsel doğrulama gözle yapılır.
 7. Cila + meta (undo, +1 tüp, kapak animasyonu, ses)
 8. Build
 
+### Kaldığımız yer (22 Tem 2026)
+
+**Sıradaki iş: ilk 5 leveli 1 boş tüple yeniden üretmek.** Leveller şu an
+2 boş tüple üretildi (`Tools/SolverBenchmark/generate_levels.py`,
+`EMPTIES = 2`). 1 boşa geçince dikkat edilecekler:
+
+- 1 boş tüpte çözülemez oranı çok yüksek (küçük boyutlarda bile sık);
+  generate-and-test'in at-yeniden-üret döngüsü ilk kez gerçekten
+  çalışacak — "atıldı" logları normaldir.
+- Üretim sonrası `python generate_levels.py` → Unity'de PlayMode
+  `LevelLibraryTests` yeniden koşulmalı (5 levelin şekil + C# solver
+  doğrulaması); testteki boş tüp beklentisi (2) de 1'e güncellenmeli.
+- Ekran görüntüleri mentöre yeniden atılacaksa `BoardView.levelNumber`
+  ile level seçilip Play — Console'daki çözülebilirlik logu dahil.
+
+Bu iş `feature/deadlock-detection` branch'inde sürüyor (master'a merge
+edilmedi; mentörle süreç devam ediyor). Level üretimi mentör kararıyla
+Unity dışında, Python'da yapılıyor; Python kural implementasyonu C# ile
+8/8 birebir çapraz doğrulanmış durumda (`crosscheck.py`).
+
 ### Bilinen eksikler
 
 - `BoardView.CreateTestBoard()` elle kurulmuş geçici bir tahta; çözülebilirliği

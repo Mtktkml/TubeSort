@@ -9,9 +9,10 @@
 # Tools altindaki dotnet projelerinin derleme ciktilari
 /Tools/**/bin/
 /Tools/**/obj/
-# Python scriptlerinin uretilen raporlari
+# Python scriptlerinin uretilen raporlari ve onbellegi
 /Tools/SolverBenchmark/py_results.md
 /Tools/SolverBenchmark/py_benchmark.md
+/Tools/**/__pycache__/
 /[Ll]ibrary/
 /[Tt]emp/
 /[Oo]bj/
