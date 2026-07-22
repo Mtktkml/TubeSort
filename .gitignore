@@ -9,6 +9,8 @@
 # Tools altindaki dotnet projelerinin derleme ciktilari
 /Tools/**/bin/
 /Tools/**/obj/
+# Unity'nin urettigi kok .csproj'lar ignore'lu; Tools altindakiler elle yazildi
+!/Tools/**/*.csproj
 /[Ll]ibrary/
 /[Tt]emp/
 /[Oo]bj/
