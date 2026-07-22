@@ -6,6 +6,9 @@
 # See: https://github.com/github/gitignore/tree/main/Global
 #
 .utmp/
+# Tools altindaki dotnet projelerinin derleme ciktilari
+/Tools/**/bin/
+/Tools/**/obj/
 /[Ll]ibrary/
 /[Tt]emp/
 /[Oo]bj/
