@@ -112,6 +112,123 @@ namespace TubeSort.Tests
         }
 
         [Test]
+        public void Solve_AgreesWithNaiveSolverOnRandomBoards()
+        {
+            // Budamaların ve kanonikleştirmenin çözüm kaçırmadığının asıl kanıtı:
+            // budamasız, kanonik anahtarsız naif DFS ile 200 rastgele tahtada
+            // aynı karara varılmalı. Tohum sabit: test deterministik.
+            var rng = new System.Random(12345);
+            int solvableCount = 0;
+            int unsolvableCount = 0;
+
+            for (int i = 0; i < 200; i++)
+            {
+                int colors = 2 + rng.Next(2);   // 2-3 renk
+                int capacity = 2 + rng.Next(2); // 2-3 kapasite
+                int empties = rng.Next(3);      // 0-2 boş tüp
+
+                Board board = RandomBoard(rng, colors, capacity, empties);
+
+                SolveReport report = Solver.Solve(board);
+                Assert.AreNotEqual(SolveVerdict.OutOfBudget, report.Verdict,
+                    "Küçük tahtada bütçe aşılmamalı");
+
+                bool naive = NaiveSolvable(board.Clone());
+
+                Assert.AreEqual(naive, report.IsSolvable,
+                    $"Tahta #{i} (renk={colors}, kapasite={capacity}, boş={empties}): " +
+                    $"naif={naive}, solver={report.IsSolvable} — bir budama çözüm kaçırıyor olabilir");
+
+                if (report.IsSolvable) solvableCount++;
+                else unsolvableCount++;
+            }
+
+            // Test boşa dönmesin: iki karar da gerçekten üretilmiş olmalı.
+            Assert.Greater(solvableCount, 0, "Hiç çözülebilir tahta üretilmedi");
+            Assert.Greater(unsolvableCount, 0, "Hiç çözülemez tahta üretilmedi");
+        }
+
+        /// <summary>
+        /// Rastgele tahta: her renkten tam 'capacity' birim karıştırılıp dolu
+        /// tüplere dağıtılır, sonuna boş tüpler eklenir. Oyunun üreteceği
+        /// "hepsi dolu ya da boş" başlangıç biçimiyle aynı.
+        /// </summary>
+        private static Board RandomBoard(System.Random rng, int colors, int capacity, int emptyTubes)
+        {
+            var units = new System.Collections.Generic.List<int>();
+            for (int c = 0; c < colors; c++)
+                for (int u = 0; u < capacity; u++)
+                    units.Add(c);
+
+            // Fisher-Yates karıştırma
+            for (int i = units.Count - 1; i > 0; i--)
+            {
+                int j = rng.Next(i + 1);
+                (units[i], units[j]) = (units[j], units[i]);
+            }
+
+            var tubes = new System.Collections.Generic.List<Tube>();
+            for (int t = 0; t < colors; t++)
+            {
+                var tube = new Tube(capacity);
+                for (int u = 0; u < capacity; u++)
+                    tube.Push(units[t * capacity + u]);
+                tubes.Add(tube);
+            }
+
+            for (int e = 0; e < emptyTubes; e++)
+                tubes.Add(new Tube(capacity));
+
+            return new Board(tubes);
+        }
+
+        /// <summary>
+        /// Referans çözücü: budama yok, kanonikleştirme yok, hamle sıralaması yok.
+        /// Tek koruma, birebir durum tekrarını engelleyen ziyaret kümesi
+        /// (sonlanma garantisi). Yavaş ama tartışmasız doğru.
+        /// </summary>
+        private static bool NaiveSolvable(Board board)
+        {
+            return NaiveDfs(board, new System.Collections.Generic.HashSet<string>());
+        }
+
+        private static bool NaiveDfs(Board board, System.Collections.Generic.HashSet<string> visited)
+        {
+            if (board.IsSolved) return true;
+            if (!visited.Add(RawKey(board))) return false;
+
+            for (int from = 0; from < board.TubeCount; from++)
+            {
+                for (int to = 0; to < board.TubeCount; to++)
+                {
+                    if (!board.IsValidMove(from, to)) continue;
+
+                    PourResult move = board.Pour(from, to);
+                    bool solved = NaiveDfs(board, visited);
+                    board.UndoPour(move);
+                    if (solved) return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>Ham durum anahtarı: tüp sırası korunur, kanonikleştirme yapılmaz.</summary>
+        private static string RawKey(Board board)
+        {
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < board.TubeCount; i++)
+            {
+                sb.Append(board[i].Capacity).Append(':');
+                for (int u = 0; u < board[i].Count; u++)
+                    sb.Append(board[i].Liquid[u]).Append(',');
+                sb.Append('|');
+            }
+
+            return sb.ToString();
+        }
+
+        [Test]
         public void Solve_TreatsEquivalentEmptyTubesAsOneState()
         {
             // Üç özdeş boş tüp durum uzayını katlamamalı. Aynı tahtanın tek

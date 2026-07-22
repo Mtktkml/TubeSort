@@ -72,6 +72,7 @@ namespace TubeSort.Game
             }
 
             board = CreateTestBoard();
+            LogSolvability();
             BuildViews();
             BuildStreamView();
             ApplyLayout();
@@ -111,6 +112,40 @@ namespace TubeSort.Game
                 new Tube(4),
                 new Tube(4)
             });
+        }
+
+        /// <summary>
+        /// Tahtanın çözülebilirliğini Console'a yazar (geçici teşhis; level
+        /// üreticiyle birlikte generate-and-test döngüsüne taşınacak).
+        /// Çözüm yolu loglanır ki elle oynayıp doğrulanabilsin.
+        /// </summary>
+        private void LogSolvability()
+        {
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            SolveReport report = Solver.Solve(board);
+            timer.Stop();
+
+            switch (report.Verdict)
+            {
+                case SolveVerdict.Solvable:
+                    var path = new System.Text.StringBuilder();
+                    foreach (PourResult move in report.Solution)
+                        path.Append(' ').Append(move.FromIndex).Append("->").Append(move.ToIndex);
+
+                    Debug.Log($"<color=lime>Tahta çözülebilir:</color> {report.Solution.Count} hamle, " +
+                              $"{report.StatesVisited} durum, {timer.ElapsedMilliseconds} ms. Yol:{path}");
+                    break;
+
+                case SolveVerdict.Unsolvable:
+                    Debug.LogWarning(
+                        $"Tahta ÇÖZÜLEMEZ ({report.StatesVisited} durum, {timer.ElapsedMilliseconds} ms).");
+                    break;
+
+                case SolveVerdict.OutOfBudget:
+                    Debug.LogWarning(
+                        $"Çözülebilirlik bilinmiyor: bütçe aşıldı ({report.StatesVisited} durum).");
+                    break;
+            }
         }
 
         private void BuildViews()
