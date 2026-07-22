@@ -3,13 +3,17 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using TubeSort.Core;
 
-// Performans testi: N renk x N kapasite tahtalar (N=3..10).
-// Her boyut icin bir COZULEBILIR ve bir COZULEMEZ ornek bulunur,
-// solver'in suresi ve gezdigi durum sayisi olculur.
+// Performans testi, iki tablo:
+//   Tablo 1 — N=3..10: cozulebilir ornek (2 bos) hamle/durum/sure,
+//             cozulemez ornek (1 bos) durum/sure.
+//   Tablo 2 — 2 bos tuple cozulemez tahta avi: boyut basina en fazla
+//             30.000 deneme ya da 45 s; ilk bulunanin kanit maliyeti.
+// Tohumlar sabittir: her calistirmada ayni tahtalar, ayni sayilar.
 var rng = new Random(7);
 const int Budget = 1_000_000;
+const int HuntBudget = 2_000_000;
 
-Board Generate(int colors, int capacity, int empties)
+Board Generate(Random r, int colors, int capacity, int empties)
 {
     var units = new List<int>();
     for (int c = 0; c < colors; c++)
@@ -18,7 +22,7 @@ Board Generate(int colors, int capacity, int empties)
 
     for (int i = units.Count - 1; i > 0; i--)
     {
-        int j = rng.Next(i + 1);
+        int j = r.Next(i + 1);
         (units[i], units[j]) = (units[j], units[i]);
     }
 
@@ -54,7 +58,7 @@ string BoardText(Board b)
 
     for (int i = 0; i < tries && wall.Elapsed.TotalSeconds < timeLimitSec; i++)
     {
-        Board board = Generate(colors, cap, empties);
+        Board board = Generate(rng, colors, cap, empties);
         if (want == SolveVerdict.Unsolvable && !board.HasAnyValidMove) continue;
 
         var sw = Stopwatch.StartNew();
@@ -69,7 +73,10 @@ string BoardText(Board b)
 }
 
 // JIT isinmasi: ilk cagri derleme maliyeti icermesin.
-Solver.Solve(Generate(3, 3, 2));
+// (Ana tohumdan uretilir: orijinal tablo 1 kosusuyla ayni dizi korunur.)
+Solver.Solve(Generate(rng, 3, 3, 2));
+
+Console.WriteLine("================ TABLO 1 — Ana benchmark ================");
 
 for (int n = 3; n <= 10; n++)
 {
@@ -113,4 +120,44 @@ for (int n = 3; n <= 10; n++)
     {
         Console.WriteLine($"COZULEMEZ    bulunamadi/kanitlanamadi (butce asan: {uoob})");
     }
+}
+
+// ---- Tablo 2: 2 bos tuple cozulemez avi ----
+// Ayri ve taze tohum: tablo 1'in rastgele tuketiminden etkilenmesin,
+// onceki av kosusunun sayilari birebir tekrar uretilebilsin.
+var huntRng = new Random(7);
+
+Console.WriteLine("\n================ TABLO 2 — 2 bos tuple cozulemez avi ================");
+Console.WriteLine("(boyut basina en fazla 30.000 deneme ya da 45 s)\n");
+
+for (int n = 3; n <= 10; n++)
+{
+    var wall = Stopwatch.StartNew();
+    int tries = 0;
+    bool found = false;
+
+    while (tries < 30000 && wall.Elapsed.TotalSeconds < 45 && !found)
+    {
+        tries++;
+        Board board = Generate(huntRng, n, n, 2);
+
+        var sw = Stopwatch.StartNew();
+        SolveReport r = Solver.Solve(board, maxStates: HuntBudget);
+        sw.Stop();
+
+        if (r.Verdict == SolveVerdict.Unsolvable)
+        {
+            found = true;
+            Console.WriteLine(
+                $"{n}x{n} bos=2  BULUNDU  deneme={tries}  " +
+                $"kanit: durum={r.StatesVisited}  sure={sw.Elapsed.TotalMilliseconds:F1} ms");
+            Console.WriteLine($"  ornek: {BoardText(board)}");
+        }
+    }
+
+    if (!found)
+        Console.WriteLine(
+            $"{n}x{n} bos=2  BULUNAMADI  deneme={tries}  " +
+            $"taranan sure={wall.Elapsed.TotalSeconds:F0} s" +
+            (n == 3 ? "  (teorik olarak imkansiz: k(3,3)<=2)" : ""));
 }
