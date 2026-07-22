@@ -395,7 +395,7 @@ namespace TubeSort.Game
         /// </summary>
         private IEnumerator AnimatePour(PourResult result)
         {
-            const float slideDuration = 0.25f;
+            const float slideDuration = 0.24f;
             const float pourDuration = 0.4f;
 
             // SmoothDamp tepki süresi. Kritik sönümleme: aşım yok, hızlı yakınsama.
@@ -580,7 +580,7 @@ namespace TubeSort.Game
             // Böylece kayma sırasında (henüz eğilmeden) gövdeler çakışmaz.
             // Eğilince ağız hedefin üstüne doğru iner.
             float destMouthY = dest.y + TallestTube;
-            float yTarget = destMouthY - 0.5f;
+            float yTarget = destMouthY - 0.25f;
 
             return new Vector3(xTarget, yTarget, 0f);
         }
