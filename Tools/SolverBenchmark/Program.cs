@@ -125,7 +125,8 @@ for (int n = 3; n <= 10; n++)
 }
 
 double table1Seconds = totalTimer.Elapsed.TotalSeconds;
-Console.WriteLine($"\nTablo 1 tamamlandi: {table1Seconds:F1} sn");
+Console.WriteLine($"\nTablo 1 tamamlandi: {table1Seconds * 1000:F0} ms " +
+    "(az sayida tahta cozuyor: ornekler genelde ilk denemelerde bulunuyor)");
 
 // ---- Tablo 2: 2 bos tuple cozulemez avi ----
 // Ayri ve taze tohum: tablo 1'in rastgele tuketiminden etkilenmesin,
@@ -154,7 +155,7 @@ for (int n = 3; n <= 10; n++)
         {
             found = true;
             Console.WriteLine(
-                $"{n}x{n} bos=2  BULUNDU  deneme={tries}  " +
+                $"{n}x{n} bos=2  BULUNDU  deneme={tries}  taranan sure={wall.Elapsed.TotalSeconds:F1} s  " +
                 $"kanit: durum={r.StatesVisited}  sure={sw.Elapsed.TotalMilliseconds:F1} ms");
             Console.WriteLine($"  ornek: {BoardText(board)}");
         }
