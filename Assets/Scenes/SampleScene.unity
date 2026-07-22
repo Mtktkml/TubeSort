@@ -369,9 +369,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 22c132a2601f5914cbd1d78ddbd58b6e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: TubeSort.Game::TubeSort.Game.BoardView
-  horizontalSpacing: 1.2
-  verticalSpacing: 3.2
-  tubesPerRow: 5
+  horizontalGap: 0.35
+  verticalGap: 1
+  screenMargin: 0.1
+  useUnsolvableBoard: 0
 --- !u!4 &826710510
 Transform:
   m_ObjectHideFlags: 0
