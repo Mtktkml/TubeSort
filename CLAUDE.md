@@ -120,7 +120,7 @@ Unity Editor **kapalı** olmalı; açıksa proje kilitli olur ve batchmode başl
 
 `-testPlatform PlayMode` ile de aynısı. Editor'dan: **Window → General → Test Runner**.
 
-Mevcut durum: **EditMode 12/12**, **PlayMode 22/22**.
+Mevcut durum: **EditMode 17/17**, **PlayMode 26/26**.
 
 EditMode'u tercih et: sahne kurmadığı için saniyeler sürer. PlayMode'u yalnızca
 gerçek oyun ortamı gerektiğinde kullan.

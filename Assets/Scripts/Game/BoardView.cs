@@ -29,6 +29,7 @@ namespace TubeSort.Game
         [SerializeField] private float screenMargin = 0.1f;
 
         private Board board;
+        private readonly MoveHistory history = new MoveHistory();
         private ColorPalette palette;
         private Sprite unitSprite;
         private Material glassMaterial;
@@ -91,6 +92,9 @@ namespace TubeSort.Game
         /// <summary>Aktif tahta. Testlerin ve dış katmanların durum sorgusu için.</summary>
         public Board Board => board;
 
+        /// <summary>Dökme animasyonu sürüyor mu? Testler bitişini beklemek için kullanır.</summary>
+        public bool IsAnimating => isAnimating;
+
         /// <summary>
         /// Dışarıdan tahta yükler: level üreticinin ve testlerin giriş kapısı.
         /// Start'tan önce çağrılırsa kurulum bu tahtayla yapılır; oyun
@@ -106,8 +110,40 @@ namespace TubeSort.Game
             }
 
             board = newBoard;
+            history.Clear(); // eski tahtanın hamleleri yeni tahtada geri alınamaz
             if (initialized)
                 RebuildViews();
+        }
+
+        /// <summary>
+        /// Hamleyi dener: geçerliyse uygular, geçmişe yazar ve animasyonu
+        /// başlatır. Dokunuş yöneticisi ve testler aynı kapıyı kullanır.
+        /// </summary>
+        public bool TryPour(int fromIndex, int toIndex)
+        {
+            if (isAnimating) return false;
+
+            PourResult result = board.Pour(fromIndex, toIndex);
+            if (!result.Success) return false;
+
+            history.Record(result);
+            StartCoroutine(AnimatePour(result));
+            return true;
+        }
+
+        /// <summary>
+        /// Son hamleyi geri alır ve iki tüpün görselini anında günceller.
+        /// Animasyon sürerken ve geçmiş boşken çağrı yok sayılır.
+        /// Kademeli değil anlık: geri alma bir düzeltmedir, tören değil.
+        /// </summary>
+        public void UndoLastMove()
+        {
+            if (isAnimating) return;
+            if (!history.TryUndo(board, out PourResult undone)) return;
+
+            ClearSelection();
+            tubeViews[undone.FromIndex].Refresh();
+            tubeViews[undone.ToIndex].Refresh();
         }
 
         /// <summary>Mevcut tüp görünümlerini yıkıp tahtayı baştan kurar.</summary>
@@ -346,6 +382,12 @@ namespace TubeSort.Game
         {
             RefitIfViewChanged();
 
+            // Geçici geliştirme kısayolu: geri al butonu gelene kadar Z tuşu.
+            // Telefonda klavye yok; kalıcı çözüm ekran butonu olacak.
+            Keyboard keyboard = Keyboard.current;
+            if (keyboard != null && keyboard.zKey.wasPressedThisFrame)
+                UndoLastMove();
+
             // Pointer, Mouse ve Touchscreen'in ortak atasıdır: masaüstünde fare,
             // telefonda (ve Device Simulator'da) parmak aynı kodla okunur.
             Pointer pointer = Pointer.current;
@@ -395,13 +437,8 @@ namespace TubeSort.Game
                 return;
             }
 
-            PourResult result = board.Pour(selectedIndex, index);
-
-            if (result.Success)
-            {
-                StartCoroutine(AnimatePour(result));
+            if (TryPour(selectedIndex, index))
                 return;
-            }
 
             // Hamle geçersizdi. Oyuncu muhtemelen yeni bir kaynak seçmek istiyor:
             // seçimi iptal etmek yerine seçimi tıklanan tüpe taşımak daha rahat.
