@@ -28,6 +28,11 @@ namespace TubeSort.Game
         [Range(0f, 0.4f)]
         [SerializeField] private float screenMargin = 0.1f;
 
+        [Header("Teşhis")]
+        [Tooltip("Çözülemez test tahtasını kur: solver'ın 'ÇÖZÜLEMEZ' kararını " +
+                 "ve oyun içi çıkmazı elle denemek için.")]
+        [SerializeField] private bool useUnsolvableBoard;
+
         private Board board;
         private ColorPalette palette;
         private Sprite unitSprite;
@@ -71,7 +76,7 @@ namespace TubeSort.Game
                 return;
             }
 
-            board = CreateTestBoard();
+            board = useUnsolvableBoard ? CreateUnsolvableTestBoard() : CreateTestBoard();
             LogSolvability();
             BuildViews();
             BuildStreamView();
@@ -110,6 +115,26 @@ namespace TubeSort.Game
                 new Tube(4, Blue, Green, Green, Red),
                 new Tube(4, Yellow, Blue, Red, Green),
                 new Tube(4),
+                new Tube(4)
+            });
+        }
+
+        /// <summary>
+        /// Kanıtlanmış çözülemez tahta: rastgele üretilip solver ile tarandı
+        /// (58 durumun tamamı gezildi, çözüm yok). Hamleler var, yani oyuncu
+        /// bir süre oynayıp çıkmaza girebilir — "hamle var ama kazanılamaz"
+        /// durumunun elle test edilebilir örneği.
+        /// </summary>
+        private Board CreateUnsolvableTestBoard()
+        {
+            const int Red = 0, Yellow = 1, Blue = 2, Green = 3;
+
+            return new Board(new[]
+            {
+                new Tube(4, Blue, Blue, Green, Red),
+                new Tube(4, Blue, Red, Green, Yellow),
+                new Tube(4, Green, Red, Green, Yellow),
+                new Tube(4, Blue, Red, Yellow, Yellow),
                 new Tube(4)
             });
         }
