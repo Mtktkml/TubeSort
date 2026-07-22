@@ -37,6 +37,7 @@ namespace TubeSort.Game
         private Material streamMaterial;
         private readonly List<TubeView> tubeViews = new List<TubeView>();
         private StreamView streamView;
+        private UndoButtonView undoButton;
 
         private int selectedIndex = -1;
         private bool isAnimating;
@@ -85,8 +86,35 @@ namespace TubeSort.Game
 
             BuildViews();
             BuildStreamView();
+            BuildUndoButton();
             ApplyLayout();
             initialized = true;
+        }
+
+        /// <summary>
+        /// Geri al butonunu kurar. Buton tahtanın çocuğu değildir: ApplyLayout
+        /// tahtayı ekrana sığdırmak için ölçeklerken buton sabit kalmalı.
+        /// </summary>
+        private void BuildUndoButton()
+        {
+            var go = new GameObject("UndoButton");
+            undoButton = go.AddComponent<UndoButtonView>();
+            undoButton.Initialize();
+        }
+
+        /// <summary>Butonu görüş alanının sol üst köşesine yerleştirir.</summary>
+        private void PositionUndoButton()
+        {
+            if (undoButton == null) return;
+
+            Vector2 view = CameraView;
+            Vector3 cam = mainCamera.transform.position;
+            float inset = UndoButtonView.Size;
+
+            undoButton.transform.position = new Vector3(
+                cam.x - view.x * 0.5f + inset,
+                cam.y + view.y * 0.5f - inset,
+                0f);
         }
 
         /// <summary>Aktif tahta. Testlerin ve dış katmanların durum sorgusu için.</summary>
@@ -243,6 +271,9 @@ namespace TubeSort.Game
             // ileride gelecek arayüz de onunla birlikte kayardı.
             transform.localScale = Vector3.one * Mathf.Min(1f, FitScale(boardSize));
             lastFittedView = CameraView;
+
+            // Buton görüş alanına bağlı: yerleşim her tazelendiğinde o da tazelenir.
+            PositionUndoButton();
         }
 
         /// <summary>
@@ -368,6 +399,10 @@ namespace TubeSort.Game
         /// </summary>
         private void OnDestroy()
         {
+            // Buton tahtanın çocuğu olmadığı için kendiliğinden yok olmaz.
+            if (undoButton != null)
+                Destroy(undoButton.gameObject);
+
             Destroy(glassMaterial);
             Destroy(liquidMaterial);
             Destroy(streamMaterial);
@@ -382,12 +417,6 @@ namespace TubeSort.Game
         {
             RefitIfViewChanged();
 
-            // Geçici geliştirme kısayolu: geri al butonu gelene kadar Z tuşu.
-            // Telefonda klavye yok; kalıcı çözüm ekran butonu olacak.
-            Keyboard keyboard = Keyboard.current;
-            if (keyboard != null && keyboard.zKey.wasPressedThisFrame)
-                UndoLastMove();
-
             // Pointer, Mouse ve Touchscreen'in ortak atasıdır: masaüstünde fare,
             // telefonda (ve Device Simulator'da) parmak aynı kodla okunur.
             Pointer pointer = Pointer.current;
@@ -396,26 +425,29 @@ namespace TubeSort.Game
             if (isAnimating) return;
             if (!pointer.press.wasPressedThisFrame) return;
 
-            TubeView clicked = RaycastTube(pointer.position.ReadValue());
-            if (clicked != null)
-                HandleTubeClick(clicked.Index);
+            HandleClick(pointer.position.ReadValue());
         }
 
         /// <summary>
-        /// Ekran koordinatındaki dokunuşun hangi tüpe denk geldiğini bulur.
-        /// BoxCollider2D hızlı eleme yapar; ardından SDF ile tıklamanın gerçekten
-        /// tüp şekli içinde olup olmadığı doğrulanır.
+        /// Ekran koordinatındaki dokunuşu ilgili hedefe yönlendirir: geri al
+        /// butonu ya da tüp. Tüplerde BoxCollider2D hızlı eleme yapar; ardından
+        /// SDF ile dokunuşun gerçekten tüp şekli içinde olduğu doğrulanır.
         /// </summary>
-        private TubeView RaycastTube(Vector2 screenPosition)
+        private void HandleClick(Vector2 screenPosition)
         {
             Vector3 worldPoint = mainCamera.ScreenToWorldPoint(screenPosition);
             Collider2D hit = Physics2D.OverlapPoint(worldPoint);
-            if (hit == null) return null;
+            if (hit == null) return;
+
+            if (hit.GetComponent<UndoButtonView>() != null)
+            {
+                UndoLastMove();
+                return;
+            }
 
             var view = hit.GetComponent<TubeView>();
-            if (view == null) return null;
-
-            return view.ContainsPoint(worldPoint) ? view : null;
+            if (view != null && view.ContainsPoint(worldPoint))
+                HandleTubeClick(view.Index);
         }
 
         private void HandleTubeClick(int index)
