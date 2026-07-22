@@ -28,9 +28,15 @@ namespace TubeSort.Game
         [Range(0f, 0.4f)]
         [SerializeField] private float screenMargin = 0.1f;
 
+        [Header("Level")]
+        [Tooltip("Oynanacak level (Resources/levels.json'dan). 0 = level yok, " +
+                 "elle kurulmuş test tahtası kullanılır.")]
+        [SerializeField] private int levelNumber;
+
         [Header("Teşhis")]
         [Tooltip("Çözülemez test tahtasını kur: solver'ın 'ÇÖZÜLEMEZ' kararını " +
-                 "ve oyun içi çıkmazı elle denemek için.")]
+                 "ve oyun içi çıkmazı elle denemek için. Yalnız levelNumber = 0 " +
+                 "iken etkilidir.")]
         [SerializeField] private bool useUnsolvableBoard;
 
         private Board board;
@@ -83,8 +89,12 @@ namespace TubeSort.Game
                 return;
             }
 
-            // Dışarıdan tahta verilmediyse geçici test tahtası kurulur
-            // (teşhis anahtarına göre çözülebilir ya da çözülemez olan).
+            // Tahta önceliği: dışarıdan verilen (LoadBoard) > seçili level >
+            // elle kurulmuş test tahtası (teşhis anahtarına göre çözülebilir
+            // ya da çözülemez olan). Level yüklenemezse test tahtasına düşer.
+            if (board == null && levelNumber > 0)
+                board = LevelLibrary.Load(levelNumber);
+
             if (board == null)
                 board = useUnsolvableBoard ? CreateUnsolvableTestBoard() : CreateTestBoard();
 
