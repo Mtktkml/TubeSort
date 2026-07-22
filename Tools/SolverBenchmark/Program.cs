@@ -76,6 +76,8 @@ string BoardText(Board b)
 // (Ana tohumdan uretilir: orijinal tablo 1 kosusuyla ayni dizi korunur.)
 Solver.Solve(Generate(rng, 3, 3, 2));
 
+var totalTimer = Stopwatch.StartNew();
+
 Console.WriteLine("================ TABLO 1 — Ana benchmark ================");
 
 for (int n = 3; n <= 10; n++)
@@ -122,9 +124,12 @@ for (int n = 3; n <= 10; n++)
     }
 }
 
+double table1Seconds = totalTimer.Elapsed.TotalSeconds;
+Console.WriteLine($"\nTablo 1 tamamlandi: {table1Seconds:F1} sn");
+
 // ---- Tablo 2: 2 bos tuple cozulemez avi ----
 // Ayri ve taze tohum: tablo 1'in rastgele tuketiminden etkilenmesin,
-// onceki av kosusunun sayilari birebir tekrar uretilebilsin.
+// sayilar tekrar uretilebilir kalsin.
 var huntRng = new Random(7);
 
 Console.WriteLine("\n================ TABLO 2 — 2 bos tuple cozulemez avi ================");
@@ -161,3 +166,7 @@ for (int n = 3; n <= 10; n++)
             $"taranan sure={wall.Elapsed.TotalSeconds:F0} s" +
             (n == 3 ? "  (teorik olarak imkansiz: k(3,3)<=2)" : ""));
 }
+
+double totalSeconds = totalTimer.Elapsed.TotalSeconds;
+Console.WriteLine($"\nTablo 2 tamamlandi: {totalSeconds - table1Seconds:F1} sn");
+Console.WriteLine($"BITTI — toplam {totalSeconds:F1} sn (Tablo 1: {table1Seconds:F1} sn, Tablo 2: {totalSeconds - table1Seconds:F1} sn)");
