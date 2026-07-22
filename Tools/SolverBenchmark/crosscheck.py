@@ -16,7 +16,23 @@ Sonuclar hem ekrana basilir hem py_results.md dosyasina yazilir.
 
 import os
 import random
+import threading
 import time
+
+# Terminaldeki canli durum satiri: script calistigi surece her saniye
+# gecen sureyi ve o anki asamayi ayni satirin ustune yazar.
+_stage = {"text": "basliyor"}
+
+
+def _ticker(stop_event, t0):
+    while not stop_event.wait(1.0):
+        elapsed = time.time() - t0
+        print(f"\r  CALISIYOR  {elapsed:4.0f} sn  |  {_stage['text']}          ",
+              end="", flush=True)
+
+
+def set_stage(text):
+    _stage["text"] = text
 
 BUDGET = 2_000_000
 
@@ -250,6 +266,7 @@ def run_benchmark(out):
 
     rng = random.Random(7)
     for n in range(3, 11):
+        set_stage(f"benchmark {n}x{n} kosuyor")
         s = find(n, n, 2, "SOLVABLE", rng)
         s_cell = (f"{s[3]} / {s[1]} / {s[2]:.1f} ms" if s else "bulunamadi")
 
@@ -257,7 +274,7 @@ def run_benchmark(out):
         u_cell = (f"{u[1]} / {u[2]:.1f} ms" if u else "bulunamadi")
 
         out.append(f"| {n}x{n} | {s_cell} | {u_cell} |")
-        print(f"  {n}x{n} tamam", flush=True)
+        set_stage(f"benchmark {n}x{n} tamamlandi")
 
     out.append("")
 
@@ -265,11 +282,20 @@ def run_benchmark(out):
 def main():
     out = ["# TubeSort Solver — Python Capraz Dogrulama Raporu", ""]
 
-    print("Capraz dogrulama kosuyor...", flush=True)
+    t0 = time.time()
+    stop = threading.Event()
+    ticker = threading.Thread(target=_ticker, args=(stop, t0), daemon=True)
+    ticker.start()
+
+    set_stage("capraz dogrulama")
     run_cross_checks(out)
 
-    print("Benchmark kosuyor...", flush=True)
+    set_stage("benchmark basliyor")
     run_benchmark(out)
+
+    stop.set()
+    ticker.join()
+    print(f"\r  BITTI  toplam {time.time() - t0:.0f} sn" + " " * 40)
 
     report = "\n".join(out)
 
