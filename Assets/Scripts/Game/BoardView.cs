@@ -47,6 +47,13 @@ namespace TubeSort.Game
         private Camera mainCamera;
 
         /// <summary>
+        /// Start kurulumu tamamlandı mı? LoadBoard bununla karar verir:
+        /// kurulumdan önce çağrıldıysa tahtayı saklamak yeter (Start kuracak),
+        /// sonra çağrıldıysa görünümlerin yıkılıp yeniden kurulması gerekir.
+        /// </summary>
+        private bool initialized;
+
+        /// <summary>
         /// Yerleşimin son yapıldığı görüş alanı. Değiştiği kareyi yakalamak için
         /// saklanır: cihaz döndüğünde, katlanabilir telefon açıldığında ya da
         /// ekran bölündüğünde tahtanın yeniden yerleşmesi gerekir.
@@ -76,10 +83,55 @@ namespace TubeSort.Game
                 return;
             }
 
-            board = useUnsolvableBoard ? CreateUnsolvableTestBoard() : CreateTestBoard();
+            // Dışarıdan tahta verilmediyse geçici test tahtası kurulur
+            // (teşhis anahtarına göre çözülebilir ya da çözülemez olan).
+            if (board == null)
+                board = useUnsolvableBoard ? CreateUnsolvableTestBoard() : CreateTestBoard();
+
             LogSolvability();
             BuildViews();
             BuildStreamView();
+            ApplyLayout();
+            initialized = true;
+        }
+
+        /// <summary>Aktif tahta. Testlerin ve dış katmanların durum sorgusu için.</summary>
+        public Board Board => board;
+
+        /// <summary>
+        /// Dışarıdan tahta yükler: level üreticinin ve testlerin giriş kapısı.
+        /// Start'tan önce çağrılırsa kurulum bu tahtayla yapılır; oyun
+        /// sırasında çağrılırsa mevcut görünümler yıkılıp yenisi kurulur
+        /// (level geçişi de bu yoldan yapılacak).
+        /// </summary>
+        public void LoadBoard(Board newBoard)
+        {
+            if (newBoard == null)
+            {
+                Debug.LogError("LoadBoard'a null tahta verildi; mevcut tahta korunuyor.");
+                return;
+            }
+
+            board = newBoard;
+            if (initialized)
+                RebuildViews();
+        }
+
+        /// <summary>Mevcut tüp görünümlerini yıkıp tahtayı baştan kurar.</summary>
+        private void RebuildViews()
+        {
+            // Yarıda kalan dökme animasyonu yeni tahtaya sızmasın.
+            StopAllCoroutines();
+            isAnimating = false;
+            selectedIndex = -1;
+            if (streamView != null)
+                streamView.Hide();
+
+            foreach (TubeView view in tubeViews)
+                Destroy(view.gameObject);
+            tubeViews.Clear();
+
+            BuildViews();
             ApplyLayout();
         }
 
