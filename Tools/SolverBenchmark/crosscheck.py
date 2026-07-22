@@ -14,6 +14,7 @@ Calistirma:  python crosscheck.py
 Sonuclar hem ekrana basilir hem py_results.md dosyasina yazilir.
 """
 
+import os
 import random
 import time
 
@@ -271,12 +272,15 @@ def main():
     run_benchmark(out)
 
     report = "\n".join(out)
-    with open("py_results.md", "w", encoding="utf-8") as f:
+
+    # Rapor, calisma dizini nereden olursa olsun scriptin kendi klasorune yazilir.
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "py_results.md")
+    with open(path, "w", encoding="utf-8") as f:
         f.write(report)
 
     print()
     print(report)
-    print("\nRapor dosyasi: py_results.md")
+    print(f"\nRapor dosyasi: {path}")
 
 
 if __name__ == "__main__":
