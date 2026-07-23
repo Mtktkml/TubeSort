@@ -219,7 +219,10 @@ namespace TubeSort.Game
                     foreach (PourResult move in report.Solution)
                         path.Append(' ').Append(move.FromIndex).Append("->").Append(move.ToIndex);
 
-                    Debug.Log($"<color=lime>Tahta çözülebilir:</color> {report.Solution.Count} hamle, " +
+                    // Çözüm sayısı zorluk/esneklik metriği; bütçe aşıldıysa alt sınırdır.
+                    string exactNote = report.CountIsExact ? "" : " (bütçe aşıldı: alt sınır)";
+                    Debug.Log($"<color=lime>Tahta çözülebilir:</color> {report.SolutionCount} çözüm{exactNote}, " +
+                              $"örnek yol {report.Solution.Count} hamle, " +
                               $"{report.StatesVisited} durum, {timer.ElapsedMilliseconds} ms. Yol:{path}");
                     break;
 

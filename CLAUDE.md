@@ -120,7 +120,7 @@ Unity Editor **kapalı** olmalı; açıksa proje kilitli olur ve batchmode başl
 
 `-testPlatform PlayMode` ile de aynısı. Editor'dan: **Window → General → Test Runner**.
 
-Mevcut durum: **EditMode 19/19**, **PlayMode 22/22**.
+Mevcut durum: **EditMode 21/21**, **PlayMode 22/22**.
 
 EditMode'u tercih et: sahne kurmadığı için saniyeler sürer. PlayMode'u yalnızca
 gerçek oyun ortamı gerektiğinde kullan.
@@ -147,25 +147,43 @@ doğrulamaz. Görsel doğrulama gözle yapılır.
 7. Cila + meta (undo, +1 tüp, kapak animasyonu, ses)
 8. Build
 
-### Kaldığımız yer (22 Tem 2026)
+### Kaldığımız yer (23 Tem 2026)
 
-**Sıradaki iş: ilk 5 leveli 1 boş tüple yeniden üretmek.** Leveller şu an
-2 boş tüple üretildi (`Tools/SolverBenchmark/generate_levels.py`,
-`EMPTIES = 2`). 1 boşa geçince dikkat edilecekler:
+**Hedef (mentör kararı): 300 önceden üretilmiş-seçilmiş level.** Leveller
+runtime'da üretilmeyecek; Python'da çok sayıda aday üretilip metriklerle
+en iyileri seçilecek, zorluğu artan sırayla dosyaya yazılacak. Kapasite
+4/5/6; renk sayısı (K) ve boş tüp sayısı (2 kolay / 1 zor) bağımsız
+parametreler. Eski plan ("5 leveli EMPTIES=1 ile yeniden üret") bu hattın
+içine katlandı.
 
-- 1 boş tüpte çözülemez oranı çok yüksek (küçük boyutlarda bile sık);
-  generate-and-test'in at-yeniden-üret döngüsü ilk kez gerçekten
-  çalışacak — "atıldı" logları normaldir.
-- Üretim sonrası `python generate_levels.py` → Unity'de PlayMode
-  `LevelLibraryTests` yeniden koşulmalı (5 levelin şekil + C# solver
-  doğrulaması); testteki boş tüp beklentisi (2) de 1'e güncellenmeli.
-- Ekran görüntüleri mentöre yeniden atılacaksa `BoardView.levelNumber`
-  ile level seçilip Play — Console'daki çözülebilirlik logu dahil.
+Yol haritası — A tamam, sıra B'de:
+
+- [x] **A. Solver sayım semantiği:** arama ilk çözümde durmaz, uzayı
+  tüketir, çözüme düşen kenarları sayar (`SolutionCount`, `CountIsExact`).
+  C# + Python; EditMode 21/21; çapraz doğrulama 8/8 — artık karar +
+  durum + çözüm sayısı üçlüsü birebir kıyaslanıyor. Ayrıntı:
+  `Docs/SOLVER.md`.
+- [ ] **B. En kısa çözüm uzunluğu:** kanonik graf üzerinde BFS (Python,
+  build-time) + level başına metrik makbuzu (kapasite, renk, boş, çözüm
+  sayısı, en kısa, durum). Sağlama: BFS durum sayısı == DFS durum sayısı.
+- [ ] **C. ~15 levellik pilot merdiven** + zorluk skoru ilk sürüm →
+  mentör onayı (skor ağırlıkları ve eğri şekli açık soru).
+- [ ] **D. 300 level üretimi** + Unity tarafı: `LevelLibraryTests`
+  güncelleme, ekran kontrolü (13+ tüp sığıyor mu), `ColorPalette`
+  (12 renk ayırt edilebilir mi).
+
+Notlar:
+
+- `BoardView.LogSolvability` yeni formatta ("N çözüm, örnek yol M hamle");
+  BoardView.cs değişikliği henüz Unity'de derlenmedi — ilk açılışta
+  doğrulanmalı, PlayMode testleri koşulmalı.
+- Benchmark Tablo 2 (2 boş çözülemez avı) yeni semantikte fiilen işlevsiz:
+  avda elenen her çözülebilir aday tam tüketim maliyeti ödüyor, 45 sn'ye
+  3-23 deneme sığıyor. Gerekirse solver'a "yalnız varlık" hızlı modu
+  eklenebilir — mentörle konuşulacak.
 
 Bu iş `feature/deadlock-detection` branch'inde sürüyor (master'a merge
-edilmedi; mentörle süreç devam ediyor). Level üretimi mentör kararıyla
-Unity dışında, Python'da yapılıyor; Python kural implementasyonu C# ile
-8/8 birebir çapraz doğrulanmış durumda (`crosscheck.py`).
+edilmedi; mentörle süreç devam ediyor).
 
 ### Bilinen eksikler
 
@@ -194,8 +212,10 @@ Unity dışında, Python'da yapılıyor; Python kural implementasyonu C# ile
   (Ito et al., FUN 2022).
 
   **Karar — algoritma: DFS + budama + kanonik durum önbelleği.**
-  Çözülebilirlik testi *herhangi bir* çözüm arar, en kısasını değil;
-  DFS bunun en hızlı ve bellek açısından en ucuz yolu. Dayanaklar
+  *Güncelleme (23 Tem 2026, mentör kararı):* arama ilk çözümde durmaz;
+  erişilebilir uzayı tüketir ve çözüme düşen kenarları sayar
+  (`SolutionCount` — zorluk metriği). İlk bulunan yol örnek olarak
+  raporlanır, metrik değildir. Ayrıntı: `Docs/SOLVER.md`. Dayanaklar
   (Ito et al., arXiv:2202.09495):
   - Çözülebilirlik kararı **NP-tam** → budama tercih değil, zorunluluk.
   - **Ball sort ↔ water sort eşdeğer** (Corollary 4): ball-sort solver
@@ -216,13 +236,16 @@ Unity dışında, Python'da yapılıyor; Python kural implementasyonu C# ile
     "çözülemez" değil — ikisi ayrı raporlanır. Yoksa zayıf doğrulayıcı
     level havuzunu sessizce kolaya yamultur (Murase 1996 dersi).
 
-  **Elenen alternatifler:** BFS (üstel bellek), naif DFS (durum tekrarı),
-  Bidirectional BFS (geriye hamle üretme karmaşıklığı), boş tüp garantisi
-  (oyun tasarımını bozar). **A\*/IDA\*** çözülebilirlik için elendi ama
-  ileride zorluk metriği (en kısa çözüm uzunluğu) istenirse kabul edilen
-  levellerde ikinci katman olur: kabul edilebilir "color break" heuristiği
-  (farklı renk üstüne oturan renk geçişi sayısı) ile A\* build-time'da,
-  IDA\*+transpozisyon runtime'da.
+  **Elenen alternatifler:** BFS (çözülebilirlik/sayım için gereksiz bellek;
+  ama **en kısa çözüm uzunluğu** metriği için build-time'da kanonik graf
+  üzerinde BFS kullanılacak — uzay zaten tüketiliyor, ek maliyet sınıfı
+  yok), naif DFS (durum tekrarı), Bidirectional BFS (geriye hamle üretme
+  karmaşıklığı), boş tüp garantisi (oyun tasarımını bozar). **A\*/IDA\***
+  ancak tahta boyutları BFS'i aşarsa gündeme gelir; "color break"
+  heuristiği (farklı renk üstüne oturan renk geçişi sayısı) hazır fikir
+  olarak duruyor. Tüm çözüm *yollarını* saymak/saklamak da elendi:
+  sıralama kombinasyonlarıyla katlanarak büyür (#P), önbelleği geçersiz
+  kılar — ölçümü ve gerekçesi `Docs/SOLVER.md`'de.
 
 - **Son katman dökme artefaktı — çözüldü:** Shader'da surface-based
   `survivalScore` ile son ~1 birim sıvıda ağız tarafına doğru çekilme

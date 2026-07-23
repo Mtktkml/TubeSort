@@ -5,10 +5,12 @@ Kod: `Assets/Scripts/Core/Solver.cs` · Testler: `Assets/Tests/EditMode/SolverTe
 
 ## Problem
 
-Level üreticinin ürettiği rastgele tahta çözülebilir mi? Bu soru NP-tam
-(Ito et al. 2022); ama tek bir tahta için pratikte hızla cevaplanabilir.
-Amaç *en kısa* çözümü bulmak değil, **"herhangi bir çözüm var mı?"**
-sorusuna evet/hayır demek. Bu ayrım tüm tasarım kararlarını belirler.
+Level üreticinin ürettiği rastgele tahta çözülebilir mi — ve kaç farklı
+çıkışı var? Çözülebilirlik kararı NP-tam (Ito et al. 2022); ama tek bir
+tahta için pratikte hızla cevaplanabilir. Amaç *en kısa* çözümü bulmak
+değil, çözülebilirliğe karar vermek ve **çözüm sayısını** ölçmek (zorluk
+metriği; mentör kararı, 23 Tem 2026). En kısa çözüm uzunluğu ayrı ve ucuz
+bir soru olarak build-time'da BFS ile ölçülür (aşağıda).
 
 ## Arama modeli: tek tahta üzerinde geri izlemeli DFS
 
@@ -21,10 +23,14 @@ gezdirilir. BFS'in elenme sebebi tam bu: BFS her durumu ayrı kopya olarak
 saklamak zorunda (üstel bellek); A\* elenmesi de aynı mantık: en kısa çözüm
 aranmıyor ki maliyetine katlanılsın.
 
-Sonuç mantığı asimetriktir: **tek bir dalın** çözüme ulaşması "çözülebilir"
-demek için yeter (arama anında biter, hamle zinciri çözüm olarak raporlanır);
-"çözülemez" diyebilmek içinse **erişilebilir tüm durumların** tüketilmesi
-gerekir.
+Arama ilk çözümde **durmaz**: her tahtada erişilebilir durum uzayının
+tamamı gezilir ve çözüme düşen her kenar sayılır. İlk bulunan çözümün yolu
+örnek olarak saklanır (replay testi, Console logu, ileride ipucu) ama
+hiçbir metriğe girmez — DFS'in yolu gezinme sırasının rastlantısıdır, en
+kısa değildir. Kararların **kanıt yükü** yine asimetriktir: "çözülebilir"
+için tek kenar yeter, "çözülemez" için uzayın tükenmiş olması gerekir;
+maliyet ise iki durumda da aynıdır (uzayı tüketmek). Uzay tüketildiği için
+karar, durum sayısı ve çözüm sayısı gezinme sırasından bağımsızdır.
 
 ## Asıl hız kaynağı: kanonik durum önbelleği
 
@@ -67,6 +73,29 @@ hamleleri öne koymak çözümün daha az düğüm gezilerek bulunmasını sağl
 Bu bir **sezgidir, doğruluk koşulu değildir**: sıra tersine çevrilse karar
 aynı çıkar, sadece daha yavaş.
 
+## Çözüm sayısı metriği: çözüme düşen kenarlar
+
+Sayılan şey: genişletilen kanonik durumlardan yapılan ve tahtayı bitiren
+(budanmış) hamleler — durum grafında **çözüme düşen kenarların sayısı**.
+Her durum en fazla bir kez genişletildiği için:
+
+- Aynı öz çözümün hamle-sıralaması varyantları tekrar sayılmaz (bağımsız
+  hamle çiftleri yol sayısını katlar; kenar sayısını değiştirmez).
+- Sayı gezinme sırasından bağımsız ve deterministiktir — çapraz
+  doğrulamada birebir kıyaslanır.
+- Maliyet tavanı, "çözülemez" kararının zaten ödediği bedeldir (uzayı
+  tüketmek); çıktı boyutuyla patlamaz.
+
+Bilinçli olarak YAPILMAYAN: tüm çözüm *yollarını* saymak ya da saklamak.
+Yol sayısı bağımsız hamlelerin sıralama kombinasyonlarıyla katlanarak
+büyür (ölçüldü: 13 hamlelik çözümü olan tahtada 30 sn'de 2.5M+ yol,
+bitmedi) ve tam sayma #P sınıfındadır; üstelik yol biriktirmek kanonik
+önbelleği geçersiz kılar. "Ortalama çözüm uzunluğu" da aynı nedenle
+tanımsız/gürültülüdür. **En kısa çözüm uzunluğu** ise grafın özelliğidir
+ve yol saymadan ölçülür: kanonik graf üzerinde BFS (build-time, Python —
+planlanan metrik katmanı). DFS'in örnek yolu ile BFS'in en kısası
+çelişmez; iki ayrı soruya iki ayrı cevaptır.
+
 ## Neden 3 sonuç durumu (Solvable / Unsolvable / OutOfBudget)
 
 Arama düğüm ve derinlik bütçesiyle sınırlıdır. Bütçe aşıldığında dürüst
@@ -79,6 +108,12 @@ Derinlik bütçesinin cömert bir tavan olabilmesinin dayanağı da teorik: her
 çözülebilir tahtanın polinom uzunlukta çözümü kanıtlı — sınıra dek arayıp
 bulamamak anlamlı bir sinyaldir.
 
+Sayım semantiğinin getirdiği köşe: bütçe dolduğunda elde çözüm *varsa*
+karar Solvable kalır; yalnız sayım kesinliğini yitirir
+(`CountIsExact=false` — "en az N"). OutOfBudget yalnız hiç çözüm
+bulunamadan bütçe aşılınca döner. Eksik sayım hiçbir raporda kesin sayı
+gibi sunulmaz; tablolar "(alt sınır)" işareti basar.
+
 ## Doğruluğun görünmez sözleşmeleri
 
 - Geri alma mekanizması tahtayı **bire bir** eski hâline döndürmek
@@ -87,6 +122,9 @@ bulamamak anlamlı bir sinyaldir.
   kayıpsız bir alt kümesini** verir — kaybedilen yalnızca alternatif çözüm
   yollarıdır.
 - Bu sözleşmeler, kuralları bağımsızca implemente eden Python solver'ıyla
-  çapraz doğrulamada (8/8 birebir aynı karar) sınanmıştır — Python tarafı
-  geri alma yerine taze kopya kullanır, yani aynı sonuca **farklı
-  mekanizmayla** ulaşır; bu da doğrulamayı güçlendirir.
+  çapraz doğrulamada sınanmıştır: 8 tahtanın 8'inde **karar + gezilen durum
+  sayısı + çözüm sayısı** birebir aynıdır (yeni semantikte üç değer de
+  gezinme sırasından bağımsız olduğundan kıyas eski "yalnız karar"
+  kıyasından sıkıdır). Python tarafı geri alma yerine taze kopya kullanır,
+  yani aynı sonuca **farklı mekanizmayla** ulaşır; bu da doğrulamayı
+  güçlendirir.
