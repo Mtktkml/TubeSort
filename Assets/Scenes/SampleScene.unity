@@ -372,7 +372,7 @@ MonoBehaviour:
   horizontalGap: 0.35
   verticalGap: 1
   screenMargin: 0.1
-  levelNumber: 5
+  levelNumber: 3
   useUnsolvableBoard: 1
 --- !u!4 &826710510
 Transform:
