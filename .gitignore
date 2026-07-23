@@ -6,6 +6,13 @@
 # See: https://github.com/github/gitignore/tree/main/Global
 #
 .utmp/
+# Tools altindaki dotnet projelerinin derleme ciktilari
+/Tools/**/bin/
+/Tools/**/obj/
+# Python scriptlerinin uretilen raporlari ve onbellegi
+/Tools/SolverBenchmark/py_results.md
+/Tools/SolverBenchmark/py_benchmark.md
+/Tools/**/__pycache__/
 /[Ll]ibrary/
 /[Tt]emp/
 /[Oo]bj/
@@ -44,6 +51,9 @@
 ExportedObj/
 .consulo/
 *.csproj
+# Unity'nin urettigi .csproj'lar yukarida dislandi; Tools altindakiler elle
+# yazildi ve repoda kalmali (istisna, disleyen kuraldan SONRA gelmeli).
+!/Tools/**/*.csproj
 *.unityproj
 *.sln
 *.slnx
