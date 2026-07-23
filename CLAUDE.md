@@ -120,7 +120,7 @@ Unity Editor **kapalı** olmalı; açıksa proje kilitli olur ve batchmode başl
 
 `-testPlatform PlayMode` ile de aynısı. Editor'dan: **Window → General → Test Runner**.
 
-Mevcut durum: **EditMode 26/26**, **PlayMode 32/32**.
+Mevcut durum: **EditMode 26/26**, **PlayMode 35/35**.
 
 EditMode'u tercih et: sahne kurmadığı için saniyeler sürer. PlayMode'u yalnızca
 gerçek oyun ortamı gerektiğinde kullan.
@@ -195,6 +195,12 @@ edilmedi; mentörle süreç devam ediyor).
 - Sahne hâlâ `SampleScene` adında; içindeki `BoardView` nesnesi `GameObject`.
 - Asset yok ve neredeyse gerekmiyor. Ses, ikon ve yazı tipi cila adımında
   (Kenney.nl, freesound.org, Google Fonts).
+- **Telefonda akıcılık (23 Tem 2026, cihaz testi):** animasyonlar cihazda
+  editördekinden az akıcı. Muhtemel sebepler, olasılık sırasıyla:
+  (1) `Application.targetFrameRate` ayarlanmadı — Unity mobilde varsayılan
+  30 fps'e kilitler; (2) SDF shader'ların piksel maliyeti: alpha-blend'li
+  büyük quad'lar mobilde overdraw'a çok duyarlı. Cila adımında ele
+  alınacak: önce targetFrameRate=60 denenecek, yetmezse cihazda profiler.
 
 ### Bilinen hatalar
 
@@ -258,6 +264,11 @@ edilmedi; mentörle süreç devam ediyor).
   Input System dokunuş "bırakma" olayını kaybedebiliyor; `isPressed` true'da
   takılı kalıyor ve yeni basış algılanmıyor. Game penceresinde ve gerçek
   cihazda bu sorun **yok**. Oyunun hatası değil, simülatörün bilinen sınırı.
+  **Uyarı (23 Tem 2026):** geçmişte simülatöre atfedilen donmaların bir
+  kısmı aslında dökme animasyonu kilidiymiş (kapasite >= 5 tüplerde
+  sıvı-ağızda formülünün kelepçe hatası; gerçek geometriyle düzeltildi,
+  bkz. `TiltedEdgeLevel` ve `PourFreezeTests`). Simülatörde donma görülürse
+  önce Console'a bakılmalı: watchdog LogError'u varsa oyun hatasıdır.
 
 ### Kod okuma sırası
 
