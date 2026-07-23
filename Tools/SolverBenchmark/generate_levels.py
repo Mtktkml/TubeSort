@@ -35,7 +35,7 @@ def main():
             board = cc.generate(n, n, EMPTIES, rng)
 
             t0 = time.perf_counter()
-            verdict, states, sol_len = cc.solve(board, n)
+            verdict, states, sol_count, sol_len = cc.solve(board, n)
             ms = (time.perf_counter() - t0) * 1000
 
             if verdict == "SOLVABLE":
@@ -47,8 +47,8 @@ def main():
         levels.append({"level": index, "capacity": n, "tubes": tubes})
 
         print(f"Level {index}  ({n} renk x {n} kapasite + {EMPTIES} bos)  "
-              f"deneme={attempts}  cozum={sol_len} hamle  durum={states}  "
-              f"dogrulama={ms:.1f} ms")
+              f"deneme={attempts}  cozumSayisi={sol_count}  ilkYol={sol_len} hamle  "
+              f"durum={states}  dogrulama={ms:.1f} ms")
         for t, tube in enumerate(board):
             print(f"    Tube {t}: [{tubes[t]}]")
 

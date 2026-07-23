@@ -4,8 +4,9 @@ using System.Diagnostics;
 using TubeSort.Core;
 
 // Performans testi, iki tablo:
-//   Tablo 1 — N=3..10: cozulebilir ornek (2 bos) hamle/durum/sure,
-//             cozulemez ornek (1 bos) durum/sure.
+//   Tablo 1 — N=3..10: cozulebilir ornek (2 bos) cozumSayisi/ilkYol/durum/sure,
+//             cozulemez ornek (1 bos) durum/sure. Yeni sayim semantiginde
+//             "durum" tam tuketim maliyetidir (ilk cozumde durulmaz).
 //   Tablo 2 — 2 bos tuple cozulemez tahta avi: boyut basina en fazla
 //             30.000 deneme ya da 45 s; ilk bulunanin kanit maliyeti.
 // Tohumlar sabittir: her calistirmada ayni tahtalar, ayni sayilar.
@@ -94,9 +95,11 @@ for (int n = 3; n <= 10; n++)
         if (hit.HasValue)
         {
             var (board, report, ms) = hit.Value;
+            string exactNote = report.CountIsExact ? "" : " (alt sinir)";
             Console.WriteLine(
-                $"COZULEBILIR  bos={empties}  cozum={report.Solution.Count} hamle  " +
-                $"durum={report.StatesVisited}  sure={ms:F1} ms  (butce asan deneme: {oob})");
+                $"COZULEBILIR  bos={empties}  cozumSayisi={report.SolutionCount}{exactNote}  " +
+                $"ilkYol={report.Solution.Count} hamle  durum={report.StatesVisited}  " +
+                $"sure={ms:F1} ms  (butce asan deneme: {oob})");
             Console.WriteLine($"  ornek: {BoardText(board)}");
             found = true;
         }

@@ -44,7 +44,7 @@ def table2_hunt(out):
             tries += 1
             board = cc.generate(n, n, 2, rng)
             t0 = time.perf_counter()
-            verdict, states, _ = cc.solve(board, n)
+            verdict, states, _, _ = cc.solve(board, n)
             ms = (time.perf_counter() - t0) * 1000
             if verdict == "UNSOLVABLE":
                 found = (states, ms)
