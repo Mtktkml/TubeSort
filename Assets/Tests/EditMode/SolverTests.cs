@@ -22,6 +22,8 @@ namespace TubeSort.Tests
 
             Assert.AreEqual(SolveVerdict.Solvable, report.Verdict);
             Assert.AreEqual(0, report.Solution.Count, "Çözülmüş tahta için hamle gerekmemeli");
+            Assert.AreEqual(0, report.SolutionCount, "Çözülü başlayan tahtada çözüme düşen kenar yok");
+            Assert.IsTrue(report.CountIsExact);
         }
 
         [Test]
@@ -41,6 +43,8 @@ namespace TubeSort.Tests
             Assert.AreEqual(SolveVerdict.Solvable, report.Verdict);
             Assert.IsNotNull(report.Solution);
             Assert.Greater(report.Solution.Count, 0);
+            Assert.Greater(report.SolutionCount, 0, "En az bir çözüm kenarı sayılmalı");
+            Assert.IsTrue(report.CountIsExact, "Bütçe aşılmadı: sayım kesin olmalı");
 
             // Solve orijinal tahtayı değiştirmemeli.
             Assert.AreEqual(4, board[0].Count);
@@ -73,6 +77,8 @@ namespace TubeSort.Tests
 
             Assert.AreEqual(SolveVerdict.Unsolvable, report.Verdict);
             Assert.IsNull(report.Solution);
+            Assert.AreEqual(0, report.SolutionCount);
+            Assert.IsTrue(report.CountIsExact, "Uzay tüketildi: 'sıfır çözüm' kesin bir sayımdır");
         }
 
         [Test]
@@ -91,6 +97,7 @@ namespace TubeSort.Tests
             SolveReport report = Solver.Solve(board);
 
             Assert.AreEqual(SolveVerdict.Unsolvable, report.Verdict);
+            Assert.AreEqual(0, report.SolutionCount);
         }
 
         [Test]
@@ -109,6 +116,56 @@ namespace TubeSort.Tests
             SolveReport report = Solver.Solve(board, maxStates: 1);
 
             Assert.AreEqual(SolveVerdict.OutOfBudget, report.Verdict);
+            Assert.AreEqual(0, report.SolutionCount);
+            Assert.IsFalse(report.CountIsExact, "Bütçe aşıldı: sayım kesin sayılamaz");
+        }
+
+        [Test]
+        public void Solve_CountsAllSolutionEdges()
+        {
+            // Elle sayılabilir kurgu (kapasite 2): [R] [R] [Y] [Y].
+            // Kanonik durumlar: S0 = başlangıç, S1 = kırmızılar birleşmiş,
+            // S2 = sarılar birleşmiş. Çözüme düşen kenarlar: S1'den sarıları
+            // birleştiren 2 hamle (2→3, 3→2) + S2'den kırmızıları birleştiren
+            // 2 hamle (0→1, 1→0) = toplam 4. Gezilen durum: S0, S1, S2 = 3.
+            var board = new Board(new[]
+            {
+                new Tube(2, Red),
+                new Tube(2, Red),
+                new Tube(2, Yellow),
+                new Tube(2, Yellow)
+            });
+
+            SolveReport report = Solver.Solve(board);
+
+            Assert.AreEqual(SolveVerdict.Solvable, report.Verdict);
+            Assert.AreEqual(4, report.SolutionCount, "El ile sayım: 4 çözüm kenarı");
+            Assert.AreEqual(3, report.StatesVisited, "El ile sayım: S0, S1, S2");
+            Assert.IsTrue(report.CountIsExact);
+        }
+
+        [Test]
+        public void Solve_StaysSolvableWhenBudgetHitsAfterFirstSolution()
+        {
+            // Aynı elle sayılabilir kurgu, ama bütçe 2 duruma yetiyor: S1'deki
+            // çözümler bulunur, S2 genişletilemeden bütçe dolar. Karar Solvable
+            // KALMALI; yalnız sayım "en az" düzeyine iner (CountIsExact=false).
+            var board = new Board(new[]
+            {
+                new Tube(2, Red),
+                new Tube(2, Red),
+                new Tube(2, Yellow),
+                new Tube(2, Yellow)
+            });
+
+            SolveReport report = Solver.Solve(board, maxStates: 2);
+
+            Assert.AreEqual(SolveVerdict.Solvable, report.Verdict,
+                "Çözüm bulunduysa bütçe aşımı kararı OutOfBudget'a çevirmemeli");
+            Assert.Greater(report.SolutionCount, 0);
+            Assert.Less(report.SolutionCount, 4, "Kesilen arama tüm kenarları sayamamalı");
+            Assert.IsFalse(report.CountIsExact);
+            Assert.IsNotNull(report.Solution, "İlk çözümün yolu yine de raporlanmalı");
         }
 
         [Test]

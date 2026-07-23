@@ -7,38 +7,59 @@ namespace TubeSort.Core
     /// <summary>Çözülebilirlik testinin sonucu.</summary>
     public enum SolveVerdict
     {
-        /// <summary>Çözüm bulundu; Solution listesi dolu.</summary>
+        /// <summary>En az bir çözüm bulundu; Solution ilk bulunan yolu taşır.</summary>
         Solvable,
 
         /// <summary>Erişilebilir tüm durumlar tarandı, çözüm yok. Kanıtlanmış çıkmaz.</summary>
         Unsolvable,
 
         /// <summary>
-        /// Bütçe (düğüm/derinlik) aşıldı; çözülebilirlik bilinmiyor.
-        /// "Çözülemez" ile karıştırılmamalı: bütçeyle elenen tahtalar ayrı
-        /// raporlanmazsa level havuzu sessizce kolaya yamulur.
+        /// Bütçe (düğüm/derinlik) hiç çözüm bulunamadan aşıldı; çözülebilirlik
+        /// bilinmiyor. "Çözülemez" ile karıştırılmamalı: bütçeyle elenen tahtalar
+        /// ayrı raporlanmazsa level havuzu sessizce kolaya yamulur.
+        /// (Çözüm bulunduktan sonra aşılan bütçe kararı değiştirmez: sonuç
+        /// Solvable kalır, yalnız sayım kesinliğini yitirir; bkz. CountIsExact.)
         /// </summary>
         OutOfBudget,
     }
 
-    /// <summary>Solver'ın raporu: karar, gezilen durum sayısı ve varsa çözüm yolu.</summary>
+    /// <summary>Solver'ın raporu: karar, gezilen durum ve çözüm sayısı, örnek çözüm.</summary>
     public readonly struct SolveReport
     {
         public readonly SolveVerdict Verdict;
 
-        /// <summary>Genişletilen benzersiz durum sayısı (performans gözlemi için).</summary>
+        /// <summary>
+        /// Genişletilen benzersiz durum sayısı. Uzay tüketildiği için gezinme
+        /// sırasından bağımsızdır (bütçe aşılmadıysa).
+        /// </summary>
         public readonly int StatesVisited;
 
         /// <summary>
-        /// Bulunan çözüm yolu; yalnız Solvable'da dolu, diğerlerinde null.
-        /// En kısa çözüm DEĞİLDİR: DFS ilk bulduğu yolu döner.
+        /// Çözüme düşen kenar sayısı: genişletilen durumlardan yapılan ve tahtayı
+        /// bitiren (budanmış) hamlelerin toplamı. Aynı öz çözümün hamle-sıralaması
+        /// varyantlarını tekrar saymaz; zorluk/esneklik metriği olarak kullanılır.
+        /// </summary>
+        public readonly int SolutionCount;
+
+        /// <summary>
+        /// true: sayım kesin (erişilebilir uzay tüketildi). false: bütçe aşıldı,
+        /// SolutionCount yalnızca alt sınırdır ("en az N").
+        /// </summary>
+        public readonly bool CountIsExact;
+
+        /// <summary>
+        /// İlk bulunan çözüm yolu; yalnız Solvable'da dolu, diğerlerinde null.
+        /// En kısa çözüm DEĞİLDİR: DFS'in ilk rastladığı yoldur (örnek/replay için).
         /// </summary>
         public readonly IReadOnlyList<PourResult> Solution;
 
-        public SolveReport(SolveVerdict verdict, int statesVisited, IReadOnlyList<PourResult> solution)
+        public SolveReport(SolveVerdict verdict, int statesVisited, int solutionCount,
+            bool countIsExact, IReadOnlyList<PourResult> solution)
         {
             Verdict = verdict;
             StatesVisited = statesVisited;
+            SolutionCount = solutionCount;
+            CountIsExact = countIsExact;
             Solution = solution;
         }
 
@@ -46,14 +67,17 @@ namespace TubeSort.Core
     }
 
     /// <summary>
-    /// Tahtanın çözülebilir olup olmadığını karar veren arama: DFS + budama +
-    /// kanonik durum önbelleği. Level üreticinin generate-and-test akışında
-    /// kullanılır: üret → Solve → Unsolvable/OutOfBudget ise at, yeniden üret.
+    /// Tahtanın çözülebilirliğine karar veren ve çözüm sayısını ölçen arama:
+    /// DFS + budama + kanonik durum önbelleği. Arama ilk çözümde DURMAZ:
+    /// erişilebilir durum uzayının tamamını gezer (her kanonik durum en fazla
+    /// bir kez genişletilir) ve çözüme düşen her kenarı sayar. Level üreticinin
+    /// generate-and-test akışında kullanılır: üret → Solve →
+    /// Unsolvable/OutOfBudget ise at; SolutionCount zorluk metriğine girer.
     ///
-    /// Çözülebilirlik testi herhangi bir çözüm arar, en kısasını değil;
-    /// bu yüzden BFS/A* değil DFS. Durum uzayı sonlu ve önbellek tekrar
-    /// ziyareti engellediği için arama derinlik sınırı olmadan da sonlanır;
-    /// sınırlar yalnızca bütçe görevi görür.
+    /// Uzay tüketildiği için sonuçlar (karar, durum ve çözüm sayısı) gezinme
+    /// sırasından bağımsızdır. Durum uzayı sonlu ve önbellek tekrar ziyareti
+    /// engellediği için arama derinlik sınırı olmadan da sonlanır; sınırlar
+    /// yalnızca bütçe görevi görür.
     /// </summary>
     public static class Solver
     {
@@ -73,14 +97,22 @@ namespace TubeSort.Core
             int maxStates = DefaultMaxStates,
             int maxDepth = DefaultMaxDepth)
         {
-            var context = new SearchContext(maxStates, maxDepth);
-            bool found = Dfs(board.Clone(), context);
+            // Baştan çözülmüş tahta: çözüme düşen kenar yok ama tahta çözülü.
+            if (board.IsSolved)
+                return new SolveReport(SolveVerdict.Solvable, 0, 0, true, Array.Empty<PourResult>());
 
-            if (found)
-                return new SolveReport(SolveVerdict.Solvable, context.StatesVisited, context.Path.ToArray());
+            var context = new SearchContext(maxStates, maxDepth);
+            Dfs(board.Clone(), context);
+
+            bool exact = !context.BudgetHit;
+            if (context.SolutionCount > 0)
+            {
+                return new SolveReport(SolveVerdict.Solvable, context.StatesVisited,
+                    context.SolutionCount, exact, context.FirstSolution);
+            }
 
             SolveVerdict verdict = context.BudgetHit ? SolveVerdict.OutOfBudget : SolveVerdict.Unsolvable;
-            return new SolveReport(verdict, context.StatesVisited, null);
+            return new SolveReport(verdict, context.StatesVisited, 0, exact, null);
         }
 
         private sealed class SearchContext
@@ -90,7 +122,11 @@ namespace TubeSort.Core
             public readonly int MaxStates;
             public readonly int MaxDepth;
             public int StatesVisited;
+            public int SolutionCount;
             public bool BudgetHit;
+
+            /// <summary>İlk bulunan çözümün fotoğrafı (Path o anda kopyalanır).</summary>
+            public PourResult[] FirstSolution;
 
             public SearchContext(int maxStates, int maxDepth)
             {
@@ -111,24 +147,22 @@ namespace TubeSort.Core
             }
         }
 
-        private static bool Dfs(Board board, SearchContext context)
+        private static void Dfs(Board board, SearchContext context)
         {
-            if (board.IsSolved) return true;
-
             if (context.Path.Count >= context.MaxDepth)
             {
                 context.BudgetHit = true;
-                return false;
+                return;
             }
 
             // Ters hamle ve döngüler burada elenir: geri dönülen her durum
             // önbellekte zaten vardır.
-            if (!context.Visited.Add(CanonicalKey(board))) return false;
+            if (!context.Visited.Add(CanonicalKey(board))) return;
 
             if (context.StatesVisited >= context.MaxStates)
             {
                 context.BudgetHit = true;
-                return false;
+                return;
             }
             context.StatesVisited++;
 
@@ -140,13 +174,23 @@ namespace TubeSort.Core
                 PourResult result = board.Pour(move.From, move.To);
                 context.Path.Add(result);
 
-                if (Dfs(board, context)) return true;
+                // Çözüm KENARDA tespit edilir ve çözülmüş durum genişletilmez:
+                // sayım "çözüme düşen kenar" tanımıyla bire bir kalır. Arama
+                // ilk çözümde durmaz; uzayın kalanını gezmeye devam eder.
+                if (board.IsSolved)
+                {
+                    context.SolutionCount++;
+                    if (context.FirstSolution == null)
+                        context.FirstSolution = context.Path.ToArray();
+                }
+                else
+                {
+                    Dfs(board, context);
+                }
 
                 board.UndoPour(result);
                 context.Path.RemoveAt(context.Path.Count - 1);
             }
-
-            return false;
         }
 
         /// <summary>
