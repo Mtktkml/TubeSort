@@ -641,9 +641,25 @@ namespace TubeSort.Game
             float angleVelocity = 0f;
             float moveElapsed = 0f;
 
+            // Emniyet kemeri: hiçbir formül hatası animasyonu bir daha
+            // kilitleyemesin. Doğru işleyişte asla tetiklenmez; tetiklenirse
+            // hata loglanır ve animasyon son değerlerle zorla tamamlanır.
+            const float watchdogSeconds = 4f;
+            float watchdogElapsed = 0f;
+
             while (true)
             {
                 float dt = Time.deltaTime;
+
+                watchdogElapsed += dt;
+                if (watchdogElapsed >= watchdogSeconds)
+                {
+                    Debug.LogError(
+                        $"AnimatePour watchdog: dökme {watchdogSeconds} sn içinde bitmedi " +
+                        $"({result.FromIndex} -> {result.ToIndex}, açı={currentAngle:F2}, " +
+                        $"pourStarted={pourStarted}). Animasyon zorla tamamlanıyor.");
+                    break;
+                }
 
                 // Hedef açı: fill'e göre dinamik, tek kaynak.
                 float targetAngle = -CalculatePourAngle(fromView) * direction;
@@ -680,12 +696,10 @@ namespace TubeSort.Game
                     float nextT = Mathf.Clamp01(nextElapsed / pourDuration);
                     float nextFill = Mathf.Lerp(fromStart, fromTarget, nextT);
 
-                    // Bu fill'de sıvı lip'e ulaşıyor mu?
-                    float slopeNow = Mathf.Sin(currentAngle)
-                        / Mathf.Max(Mathf.Abs(Mathf.Cos(currentAngle)), 0.2f);
-                    float offsetNow = Mathf.Abs(
-                        0.5f * slopeNow * (TubeView.Width / fromView.Height));
-                    bool liquidAtLip = nextFill + offsetNow >= 0.95f;
+                    // Bu fill'de sıvı lip'e ulaşıyor mu? (gerçek geometri —
+                    // açı 90°'yi aşınca koşulsuz evet, bekleme sonlu kalır)
+                    bool liquidAtLip =
+                        TiltedEdgeLevel(nextFill, currentAngle, fromView.Height) >= 0.95f;
 
                     // Pour ilerlesin: sıvı lip'te VEYA pour tamamlanmak üzere.
                     if (liquidAtLip || nextT >= 0.98f)
@@ -808,9 +822,36 @@ namespace TubeSort.Game
         {
             // Eşik FillSpan değil 1.0: sıvı tüpün fiziksel ağız ucuna (genişleyen
             // kısmın en tepesine) ulaşmalı, FillHeadroom sınırına değil.
-            float tiltSlope = Mathf.Sin(angle) / Mathf.Max(Mathf.Abs(Mathf.Cos(angle)), 0.2f);
-            float maxOffset = Mathf.Abs(0.5f * tiltSlope * (TubeView.Width / view.Height));
-            return view.CurrentFill + maxOffset >= 1f;
+            return TiltedEdgeLevel(view.CurrentFill, angle, view.Height) >= 1f;
+        }
+
+        /// <summary>
+        /// Eğik tüpte sıvının döken kenardaki normalize yüzey yüksekliği.
+        /// Gerçek geometri (hacim korunumu, dünyada yatay yüzey), iki rejim:
+        /// yüzey iki duvarı da kesiyorsa kenar doğrusal yükselir; sıvı az ya da
+        /// eğim çoksa sıvı döken duvarın dibinde üçgen toplanır. 90° ve
+        /// ötesinde ağız ufkun altındadır: sıvı koşulsuz kenardadır.
+        ///
+        /// Shader'daki 0.2 kelepçeli eğim BİLEREK kullanılmaz: o kelepçe çizim
+        /// güvenliğidir; karar mantığına taşınınca eğimi ~tan(78.7°) ile
+        /// tavanlıyor ve uzun tüplerde (kapasite >= 5) az sıvı dökülürken
+        /// "açı asla yetmiyor" kilidine — donmaya — yol açıyordu.
+        /// </summary>
+        private static float TiltedEdgeLevel(float fill, float angle, float height)
+        {
+            float a = Mathf.Abs(angle);
+            if (a >= Mathf.PI * 0.5f) return float.PositiveInfinity;
+
+            // Normalize eğim: yerel tan(açı), tüp en-boy oranıyla ölçekli.
+            float slope = Mathf.Tan(a) * (TubeView.Width / height);
+            float halfRise = 0.5f * slope;
+
+            // Yüzey iki duvarı da kesiyor: kenar = seviye + yarım yükselme.
+            if (fill >= halfRise)
+                return fill + halfRise;
+
+            // Üçgen rejimi: hacim korunumundan kenar yüksekliği.
+            return Mathf.Sqrt(2f * slope * fill);
         }
 
         /// <summary>
