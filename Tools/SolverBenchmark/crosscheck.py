@@ -18,6 +18,7 @@ import os
 import random
 import threading
 import time
+from collections import deque
 
 # Terminaldeki canli durum satiri: script calistigi surece her saniye
 # gecen sureyi ve o anki asamayi ayni satirin ustune yazar.
@@ -170,6 +171,49 @@ def solve(board, cap, max_states=BUDGET):
     if sols > 0:
         return "SOLVABLE", states, sols, first_len
     return ("OUT_OF_BUDGET" if budget_hit else "UNSOLVABLE"), states, 0, None
+
+
+def shortest_solution(board, cap, max_states=BUDGET):
+    """En kisa cozum uzunlugu (hamle sayisi): kanonik graf uzerinde BFS.
+
+    solve() ile AYNI grafi gezer (ayni budamalar, ayni kanonik anahtar);
+    tek fark siralama: katman katman genisletildigi icin bir duruma ilk
+    varis garantili en kisa varistir — cozume dusen ilk kenarin derinligi
+    en kisa cozumdur ve arama orada durabilir (DFS'in ilk yolu boyle bir
+    garanti tasimaz, o yuzden metrik olamazdi).
+
+    Zorluk metrigi katmani: uretimde yalniz KABUL edilmis (SOLVABLE)
+    tahtalarda kosulur; cozulebilirlik karari solve()'un isidir.
+
+    (uzunluk, durum_sayisi, butce_asildi) doner. Cozum yoksa uzunluk None
+    (cozulemez tahtada uzay tukenir); butce asilirsa uzunluk None ve
+    bayrak True — 'bilinmiyor', 'cozum yok' degil.
+    """
+    board = tuple(tuple(t) for t in board)
+    if is_solved(board, cap):
+        return 0, 0, False
+
+    visited = {canonical(board)}
+    queue = deque([(board, 0)])
+    states = 0
+
+    while queue:
+        cur, depth = queue.popleft()
+
+        if states >= max_states:
+            return None, states, True
+        states += 1
+
+        for i, j in gen_moves(cur, cap):
+            nxt = pour(cur, cap, i, j)
+            if is_solved(nxt, cap):
+                return depth + 1, states, False
+            key = canonical(nxt)
+            if key not in visited:
+                visited.add(key)
+                queue.append((nxt, depth + 1))
+
+    return None, states, False
 
 
 # ------------------------------------------------- capraz dogrulama verisi
