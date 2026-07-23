@@ -120,7 +120,8 @@ Unity Editor **kapalı** olmalı; açıksa proje kilitli olur ve batchmode başl
 
 `-testPlatform PlayMode` ile de aynısı. Editor'dan: **Window → General → Test Runner**.
 
-Mevcut durum: **EditMode 17/17**, **PlayMode 26/26**.
+Mevcut durum: **EditMode 26/26**, **PlayMode 29/29** (undo birleşmesi
+sonrası beklenti; Test Runner koşusuyla doğrulanacak).
 
 EditMode'u tercih et: sahne kurmadığı için saniyeler sürer. PlayMode'u yalnızca
 gerçek oyun ortamı gerektiğinde kullan.
@@ -147,6 +148,44 @@ doğrulamaz. Görsel doğrulama gözle yapılır.
 7. Cila + meta (undo, +1 tüp, kapak animasyonu, ses)
 8. Build
 
+### Kaldığımız yer (23 Tem 2026)
+
+**Hedef (mentör kararı): 300 önceden üretilmiş-seçilmiş level.** Leveller
+runtime'da üretilmeyecek; Python'da çok sayıda aday üretilip metriklerle
+en iyileri seçilecek, zorluğu artan sırayla dosyaya yazılacak. Kapasite
+4/5/6; renk sayısı (K) ve boş tüp sayısı (2 kolay / 1 zor) bağımsız
+parametreler. Eski plan ("5 leveli EMPTIES=1 ile yeniden üret") bu hattın
+içine katlandı.
+
+Yol haritası — A tamam, sıra B'de:
+
+- [x] **A. Solver sayım semantiği:** arama ilk çözümde durmaz, uzayı
+  tüketir, çözüme düşen kenarları sayar (`SolutionCount`, `CountIsExact`).
+  C# + Python; EditMode 21/21; çapraz doğrulama 8/8 — artık karar +
+  durum + çözüm sayısı üçlüsü birebir kıyaslanıyor. Ayrıntı:
+  `Docs/SOLVER.md`.
+- [ ] **B. En kısa çözüm uzunluğu:** kanonik graf üzerinde BFS (Python,
+  build-time) + level başına metrik makbuzu (kapasite, renk, boş, çözüm
+  sayısı, en kısa, durum). Sağlama: BFS durum sayısı == DFS durum sayısı.
+- [ ] **C. ~15 levellik pilot merdiven** + zorluk skoru ilk sürüm →
+  mentör onayı (skor ağırlıkları ve eğri şekli açık soru).
+- [ ] **D. 300 level üretimi** + Unity tarafı: `LevelLibraryTests`
+  güncelleme, ekran kontrolü (13+ tüp sığıyor mu), `ColorPalette`
+  (12 renk ayırt edilebilir mi).
+
+Notlar:
+
+- `BoardView.LogSolvability` yeni formatta ("N çözüm, örnek yol M hamle");
+  BoardView.cs değişikliği henüz Unity'de derlenmedi — ilk açılışta
+  doğrulanmalı, PlayMode testleri koşulmalı.
+- Benchmark Tablo 2 (2 boş çözülemez avı) yeni semantikte fiilen işlevsiz:
+  avda elenen her çözülebilir aday tam tüketim maliyeti ödüyor, 45 sn'ye
+  3-23 deneme sığıyor. Gerekirse solver'a "yalnız varlık" hızlı modu
+  eklenebilir — mentörle konuşulacak.
+
+Bu iş `feature/deadlock-detection` branch'inde sürüyor (master'a merge
+edilmedi; mentörle süreç devam ediyor).
+
 ### Bilinen eksikler
 
 - `BoardView.CreateTestBoard()` elle kurulmuş geçici bir tahta; çözülebilirliği
@@ -160,11 +199,54 @@ doğrulamaz. Görsel doğrulama gözle yapılır.
 
 ### Bilinen hatalar
 
-- **Deadlock tespiti yetersiz:** `Board.HasAnyValidMove` yalnızca "yapılabilecek
-  hamle var mı" sorusunu soruyor. Hamle var ama oyun kazanılamaz (gerçek çıkmaz)
-  durumunu yakalamıyor. Tam çözülebilirlik analizi BFS/DFS ile durum uzayını
-  aramayı gerektirir; `Board.Clone()` buna hazır. Level üreticiyle birlikte
-  ele alınmalı.
+- **Deadlock tespiti — karar verildi, uygulanıyor:**
+  `Board.HasAnyValidMove` yalnızca "yapılabilecek hamle var mı" sorusunu
+  soruyor. Hamle var ama oyun kazanılamaz (gerçek çıkmaz) durumunu
+  yakalamıyor. `feature/deadlock-detection` branch'inde çalışılıyor.
+
+  **Karar — mimari: generate-and-test.** Deadlock oyun sırasında
+  yakalanmaz; level üretiminden **sonra** solver ile "bu tahta çözülebilir
+  mi?" doğrulanır, çözülemeyen tahta atılıp yenisi üretilir. Bu, PCG
+  literatüründe belgelenmiş standart pratik (De Kegel & Haahr, IEEE ToG
+  2020). Alternatif olan yapısal garanti (yeterince boş tüp) kanıtlı ama
+  pratik değil: kapasite 4'te her 4 dolu tüpe ~3 boş tüp gerekir
+  (Ito et al., FUN 2022).
+
+  **Karar — algoritma: DFS + budama + kanonik durum önbelleği.**
+  *Güncelleme (23 Tem 2026, mentör kararı):* arama ilk çözümde durmaz;
+  erişilebilir uzayı tüketir ve çözüme düşen kenarları sayar
+  (`SolutionCount` — zorluk metriği). İlk bulunan yol örnek olarak
+  raporlanır, metrik değildir. Ayrıntı: `Docs/SOLVER.md`. Dayanaklar
+  (Ito et al., arXiv:2202.09495):
+  - Çözülebilirlik kararı **NP-tam** → budama tercih değil, zorunluluk.
+  - **Ball sort ↔ water sort eşdeğer** (Corollary 4): ball-sort solver
+    literatürü kısmi-dökme mekaniğine aynen uygulanır. (Teorem başlangıç
+    konfigürasyonları için; oyun ortası kısmi tüplü tahtalar formal
+    kapsam dışı.)
+  - Her çözülebilir tahtanın **polinom uzunlukta çözümü** kanıtlı →
+    sınıra kadar arayıp bulamamak doğru bir "çözülemez" kararıdır.
+
+  **Uygulama detayları:**
+  - **Kanonikleştirme** — asıl kazanç buradan: durum hash'lenmeden önce
+    tüpler kanonik sıraya sokulur; tüp sırası permütasyonları ve eşdeğer
+    boş tüpler tek duruma iner.
+  - Budama: tamamlanmış tüpten dökme yok, tek renkli tüpü boş tüpe
+    taşıma yok, kaynak başına yalnız bir boş hedef. (Ters hamle ve
+    döngüler kanonik önbellek tarafından zaten elenir.)
+  - **Bütçe loglaması:** düğüm bütçesi aşılırsa sonuç "bilinmiyor"dur,
+    "çözülemez" değil — ikisi ayrı raporlanır. Yoksa zayıf doğrulayıcı
+    level havuzunu sessizce kolaya yamultur (Murase 1996 dersi).
+
+  **Elenen alternatifler:** BFS (çözülebilirlik/sayım için gereksiz bellek;
+  ama **en kısa çözüm uzunluğu** metriği için build-time'da kanonik graf
+  üzerinde BFS kullanılacak — uzay zaten tüketiliyor, ek maliyet sınıfı
+  yok), naif DFS (durum tekrarı), Bidirectional BFS (geriye hamle üretme
+  karmaşıklığı), boş tüp garantisi (oyun tasarımını bozar). **A\*/IDA\***
+  ancak tahta boyutları BFS'i aşarsa gündeme gelir; "color break"
+  heuristiği (farklı renk üstüne oturan renk geçişi sayısı) hazır fikir
+  olarak duruyor. Tüm çözüm *yollarını* saymak/saklamak da elendi:
+  sıralama kombinasyonlarıyla katlanarak büyür (#P), önbelleği geçersiz
+  kılar — ölçümü ve gerekçesi `Docs/SOLVER.md`'de.
 
 - **Son katman dökme artefaktı — çözüldü:** Shader'da surface-based
   `survivalScore` ile son ~1 birim sıvıda ağız tarafına doğru çekilme

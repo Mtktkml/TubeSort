@@ -28,6 +28,17 @@ namespace TubeSort.Game
         [Range(0f, 0.4f)]
         [SerializeField] private float screenMargin = 0.1f;
 
+        [Header("Level")]
+        [Tooltip("Oynanacak level (Resources/levels.json'dan). 0 = level yok, " +
+                 "elle kurulmuş test tahtası kullanılır.")]
+        [SerializeField] private int levelNumber;
+
+        [Header("Teşhis")]
+        [Tooltip("Çözülemez test tahtasını kur: solver'ın 'ÇÖZÜLEMEZ' kararını " +
+                 "ve oyun içi çıkmazı elle denemek için. Yalnız levelNumber = 0 " +
+                 "iken etkilidir.")]
+        [SerializeField] private bool useUnsolvableBoard;
+
         private Board board;
         private readonly MoveHistory history = new MoveHistory();
         private ColorPalette palette;
@@ -80,10 +91,16 @@ namespace TubeSort.Game
                 return;
             }
 
-            // Dışarıdan tahta verilmediyse geçici test tahtası kurulur.
-            if (board == null)
-                board = CreateTestBoard();
+            // Tahta önceliği: dışarıdan verilen (LoadBoard) > seçili level >
+            // elle kurulmuş test tahtası (teşhis anahtarına göre çözülebilir
+            // ya da çözülemez olan). Level yüklenemezse test tahtasına düşer.
+            if (board == null && levelNumber > 0)
+                board = LevelLibrary.Load(levelNumber);
 
+            if (board == null)
+                board = useUnsolvableBoard ? CreateUnsolvableTestBoard() : CreateTestBoard();
+
+            LogSolvability();
             BuildViews();
             BuildStreamView();
             BuildUndoButton();
@@ -226,6 +243,63 @@ namespace TubeSort.Game
                 new Tube(4),
                 new Tube(4)
             });
+        }
+
+        /// <summary>
+        /// Kanıtlanmış çözülemez tahta: rastgele üretilip solver ile tarandı
+        /// (58 durumun tamamı gezildi, çözüm yok). Hamleler var, yani oyuncu
+        /// bir süre oynayıp çıkmaza girebilir — "hamle var ama kazanılamaz"
+        /// durumunun elle test edilebilir örneği.
+        /// </summary>
+        private Board CreateUnsolvableTestBoard()
+        {
+            const int Red = 0, Yellow = 1, Blue = 2, Green = 3;
+
+            return new Board(new[]
+            {
+                new Tube(4, Blue, Blue, Green, Red),
+                new Tube(4, Blue, Red, Green, Yellow),
+                new Tube(4, Green, Red, Green, Yellow),
+                new Tube(4, Blue, Red, Yellow, Yellow),
+                new Tube(4)
+            });
+        }
+
+        /// <summary>
+        /// Tahtanın çözülebilirliğini Console'a yazar (geçici teşhis; level
+        /// üreticiyle birlikte generate-and-test döngüsüne taşınacak).
+        /// Çözüm yolu loglanır ki elle oynayıp doğrulanabilsin.
+        /// </summary>
+        private void LogSolvability()
+        {
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            SolveReport report = Solver.Solve(board);
+            timer.Stop();
+
+            switch (report.Verdict)
+            {
+                case SolveVerdict.Solvable:
+                    var path = new System.Text.StringBuilder();
+                    foreach (PourResult move in report.Solution)
+                        path.Append(' ').Append(move.FromIndex).Append("->").Append(move.ToIndex);
+
+                    // Çözüm sayısı zorluk/esneklik metriği; bütçe aşıldıysa alt sınırdır.
+                    string exactNote = report.CountIsExact ? "" : " (bütçe aşıldı: alt sınır)";
+                    Debug.Log($"<color=lime>Tahta çözülebilir:</color> {report.SolutionCount} çözüm{exactNote}, " +
+                              $"örnek yol {report.Solution.Count} hamle, " +
+                              $"{report.StatesVisited} durum, {timer.ElapsedMilliseconds} ms. Yol:{path}");
+                    break;
+
+                case SolveVerdict.Unsolvable:
+                    Debug.LogWarning(
+                        $"Tahta ÇÖZÜLEMEZ ({report.StatesVisited} durum, {timer.ElapsedMilliseconds} ms).");
+                    break;
+
+                case SolveVerdict.OutOfBudget:
+                    Debug.LogWarning(
+                        $"Çözülebilirlik bilinmiyor: bütçe aşıldı ({report.StatesVisited} durum).");
+                    break;
+            }
         }
 
         private void BuildViews()
@@ -515,7 +589,7 @@ namespace TubeSort.Game
         /// </summary>
         private IEnumerator AnimatePour(PourResult result)
         {
-            const float slideDuration = 0.25f;
+            const float slideDuration = 0.24f;
             const float pourDuration = 0.4f;
 
             // SmoothDamp tepki süresi. Kritik sönümleme: aşım yok, hızlı yakınsama.
@@ -700,7 +774,7 @@ namespace TubeSort.Game
             // Böylece kayma sırasında (henüz eğilmeden) gövdeler çakışmaz.
             // Eğilince ağız hedefin üstüne doğru iner.
             float destMouthY = dest.y + TallestTube;
-            float yTarget = destMouthY - 0.5f;
+            float yTarget = destMouthY - 0.25f;
 
             return new Vector3(xTarget, yTarget, 0f);
         }
