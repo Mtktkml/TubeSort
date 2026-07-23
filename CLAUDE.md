@@ -156,34 +156,39 @@ en iyileri seçilecek, zorluğu artan sırayla dosyaya yazılacak. Kapasite
 parametreler. Eski plan ("5 leveli EMPTIES=1 ile yeniden üret") bu hattın
 içine katlandı.
 
-Yol haritası — A tamam, sıra B'de:
+Yol haritası — A ve B tamam, sıra C'de:
 
 - [x] **A. Solver sayım semantiği:** arama ilk çözümde durmaz, uzayı
   tüketir, çözüme düşen kenarları sayar (`SolutionCount`, `CountIsExact`).
-  C# + Python; EditMode 21/21; çapraz doğrulama 8/8 — artık karar +
-  durum + çözüm sayısı üçlüsü birebir kıyaslanıyor. Ayrıntı:
-  `Docs/SOLVER.md`.
-- [ ] **B. En kısa çözüm uzunluğu:** kanonik graf üzerinde BFS (Python,
-  build-time) + level başına metrik makbuzu (kapasite, renk, boş, çözüm
-  sayısı, en kısa, durum). Sağlama: BFS durum sayısı == DFS durum sayısı.
+  C# + Python; çapraz doğrulama 8/8 — karar + durum + çözüm sayısı
+  üçlüsü birebir kıyaslanıyor. Ayrıntı: `Docs/SOLVER.md`.
+- [x] **B. En kısa çözüm uzunluğu:** `crosscheck.py`'de `shortest_solution`
+  — kanonik graf üzerinde BFS, garantili en kısa (DFS ilk yolu metrik
+  değildir: level 5'te ilk yol 59, en kısa 41). Bilinçli olarak yalnız
+  Python'da: tek tüketicisi build-time; C# ileride sayıyı levels.json'dan
+  okur, algoritmayı koşmaz. Makbuz satırı `generate_levels.py`'de
+  (kapasite/renk/boş + çözümSayısı/enKısa/ilkYol/durum) — şimdilik log,
+  şema genişlemesi C'nin kararı.
 - [ ] **C. ~15 levellik pilot merdiven** + zorluk skoru ilk sürüm →
-  mentör onayı (skor ağırlıkları ve eğri şekli açık soru).
+  mentör onayı (skor ağırlıkları ve eğri şekli açık soru). Taslak:
+  `SIZES` yerine (kapasite, renk, boş) merdiveni; slot başına ~30 aday;
+  skor = enKısa temelli, eşitlik bozucu 1/çözümSayısı.
 - [ ] **D. 300 level üretimi** + Unity tarafı: `LevelLibraryTests`
   güncelleme, ekran kontrolü (13+ tüp sığıyor mu), `ColorPalette`
   (12 renk ayırt edilebilir mi).
 
 Notlar:
 
-- `BoardView.LogSolvability` yeni formatta ("N çözüm, örnek yol M hamle");
-  BoardView.cs değişikliği henüz Unity'de derlenmedi — ilk açılışta
-  doğrulanmalı, PlayMode testleri koşulmalı.
 - Benchmark Tablo 2 (2 boş çözülemez avı) yeni semantikte fiilen işlevsiz:
   avda elenen her çözülebilir aday tam tüketim maliyeti ödüyor, 45 sn'ye
   3-23 deneme sığıyor. Gerekirse solver'a "yalnız varlık" hızlı modu
   eklenebilir — mentörle konuşulacak.
 
-Bu iş `feature/deadlock-detection` branch'inde sürüyor (master'a merge
-edilmedi; mentörle süreç devam ediyor).
+Durum (23 Tem sonu): master'da her şey birleşik — solver + sayım, undo
+özelliği (`feature/undo` merge edildi), dökme donması düzeltmesi
+(`TiltedEdgeLevel`, `fix/pour-freeze` merge edildi). Çalışma
+`feature/level-metrics` branch'inde sürüyor; cihazda (APK) doğrulandı,
+telefonda fps gözlemi "Bilinen eksikler"de.
 
 ### Bilinen eksikler
 
