@@ -9,21 +9,26 @@ Iki katman (karistirilmasin):
   - Olculen skor: ince siralama + slot ici aday secimi.
 Pilotun isi bu ikisinin uyustugunu SINAMAK, varsaymak degil.
 
-Skor (mentor karari, 24 Tem 2026 — leksikografikten dort-terime): AGIRLIKLI
-TOPLAM. Her terim tum aday havuzu uzerinde [0,1]'e min-max normalize edilir,
-boylece agirliklar dogrudan "zorlugun yuzde kaci" diye okunur.
-  L (0.35) = enKisa cozum uzunlugu             -> plan uzunlugu (buyuk=zor)
-  C (0.15) = log(durum sayisi)                 -> arama karmasikligi (buyuk=zor)
-  A (0.30) = -log(cozum sayisi)                -> affetmezlik (az cozum=zor)
-  T (0.20) = olu-durum orani (dead_ratio)      -> tuzak yogunlugu (cok=zor)
-Gerekce (bkz. tasarim tartismasi): enKisa buyuk olcude tahta HACMININ
-fonksiyonu; tek basina birakilirsa (eski leksikografik) "kisa ama tek-yol"
-tuzak leveller one, "uzun ama cok-yol" rahat leveller arkaya gider — tutarsiz.
-A ve T bu affedicilik/tuzak eksenini yakalar. C dusuk cunku hacimle L'ye
-korele (cift saymamak icin). Yapisal parametreler (kap/renk/bos) BILEREK
-formulde YOK: onlar metrikleri ureten girdiler, dogrudan konursa hacim tekrar
-sayilir. Ham sinyaller (enKisa/cozum/durum/olu) yine loglanir; agirlik/egri
-mentor karari, veriyle sekillenir.
+Skor (mentor karari, 24 Tem 2026): AGIRLIKLI TOPLAM. Her terim tum aday havuzu
+uzerinde [0,1]'e min-max normalize edilir, boylece agirliklar dogrudan
+"zorlugun yuzde kaci" diye okunur.
+  T (0.55) = olu-durum orani (dead_ratio)      -> tuzak yogunlugu (cok=zor)
+  A (0.20) = -log(cozum sayisi)                -> affetmezlik (az cozum=zor)
+  L (0.15) = enKisa cozum uzunlugu             -> plan uzunlugu (buyuk=zor)
+  C (0.10) = log(durum sayisi)                 -> arama karmasikligi (buyuk=zor)
+Agirliklar oyun testiyle kalibre edildi (24 Tem, 12 pilot leveli oynandi):
+  - T baskın: tuzak = kullanicinin yeniden baslama/geri alma sayisi; insan
+    zorlugunun asil kaynagi. Playtest: yuksek-T level (11) dusuk-T'den (12)
+    ACIK ARA zor hissettirdi, 12'nin daha az cozumu (dusuk A) olmasina ragmen.
+  - A ikinci ama "kurtarilabilir": T~0 iken tek cozum bile cok hamleyle sabirla
+    bulunur; o yuzden T'den kritik degil.
+  - L~C boyut olcer (korele, neredeyse ayni); dusuk agirlik yalniz kolay
+    (T~0) levellerin kendi arasi yumusak siralamasi icin. Playtest: en buyuk
+    tahta (31 hamle) yalniz 3 hissettirdi -> L doyuyor.
+Yapisal parametreler (kap/renk/bos) BILEREK formulde YOK: metrikleri ureten
+girdiler, dogrudan konursa hacim cift sayilir. Ham sinyaller (enKisa/cozum/
+durum/olu) yine loglanir. NOT: yalniz 2 affetmez orneklem (11,12) var; T/A
+dengesi D'nin ters-uretimi cok affetmez level verince kesinlesecek.
 
 Slot ici secim: 30 aday SKORA gore siralanir, MEDYAN temsilci alinir (sinifin
 tipik zorlugu); 30 adayin ham dagilimi (min/medyan/maks) da raporlanir ki
@@ -75,9 +80,9 @@ CANDIDATES_PER_SLOT = 30    # slot basina KABUL edilen (SOLVABLE) aday sayisi
 MAX_ATTEMPTS_FACTOR = 20    # sonsuz donguye karsi: en fazla 30*20 deneme
 SEED = 42
 
-# Dort-terim skor agirliklari (toplam 1.0). Baslangic degeri; Adim 3'te veriyle
-# oynanir. Anlam icin modul docstring'ine bak.
-WEIGHTS = {"L": 0.35, "C": 0.15, "A": 0.30, "T": 0.20}
+# Dort-terim skor agirliklari (toplam 1.0). Oyun testiyle kalibre edildi
+# (24 Tem): T baskin, sonra A, sonra L~C. Gerekce icin modul docstring'ine bak.
+WEIGHTS = {"T": 0.55, "A": 0.20, "L": 0.15, "C": 0.10}
 
 
 def build_slot(cap, colors, empties, rng):
