@@ -90,7 +90,7 @@ def build_slot(cap, colors, empties, rng):
 
     Kabul edilen adaylar (ham metrik dict'leri) + eleme sayaclarini doner.
     Skor burada HESAPLANMAZ: normalizasyon tum havuzu gerektirir, o yuzden
-    skorlama main'de iki inci gecuiste yapilir.
+    skorlama main'de ikinci geciste yapilir.
     """
     accepted = []            # ham metrik dict'leri (asagida)
     unsolvable = 0
