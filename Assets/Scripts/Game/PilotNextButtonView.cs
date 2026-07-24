@@ -29,7 +29,9 @@ namespace TubeSort.Game
 
             var renderer = gameObject.AddComponent<SpriteRenderer>();
             renderer.sprite = sprite;
-            renderer.color = new Color(1f, 1f, 1f, 0.85f);
+            // Yeşil: beyaz geri-al okundan ayrışsın, "geri/ileri çifti" gibi
+            // okunmasın. SpriteRenderer.color renk uzayını Unity çevirir.
+            renderer.color = new Color(0.30f, 0.78f, 0.45f, 0.92f);
             renderer.sortingOrder = 100; // tüplerin ve akışın üstünde
 
             var collider = gameObject.AddComponent<BoxCollider2D>();
@@ -46,7 +48,11 @@ namespace TubeSort.Game
             Destroy(texture);
         }
 
-        /// <summary>Sağ ok: dikdörtgen kuyruk + üçgen uç ("ileri" oku).</summary>
+        /// <summary>
+        /// "Sonraki" simgesi (▶|): sağ ok + ucunda dikey çubuk. Medya "sonraki
+        /// parça" simgesi gibi — "level ilerlet" okunur, geri-al okuyla (◀)
+        /// çift oluşturmaz.
+        /// </summary>
         private static Texture2D CreateArrowTexture()
         {
             var tex = new Texture2D(TextureSize, TextureSize, TextureFormat.RGBA32, false);
@@ -59,18 +65,23 @@ namespace TubeSort.Game
             const int centerY = TextureSize / 2;
 
             // Kuyruk: sabit kalınlıkta dikdörtgen (solda).
-            for (int x = 4; x <= 14; x++)
+            for (int x = 3; x <= 12; x++)
                 for (int y = centerY - 4; y <= centerY + 4; y++)
                     tex.SetPixel(x, y, Color.white);
 
-            // Üçgen uç: tepesi sağda (x=27), tabanı x=14'te. Yükseklik uca doğru
-            // daralır: her sütunun yarı boyu uca (sağa) uzaklığıyla orantılı.
-            for (int x = 14; x <= 27; x++)
+            // Üçgen uç: tepesi x=24'te (sağa bakar), tabanı x=12'de. Yükseklik
+            // uca (sağa) doğru daralır. Çubuğa yer açmak için sağ kenardan içeride.
+            for (int x = 12; x <= 24; x++)
             {
-                int halfHeight = (27 - x) * 12 / 13;
+                int halfHeight = 24 - x;
                 for (int y = centerY - halfHeight; y <= centerY + halfHeight; y++)
                     tex.SetPixel(x, y, Color.white);
             }
+
+            // "Sonraki" çubuğu: okun sağında dikey çizgi, ok yüksekliğinde.
+            for (int x = 27; x <= 29; x++)
+                for (int y = centerY - 12; y <= centerY + 12; y++)
+                    tex.SetPixel(x, y, Color.white);
 
             tex.Apply();
             return tex;
