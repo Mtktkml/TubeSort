@@ -28,6 +28,7 @@ level havuzunu kolaya yamultmasin (Murase 1996 dersi).
 Calistirma:  python pilot_ladder.py
 """
 
+import json
 import os
 import random
 import statistics
@@ -180,7 +181,37 @@ def main():
 
     total_secs = time.perf_counter() - wall0
     write_report(rows, total_secs)
-    print(f"\nBITTI — {total_secs:.1f}s. Rapor: pilot_ladder.md")
+    levels_path, n_levels = write_pilot_levels(rows)
+    print(f"\nBITTI — {total_secs:.1f}s. Rapor: pilot_ladder.md · "
+          f"Oyun onizleme: {n_levels} level -> {levels_path}")
+
+
+def write_pilot_levels(rows):
+    """Secilen (medyan) tahtalari oyunun okudugu semaya yazar:
+    Assets/Resources/pilot_levels.json. Sema levels.json ile AYNI
+    ({level, capacity, tubes[]}); zorluk/skor alani YOK (o D'nin sema
+    karari). BoardView 'pilot onizleme' modunda bunu okur; levels.json'a
+    DOKUNULMAZ. level numaralari 1..n bitisiktir (atlanan slot varsa
+    kapanir). tube metni LevelLibrary.ParseTube ile uyumlu: dipten yukari
+    virgullu, bos tup "" .
+    """
+    levels = []
+    for r in rows:
+        if r["empty"]:
+            continue
+        board = r["chosen"][3]   # (shortest, sol_count, states, board)
+        levels.append({
+            "level": len(levels) + 1,
+            "capacity": r["cap"],
+            "tubes": [",".join(str(c) for c in tube) for tube in board],
+        })
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    out_path = os.path.normpath(os.path.join(
+        script_dir, "..", "..", "Assets", "Resources", "pilot_levels.json"))
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump({"levels": levels}, f, indent=2)
+    return out_path, len(levels)
 
 
 def fmt_tubes(board):

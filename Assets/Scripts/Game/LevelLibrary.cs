@@ -28,25 +28,22 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// İstenen leveli tahta olarak kurar. Bulunamazsa ya da dosya
-        /// bozuksa hata loglayıp null döner; çağıran taraf yedeğe düşer.
+        /// İstenen leveli varsayılan level dosyasından (levels.json) kurar.
+        /// Bulunamazsa ya da dosya bozuksa hata loglayıp null döner; çağıran
+        /// taraf yedeğe düşer.
         /// </summary>
-        public static Board Load(int levelNumber)
-        {
-            var asset = Resources.Load<TextAsset>("levels");
-            if (asset == null)
-            {
-                Debug.LogError("levels.json bulunamadı (Assets/Resources/levels.json). " +
-                               "Tools/SolverBenchmark/generate_levels.py ile üretilmeli.");
-                return null;
-            }
+        public static Board Load(int levelNumber) => LoadFrom("levels", levelNumber);
 
-            LevelFile file = JsonUtility.FromJson<LevelFile>(asset.text);
-            if (file?.levels == null)
-            {
-                Debug.LogError("levels.json çözümlenemedi.");
-                return null;
-            }
+        /// <summary>
+        /// Leveli verilen Resources kaynağından kurar. levels.json dışında bir
+        /// dosyadan okumak için (ör. pilot önizleme: pilot_levels.json).
+        /// Şema aynıdır; yalnız kaynak adı değişir. Hata mesajları kaynak adını
+        /// içerir (kaynak "levels" iken eski mesajlarla birebir aynı kalır).
+        /// </summary>
+        public static Board LoadFrom(string resourceName, int levelNumber)
+        {
+            LevelFile file = ReadFile(resourceName);
+            if (file?.levels == null) return null;
 
             foreach (LevelData data in file.levels)
             {
@@ -59,8 +56,35 @@ namespace TubeSort.Game
                 return new Board(tubes);
             }
 
-            Debug.LogError($"Level {levelNumber} levels.json içinde yok.");
+            Debug.LogError($"Level {levelNumber} {resourceName}.json içinde yok.");
             return null;
+        }
+
+        /// <summary>
+        /// Verilen kaynaktaki level sayısı (gezinme için: 1..N arası dolaşma).
+        /// Dosya yoksa ya da bozuksa 0.
+        /// </summary>
+        public static int LevelCount(string resourceName)
+        {
+            LevelFile file = ReadFile(resourceName);
+            return file?.levels?.Length ?? 0;
+        }
+
+        private static LevelFile ReadFile(string resourceName)
+        {
+            var asset = Resources.Load<TextAsset>(resourceName);
+            if (asset == null)
+            {
+                Debug.LogError($"{resourceName}.json bulunamadı (Assets/Resources/{resourceName}.json). " +
+                               "Tools/SolverBenchmark ile üretilmeli.");
+                return null;
+            }
+
+            LevelFile file = JsonUtility.FromJson<LevelFile>(asset.text);
+            if (file?.levels == null)
+                Debug.LogError($"{resourceName}.json çözümlenemedi.");
+
+            return file;
         }
 
         private static Tube ParseTube(string text, int capacity)

@@ -33,6 +33,13 @@ namespace TubeSort.Game
                  "elle kurulmuş test tahtası kullanılır.")]
         [SerializeField] private int levelNumber;
 
+        [Header("Pilot Önizleme (geçici)")]
+        [Tooltip("C aşamasının pilot merdivenini (pilot_levels.json) yükle ve " +
+                 "ok tuşlarıyla (← →) gez. levelNumber ve test tahtasının önüne " +
+                 "geçer, LoadBoard'ın arkasında kalır. D'nin level dosyası " +
+                 "(levels.json) bundan etkilenmez.")]
+        [SerializeField] private bool pilotPreview;
+
         [Header("Teşhis")]
         [Tooltip("Çözülemez test tahtasını kur: solver'ın 'ÇÖZÜLEMEZ' kararını " +
                  "ve oyun içi çıkmazı elle denemek için. Yalnız levelNumber = 0 " +
@@ -53,6 +60,11 @@ namespace TubeSort.Game
         private int selectedIndex = -1;
         private bool isAnimating;
         private Camera mainCamera;
+
+        /// <summary>pilot_levels.json Resources kaynak adı (uzantısız).</summary>
+        private const string PilotResource = "pilot_levels";
+        private int pilotIndex = 1;   // 1-tabanlı; hangi pilot leveli gösteriliyor
+        private int pilotCount;       // pilot dosyasındaki level sayısı (gezinme sınırı)
 
         /// <summary>
         /// Start kurulumu tamamlandı mı? LoadBoard bununla karar verir:
@@ -91,9 +103,15 @@ namespace TubeSort.Game
                 return;
             }
 
-            // Tahta önceliği: dışarıdan verilen (LoadBoard) > seçili level >
-            // elle kurulmuş test tahtası (teşhis anahtarına göre çözülebilir
-            // ya da çözülemez olan). Level yüklenemezse test tahtasına düşer.
+            // Tahta önceliği: dışarıdan verilen (LoadBoard) > pilot önizleme >
+            // seçili level > elle kurulmuş test tahtası (teşhis anahtarına göre
+            // çözülebilir ya da çözülemez olan). Level yüklenemezse test tahtasına düşer.
+            if (board == null && pilotPreview)
+            {
+                pilotCount = LevelLibrary.LevelCount(PilotResource);
+                board = LoadPilot(pilotIndex);
+            }
+
             if (board == null && levelNumber > 0)
                 board = LevelLibrary.Load(levelNumber);
 
@@ -158,6 +176,44 @@ namespace TubeSort.Game
             history.Clear(); // eski tahtanın hamleleri yeni tahtada geri alınamaz
             if (initialized)
                 RebuildViews();
+        }
+
+        /// <summary>
+        /// Pilot merdiveninin verilen levelini pilot_levels.json'dan yükler ve
+        /// hangi levelde olduğumuzu Console'a yazar. Yalnız pilot önizleme modunda.
+        /// </summary>
+        private Board LoadPilot(int index)
+        {
+            Board loaded = LevelLibrary.LoadFrom(PilotResource, index);
+            if (loaded != null)
+                Debug.Log($"<color=cyan>Pilot önizleme {index}/{pilotCount}</color> — " +
+                          $"kapasite {loaded[0].Capacity}, {loaded.TubeCount} tüp");
+
+            return loaded;
+        }
+
+        /// <summary>
+        /// Pilot önizlemede ok tuşlarıyla (← →) leveller arasında gezer;
+        /// 1..pilotCount arasında sarar. Bir geçiş yaptıysa true döner (o kare
+        /// tıklama işlenmesin). Klavye yoksa (telefon) sessizce false — dokunuş
+        /// akışı bozulmaz.
+        /// </summary>
+        private bool HandlePilotBrowse()
+        {
+            Keyboard keyboard = Keyboard.current;
+            if (keyboard == null || pilotCount <= 0) return false;
+
+            int step = 0;
+            if (keyboard.rightArrowKey.wasPressedThisFrame) step = 1;
+            else if (keyboard.leftArrowKey.wasPressedThisFrame) step = -1;
+            if (step == 0) return false;
+
+            pilotIndex = ((pilotIndex - 1 + step + pilotCount) % pilotCount) + 1;
+            Board next = LoadPilot(pilotIndex);
+            if (next != null)
+                LoadBoard(next);
+
+            return true;
         }
 
         /// <summary>
@@ -490,6 +546,11 @@ namespace TubeSort.Game
         private void Update()
         {
             RefitIfViewChanged();
+
+            // Pilot önizleme: ok tuşlarıyla level gezme. Geçiş yapıldıysa bu kare
+            // tıklama işlenmez (yeni tahta zaten kuruldu).
+            if (pilotPreview && !isAnimating && HandlePilotBrowse())
+                return;
 
             // Pointer, Mouse ve Touchscreen'in ortak atasıdır: masaüstünde fare,
             // telefonda (ve Device Simulator'da) parmak aynı kodla okunur.

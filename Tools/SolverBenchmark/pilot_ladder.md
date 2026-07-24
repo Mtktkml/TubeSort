@@ -1,6 +1,6 @@
 # TubeSort — Pilot Merdiveni Raporu (C asamasi)
 
-Seed `42` · slot basina 30 kabul edilen aday · toplam 169.8s
+Seed `42` · slot basina 30 kabul edilen aday · toplam 168.9s
 
 Skor **leksikografik**: birincil enKisa (buyuk=zor), esitlik bozucu 1/cozumSayisi (az cozum=zor). Agirlik yok — ham sinyaller asagida, korelasyon VERIYLE degerlendirilecek. Slot temsilcisi = **medyan** aday.
 
