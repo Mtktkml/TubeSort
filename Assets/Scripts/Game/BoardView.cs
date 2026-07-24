@@ -56,6 +56,7 @@ namespace TubeSort.Game
         private readonly List<TubeView> tubeViews = new List<TubeView>();
         private StreamView streamView;
         private UndoButtonView undoButton;
+        private PilotNextButtonView pilotNextButton;
 
         private int selectedIndex = -1;
         private bool isAnimating;
@@ -122,6 +123,8 @@ namespace TubeSort.Game
             BuildViews();
             BuildStreamView();
             BuildUndoButton();
+            if (pilotPreview)
+                BuildPilotNextButton();
             ApplyLayout();
             initialized = true;
         }
@@ -137,6 +140,17 @@ namespace TubeSort.Game
             undoButton.Initialize();
         }
 
+        /// <summary>
+        /// Pilot önizlemede sıradaki level butonunu kurar (sağ üst). Yalnız
+        /// pilot modunda; telefonda ok tuşu olmadığı için level gezmenin yolu.
+        /// </summary>
+        private void BuildPilotNextButton()
+        {
+            var go = new GameObject("PilotNextButton");
+            pilotNextButton = go.AddComponent<PilotNextButtonView>();
+            pilotNextButton.Initialize();
+        }
+
         /// <summary>Butonu görüş alanının sol üst köşesine yerleştirir.</summary>
         private void PositionUndoButton()
         {
@@ -148,6 +162,21 @@ namespace TubeSort.Game
 
             undoButton.transform.position = new Vector3(
                 cam.x - view.x * 0.5f + inset,
+                cam.y + view.y * 0.5f - inset,
+                0f);
+        }
+
+        /// <summary>Sıradaki level butonunu görüş alanının sağ üst köşesine yerleştirir.</summary>
+        private void PositionPilotNextButton()
+        {
+            if (pilotNextButton == null) return;
+
+            Vector2 view = CameraView;
+            Vector3 cam = mainCamera.transform.position;
+            float inset = PilotNextButtonView.Size;
+
+            pilotNextButton.transform.position = new Vector3(
+                cam.x + view.x * 0.5f - inset,
                 cam.y + view.y * 0.5f - inset,
                 0f);
         }
@@ -208,6 +237,20 @@ namespace TubeSort.Game
             else if (keyboard.leftArrowKey.wasPressedThisFrame) step = -1;
             if (step == 0) return false;
 
+            StepPilot(step);
+            return true;
+        }
+
+        /// <summary>
+        /// Pilot levelleri arasında verilen adım kadar ilerler (ör. +1 sonraki)
+        /// ve 1..pilotCount arasında sarar. Yeni tahtayı yükleyip çözüm yolunu
+        /// loglar (Start'takiyle aynı). Ok tuşları ve sıradaki-level butonu
+        /// aynı kapıyı kullanır.
+        /// </summary>
+        private void StepPilot(int step)
+        {
+            if (pilotCount <= 0) return;
+
             pilotIndex = ((pilotIndex - 1 + step + pilotCount) % pilotCount) + 1;
             Board next = LoadPilot(pilotIndex);
             if (next != null)
@@ -215,8 +258,6 @@ namespace TubeSort.Game
                 LoadBoard(next);
                 LogSolvability();   // her levelin cozum yolu da loglansin (Start'takiyle ayni)
             }
-
-            return true;
         }
 
         /// <summary>
@@ -407,6 +448,7 @@ namespace TubeSort.Game
 
             // Buton görüş alanına bağlı: yerleşim her tazelendiğinde o da tazelenir.
             PositionUndoButton();
+            PositionPilotNextButton();
         }
 
         /// <summary>
@@ -532,9 +574,12 @@ namespace TubeSort.Game
         /// </summary>
         private void OnDestroy()
         {
-            // Buton tahtanın çocuğu olmadığı için kendiliğinden yok olmaz.
+            // Butonlar tahtanın çocuğu olmadığı için kendiliğinden yok olmaz.
             if (undoButton != null)
                 Destroy(undoButton.gameObject);
+
+            if (pilotNextButton != null)
+                Destroy(pilotNextButton.gameObject);
 
             Destroy(glassMaterial);
             Destroy(liquidMaterial);
@@ -580,6 +625,12 @@ namespace TubeSort.Game
             if (hit.GetComponent<UndoButtonView>() != null)
             {
                 UndoLastMove();
+                return;
+            }
+
+            if (hit.GetComponent<PilotNextButtonView>() != null)
+            {
+                StepPilot(1);   // sıradaki pilot level (telefonda ok tuşu yerine)
                 return;
             }
 
