@@ -156,7 +156,7 @@ en iyileri seçilecek, zorluğu artan sırayla dosyaya yazılacak. Kapasite
 parametreler. Eski plan ("5 leveli EMPTIES=1 ile yeniden üret") bu hattın
 içine katlandı.
 
-Yol haritası — A ve B tamam, sıra C'de:
+Yol haritası — A, B, C tamam, sıra D'de:
 
 - [x] **A. Solver sayım semantiği:** arama ilk çözümde durmaz, uzayı
   tüketir, çözüme düşen kenarları sayar (`SolutionCount`, `CountIsExact`).
@@ -169,13 +169,42 @@ Yol haritası — A ve B tamam, sıra C'de:
   okur, algoritmayı koşmaz. Makbuz satırı `generate_levels.py`'de
   (kapasite/renk/boş + çözümSayısı/enKısa/ilkYol/durum) — şimdilik log,
   şema genişlemesi C'nin kararı.
-- [ ] **C. ~15 levellik pilot merdiven** + zorluk skoru ilk sürüm →
-  mentör onayı (skor ağırlıkları ve eğri şekli açık soru). Taslak:
-  `SIZES` yerine (kapasite, renk, boş) merdiveni; slot başına ~30 aday;
-  skor = enKısa temelli, eşitlik bozucu 1/çözümSayısı.
-- [ ] **D. 300 level üretimi** + Unity tarafı: `LevelLibraryTests`
-  güncelleme, ekran kontrolü (13+ tüp sığıyor mu), `ColorPalette`
-  (12 renk ayırt edilebilir mi).
+- [x] **C. Pilot merdiven + zorluk skoru ilk sürüm:**
+  `Tools/SolverBenchmark/pilot_ladder.py` (ayrı script; `generate_levels.py`
+  D'ye kadar yerinde). Skor **leksikografik** (mentör kararı, 24 Tem):
+  birincil enKısa, eşitlik bozucu `1/çözümSayısı`; **ağırlık yok** —
+  ham sinyaller (enKısa/çözüm/durum) her level için loglanır, ağırlık
+  kararı veriyle mentöre bırakıldı. Slot temsilcisi = 30 adayın **medyanı**,
+  dağılım (min/med/maks) raporlanır. Çıktı: `pilot_ladder.md` (levels.json'a
+  dokunmaz). 12 slotluk merdiven, seçilen enKısa **monoton** (8→33, düşüş
+  yok). Üç bulgu (aşağıda) D'yi şekillendiriyor. Skor doğrulandı; açık
+  kalan tek şey mentörün ağırlık/eğri kararı (pilot ona veriyi sunar).
+
+  **Pilot bulguları (24 Tem, D'nin girdisi):**
+  1. **boş=1 saf rastgele üretimde kap≥5'te çöküyor:** kabul oranı ~%0
+     (kap6 renk7 boş1: 600 denemede 0 kabul). Teoriyle uyumlu (Ito et al.:
+     ~3 boş / 4 dolu). **Karar:** boş=1 yalnız kap≤4'te (kabul ~%15-24).
+     Garantili boş=1 üretimi (**ters-üretim**) D'ye bırakıldı.
+  2. **enKısa ≈ 0.8·(renk×kap) = tahta hacmi**, slot sırasını değil hacmi
+     takip eder. **Karar:** merdiven hacme göre monoton dizilir; son 300
+     level **slot sırasına değil ölçülen skora göre** sıralanacak.
+  3. **`1/çözümSayısı` eşitlik bozucu doğrulandı:** eşit-uzunlukta boş=1
+     ve dar tahtalar 3-12× az çözümle doğru şekilde daha zor sıralanıyor.
+     Yan bulgu: eşit hacimde sığ+çok-renk, derin+az-renkten daha dar
+     (kapasitenin hacim ötesi etkisi — D'de mentöre).
+- [ ] **D. 300 level üretimi** + Unity tarafı. Pilotun açtığı işler:
+  - **Ters-üretim (üretici):** çözülmüş tahtadan rastgele ters-dökmelerle
+    karıştırıp garantili-çözülebilir tahta üret → boş=1 çöküşünü çözer,
+    her kapasitede kullanılabilir. Yeni fonksiyon + çapraz doğrulama.
+  - **Skora göre sıralama:** 300 level slot değil skor (enKısa, 1/çözüm)
+    ile artan sıraya dizilir; parametre kovaları hacmi monoton kapsar.
+  - **Ağırlık/eğri:** mentör kararı — pilot ham sinyalleri sunar; skalar
+    skor gerekiyorsa burada veriyle şekillenir.
+  - **Şema + Unity:** skoru/enKısayı `levels.json`'a taşı; `LevelLibraryTests`
+    güncelle, ekran kontrolü (13+ tüp sığıyor mu), `ColorPalette` (12 renk
+    ayırt edilebilir mi).
+  - **Maliyet notu:** solve() uzayı tükettiği için kap6 slotları pahalı
+    (~70 sn/30 aday); 300 level üretimi dakikalar sürer, kabul edilebilir.
 
 Notlar:
 
