@@ -211,7 +211,10 @@ namespace TubeSort.Game
             pilotIndex = ((pilotIndex - 1 + step + pilotCount) % pilotCount) + 1;
             Board next = LoadPilot(pilotIndex);
             if (next != null)
+            {
                 LoadBoard(next);
+                LogSolvability();   // her levelin cozum yolu da loglansin (Start'takiyle ayni)
+            }
 
             return true;
         }
