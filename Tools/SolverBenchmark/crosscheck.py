@@ -216,6 +216,84 @@ def shortest_solution(board, cap, max_states=BUDGET):
     return None, states, False
 
 
+def dead_ratio(board, cap, max_states=BUDGET):
+    """Erisilebilir durumlarin ne kadari OLU (hedefe yol yok) — tuzak yogunlugu.
+
+    Zorluk sinyali T: "oynarken ne kadar kolay sikisirsin". Level cozulebilir
+    olsa bile, yanlis hamlelerle dusulen cikmaz durumlarin payi. Cok = zor.
+
+    solve()/shortest_solution() ile AYNI kanonik graf (ayni budamalar, ayni
+    kanonik anahtar): once start'tan erisilebilir tum durumlar ve aralarindaki
+    kenarlar cikarilir; sonra hedeften GERI erisilebilirlik ile 'canli' (hedefe
+    en az bir yol var) durumlar isaretlenir. Olu = erisilebilir ama canli degil.
+    oran = olu / erisilebilir.
+
+    'Canli olma' hedefe DOGRUDAN dokebilen durumdan baslar ve geri (predecessor)
+    kenarlar boyunca yayilir. Boylece 'hamlesi var ama hepsi olu durumlara
+    gidiyor' olan durum dogru sekilde OLU sayilir (HasAnyValidMove'un
+    yakalayamadigi gercek cikmaz).
+
+    Tanim gonderme (dogrulama icin): bir durum bu grafta OLU ⟺ o durumdan
+    solve() 'UNSOLVABLE' verir (ayni budanmis graf, ayni hedef). Iki bagimsiz
+    yol ayni sinifi vermeli — crosscheck bunu kaba-kuvvetle sinar.
+
+    Yalniz uzay TAM tuketildiginde anlamlidir: butce asilirsa (None, states,
+    True) doner — cagiran 'bilinmiyor' diye ele alir, oran 0 gibi degil (Murase
+    1996 dersi). Bastan cozulmus tahtada erisilebilir uzay bostur -> oran 0.0.
+
+    (oran, erisilebilir_durum_sayisi, butce_asildi) doner.
+    """
+    board = tuple(tuple(t) for t in board)
+    if is_solved(board, cap):
+        return 0.0, 0, False
+
+    visited = {canonical(board)}
+    stack = [board]
+    succ = {}            # kanonik durum -> [kanonik ardil durumlar]
+    seed_alive = set()   # hedefe DOGRUDAN dokebilen durumlar (geri yayilimin tohumu)
+    states = 0
+
+    while stack:
+        cur = stack.pop()
+
+        if states >= max_states:
+            return None, states, True
+        states += 1
+
+        key = canonical(cur)
+        children = []
+        for i, j in gen_moves(cur, cap):
+            nxt = pour(cur, cap, i, j)
+            if is_solved(nxt, cap):
+                seed_alive.add(key)
+                continue
+            nkey = canonical(nxt)
+            children.append(nkey)
+            if nkey not in visited:
+                visited.add(nkey)
+                stack.append(nxt)
+        succ[key] = children
+
+    # Geri erisilebilirlik: predecessor grafini kur, seed'lerden canliligi yay.
+    preds = {}
+    for u, children in succ.items():
+        for v in children:
+            preds.setdefault(v, []).append(u)
+
+    alive = set(seed_alive)
+    queue = deque(seed_alive)
+    while queue:
+        v = queue.popleft()
+        for u in preds.get(v, ()):
+            if u not in alive:
+                alive.add(u)
+                queue.append(u)
+
+    reachable = len(visited)   # start dahil tum erisilebilir (hedef-olmayan) durumlar
+    dead = reachable - len(alive)
+    return dead / reachable, reachable, False
+
+
 # ------------------------------------------------- capraz dogrulama verisi
 
 # C# benchmark ciktisindan alinan SOMUT tahtalar. Yeni sayim semantiginde
@@ -290,6 +368,92 @@ def run_cross_checks(out):
     return all_ok
 
 
+# ------------------------------------------- dead_ratio dogrulamasi (bagimsiz)
+
+# dead_ratio grafik-tabanli ve hizli; burada YAVAS ama BAGIMSIZ bir referansla
+# (her erisilebilir duruma solve() kosup UNSOLVABLE sayarak) capraz-dogrulanir.
+# Referans solve() zaten C# ile dogrulanmis; iki yol ayni orani vermeli.
+# Tahtalar pilot merdiveninin kucuk slotlari (durum<~400); boyle kaba-kuvvet
+# saniyeler yerine milisaniyeler surer. bos=2 -> ~0 (affedici), bos=1 -> >0
+# (tuzakli): kontrol hem sifir hem sifir-disi durumu kapsar.
+DEAD_RATIO_CHECKS = [
+    ("slot1 kap4 renk3 bos2 (durum 123)", 4,
+     [[1, 2, 1, 1], [0, 0, 2, 0], [0, 2, 2, 1], [], []]),
+    ("slot2 kap4 renk4 bos2 (durum 337)", 4,
+     [[0, 2, 0, 3], [3, 2, 2, 1], [3, 3, 0, 1], [2, 1, 1, 0], [], []]),
+    ("slot4 kap4 renk5 bos1 (durum 89)", 4,
+     [[2, 0, 3, 3], [3, 0, 4, 4], [3, 2, 1, 0], [4, 1, 2, 1], [1, 4, 0, 2], []]),
+    ("slot6 kap4 renk6 bos1 (durum 71)", 4,
+     [[2, 4, 3, 1], [1, 2, 0, 5], [4, 3, 4, 0], [3, 4, 2, 0], [5, 5, 1, 1],
+      [2, 0, 5, 3], []]),
+]
+
+
+def _reachable_nongoal_states(board, cap):
+    """Start'tan erisilebilir tum (hedef-olmayan) durumlar, birer temsilci
+    tahtayla. dead_ratio'nun gezdigi ayni budanmis graf."""
+    board = tuple(tuple(t) for t in board)
+    if is_solved(board, cap):
+        return []
+    seen = {canonical(board): board}
+    stack = [board]
+    while stack:
+        cur = stack.pop()
+        for i, j in gen_moves(cur, cap):
+            nxt = pour(cur, cap, i, j)
+            if is_solved(nxt, cap):
+                continue
+            key = canonical(nxt)
+            if key not in seen:
+                seen[key] = nxt
+                stack.append(nxt)
+    return list(seen.values())
+
+
+def bruteforce_dead_ratio(board, cap):
+    """Bagimsiz referans: her erisilebilir duruma solve() kosup UNSOLVABLE
+    olanlari say. (oran, erisilebilir_sayisi) doner. Yavas ama dogrudan
+    tanimdan: durum OLU ⟺ o durumdan cozum yok."""
+    states = _reachable_nongoal_states(board, cap)
+    if not states:
+        return 0.0, 0
+    dead = 0
+    for s in states:
+        verdict = solve(s, cap)[0]
+        if verdict == "UNSOLVABLE":
+            dead += 1
+        elif verdict == "OUT_OF_BUDGET":
+            raise RuntimeError("alt-durum butce asti — dogrulama guvenilmez")
+    return dead / len(states), len(states)
+
+
+def run_dead_ratio_checks(out):
+    out.append("## dead_ratio dogrulamasi: grafik vs kaba-kuvvet\n")
+    out.append("Grafik-tabanli `dead_ratio` (hizli, geri-erisilebilirlik) vs "
+               "bagimsiz kaba-kuvvet (her duruma `solve()`). Oran ve erisilebilir "
+               "durum sayisi birebir tutmali.\n")
+    out.append("| Tahta | oran (grafik/kabaguc) | erisilebilir (grafik/kabaguc) | Sonuc |")
+    out.append("|---|---|---|---|")
+
+    all_ok = True
+    for name, cap, board in DEAD_RATIO_CHECKS:
+        g_ratio, g_reach, hit = dead_ratio(board, cap)
+        b_ratio, b_reach = bruteforce_dead_ratio(board, cap)
+        ok = (not hit
+              and g_reach == b_reach
+              and abs(g_ratio - b_ratio) < 1e-9)
+        all_ok = all_ok and ok
+        mark = "ESLESTI" if ok else "**UYUSMAZLIK**"
+        out.append(f"| {name} | {g_ratio:.4f} / {b_ratio:.4f} "
+                   f"| {g_reach} / {b_reach} | {mark} |")
+
+    out.append("")
+    out.append("**TOPLU SONUC: " + ("DEAD_RATIO ESLESTI**" if all_ok
+               else "UYUSMAZLIK VAR — INCELE!**"))
+    out.append("")
+    return all_ok
+
+
 # --------------------------------------------------------------- benchmark
 
 def generate(colors, cap, empties, rng):
@@ -357,6 +521,9 @@ def main():
 
     set_stage("capraz dogrulama")
     run_cross_checks(out)
+
+    set_stage("dead_ratio dogrulamasi")
+    run_dead_ratio_checks(out)
 
     set_stage("benchmark basliyor")
     run_benchmark(out)
