@@ -115,6 +115,29 @@ namespace TubeSort.Core
             return new SolveReport(verdict, context.StatesVisited, 0, exact, null);
         }
 
+        /// <summary>
+        /// Yalnız "bir çözüm var mı?" sorusunu yanıtlar: ilk çözümde durur, uzayı
+        /// tüketmez — <see cref="Solve"/>'dan çok daha ucuz. Çıkmaz (deadlock)
+        /// tespiti için tasarlandı: false yalnızca erişilebilir uzay TAM tükenip
+        /// hiç çözüm bulunamadığında döner. Bütçe aşılırsa (belirsiz) güvenli
+        /// tarafa çözülebilir (true) sayılır — yanlış çıkmaz uyarısı verilmesin.
+        /// Verilen tahta değişmez (klonlanır).
+        /// </summary>
+        public static bool IsSolvable(
+            Board board,
+            int maxStates = DefaultMaxStates,
+            int maxDepth = DefaultMaxDepth)
+        {
+            if (board.IsSolved) return true;
+
+            var context = new SearchContext(maxStates, maxDepth) { StopAtFirst = true };
+            Dfs(board.Clone(), context);
+
+            // Bulundu → true. Bulunamadı ama bütçe aşıldı → "bilinmiyor", güvenli
+            // tarafa true. Bulunamadı ve uzay tam tükendi → gerçek çıkmaz (false).
+            return context.Found || context.BudgetHit;
+        }
+
         private sealed class SearchContext
         {
             public readonly HashSet<string> Visited = new HashSet<string>();
@@ -124,6 +147,11 @@ namespace TubeSort.Core
             public int StatesVisited;
             public int SolutionCount;
             public bool BudgetHit;
+
+            /// <summary>true ise arama ilk çözümde durur (varlık kontrolü).</summary>
+            public bool StopAtFirst;
+            /// <summary>StopAtFirst modunda bir çözüm bulunduysa true.</summary>
+            public bool Found;
 
             /// <summary>İlk bulunan çözümün fotoğrafı (Path o anda kopyalanır).</summary>
             public PourResult[] FirstSolution;
@@ -175,13 +203,16 @@ namespace TubeSort.Core
                 context.Path.Add(result);
 
                 // Çözüm KENARDA tespit edilir ve çözülmüş durum genişletilmez:
-                // sayım "çözüme düşen kenar" tanımıyla bire bir kalır. Arama
-                // ilk çözümde durmaz; uzayın kalanını gezmeye devam eder.
+                // sayım "çözüme düşen kenar" tanımıyla bire bir kalır. Normalde
+                // arama ilk çözümde durmaz; yalnız varlık modunda (StopAtFirst)
+                // ilk çözümde erken çıkar.
                 if (board.IsSolved)
                 {
                     context.SolutionCount++;
                     if (context.FirstSolution == null)
                         context.FirstSolution = context.Path.ToArray();
+                    if (context.StopAtFirst)
+                        context.Found = true;
                 }
                 else
                 {
@@ -190,6 +221,8 @@ namespace TubeSort.Core
 
                 board.UndoPour(result);
                 context.Path.RemoveAt(context.Path.Count - 1);
+
+                if (context.Found) return;   // varlık modu: ilk çözümde aramayı kes
             }
         }
 

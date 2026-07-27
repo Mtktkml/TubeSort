@@ -205,6 +205,77 @@ namespace TubeSort.Tests
             Assert.Greater(unsolvableCount, 0, "Hiç çözülemez tahta üretilmedi");
         }
 
+        [Test]
+        public void IsSolvable_SolvedBoard_ReturnsTrue()
+        {
+            var board = new Board(new[]
+            {
+                new Tube(2, Red, Red),
+                new Tube(2)
+            });
+
+            Assert.IsTrue(board.IsSolved, "Test kurgusu: tahta çözülü olmalı");
+            Assert.IsTrue(Solver.IsSolvable(board));
+        }
+
+        [Test]
+        public void IsSolvable_SolvableBoard_ReturnsTrue()
+        {
+            // [Y] + [Y] birleşince çözülür.
+            var board = new Board(new[]
+            {
+                new Tube(2, Red, Red),
+                new Tube(2, Yellow),
+                new Tube(2, Yellow)
+            });
+
+            Assert.IsTrue(Solver.IsSolvable(board));
+        }
+
+        [Test]
+        public void IsSolvable_DeadlockWithAvailableMoves_ReturnsFalse()
+        {
+            // Hamle var ama kazanılamaz — HasAnyValidMove'un kaçırdığı gerçek çıkmaz.
+            var board = new Board(new[]
+            {
+                new Tube(4, Red, Yellow),
+                new Tube(4, Yellow, Red, Yellow)
+            });
+
+            Assert.IsTrue(board.HasAnyValidMove, "Test kurgusu: hamle mevcut olmalı");
+            Assert.IsFalse(Solver.IsSolvable(board), "Gerçek çıkmaz: çözüm yok");
+        }
+
+        [Test]
+        public void IsSolvable_AgreesWithSolve_OnRandomBoards()
+        {
+            // Varlık kontrolü, tam Solve ile aynı çözülebilirlik kararını vermeli
+            // (bütçe aşılmayan küçük tahtalarda). İlk çözümde durmak kararı değiştirmez.
+            var rng = new System.Random(54321);
+            int solvable = 0, unsolvable = 0;
+
+            for (int i = 0; i < 200; i++)
+            {
+                int colors = 2 + rng.Next(2);
+                int capacity = 2 + rng.Next(2);
+                int empties = rng.Next(3);
+
+                Board board = RandomBoard(rng, colors, capacity, empties);
+
+                SolveReport full = Solver.Solve(board);
+                Assert.AreNotEqual(SolveVerdict.OutOfBudget, full.Verdict,
+                    "Küçük tahtada bütçe aşılmamalı");
+
+                Assert.AreEqual(full.IsSolvable, Solver.IsSolvable(board),
+                    $"Tahta #{i}: IsSolvable, Solve ile aynı karara varmalı");
+
+                if (full.IsSolvable) solvable++; else unsolvable++;
+            }
+
+            Assert.Greater(solvable, 0, "Hiç çözülebilir üretilmedi");
+            Assert.Greater(unsolvable, 0, "Hiç çözülemez üretilmedi");
+        }
+
         /// <summary>
         /// Rastgele tahta: her renkten tam 'capacity' birim karıştırılıp dolu
         /// tüplere dağıtılır, sonuna boş tüpler eklenir. Oyunun üreteceği

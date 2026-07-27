@@ -3,7 +3,8 @@
     "rootNamespace": "TubeSort.Game",
     "references": [
         "TubeSort.Core",
-        "Unity.InputSystem"
+        "Unity.InputSystem",
+        "Unity.TextMeshPro"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

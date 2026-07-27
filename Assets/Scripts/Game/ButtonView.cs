@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 
 namespace TubeSort.Game
@@ -24,6 +25,9 @@ namespace TubeSort.Game
 
         private Texture2D texture;
         private Sprite sprite;
+        private SpriteRenderer spriteRenderer;
+        private Color baseColor;
+        private Coroutine pulseRoutine;
 
         public void Initialize(ButtonKind kind)
         {
@@ -33,13 +37,44 @@ namespace TubeSort.Game
                 new Rect(0f, 0f, TextureSize, TextureSize),
                 new Vector2(0.5f, 0.5f), TextureSize / Size);
 
-            var renderer = gameObject.AddComponent<SpriteRenderer>();
-            renderer.sprite = sprite;
-            renderer.color = TintFor(kind);
-            renderer.sortingOrder = 100; // tüplerin ve akışın üstünde
+            spriteRenderer = gameObject.AddComponent<SpriteRenderer>();
+            spriteRenderer.sprite = sprite;
+            baseColor = TintFor(kind);
+            spriteRenderer.color = baseColor;
+            spriteRenderer.sortingOrder = 100; // tüplerin ve akışın üstünde
 
             var collider = gameObject.AddComponent<BoxCollider2D>();
             collider.size = new Vector2(Size, Size);
+        }
+
+        /// <summary>
+        /// Butonu yanıp söndürerek dikkat çeker (çıkmazda kaçış kapısı ipucu).
+        /// Kapatınca temel renge döner. (Placeholder efekt; 1C'de cilalanır.)
+        /// </summary>
+        public void SetHighlight(bool on)
+        {
+            if (on)
+            {
+                pulseRoutine ??= StartCoroutine(Pulse());
+            }
+            else if (pulseRoutine != null)
+            {
+                StopCoroutine(pulseRoutine);
+                pulseRoutine = null;
+                spriteRenderer.color = baseColor;
+            }
+        }
+
+        private IEnumerator Pulse()
+        {
+            while (true)
+            {
+                float a = Mathf.Lerp(0.3f, 1f, Mathf.PingPong(Time.time * 4f, 1f));
+                var c = baseColor;
+                c.a = a;
+                spriteRenderer.color = c;
+                yield return null;
+            }
         }
 
         /// <summary>
