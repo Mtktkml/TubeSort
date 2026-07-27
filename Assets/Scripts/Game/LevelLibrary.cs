@@ -17,6 +17,7 @@ namespace TubeSort.Game
         private class LevelData
         {
             public int level;
+            public string label;   // ekran adı, ör. "1.1" (tier.varyant)
             public int capacity;
             public string[] tubes;
         }
@@ -68,6 +69,22 @@ namespace TubeSort.Game
         {
             LevelFile file = ReadFile(resourceName);
             return file?.levels?.Length ?? 0;
+        }
+
+        /// <summary>
+        /// Verilen leveldeki "label" alanını döner (ör. "1.1"); ekranda
+        /// "LEVEL 1.1" göstermek ve teşhis logu için. Bulunamazsa null.
+        /// label, indeksten türetilmez; JSON'daki tek doğruluk kaynağıdır.
+        /// </summary>
+        public static string LabelOf(string resourceName, int levelNumber)
+        {
+            LevelFile file = ReadFile(resourceName);
+            if (file?.levels == null) return null;
+
+            foreach (LevelData data in file.levels)
+                if (data.level == levelNumber) return data.label;
+
+            return null;
         }
 
         private static LevelFile ReadFile(string resourceName)

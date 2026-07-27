@@ -215,8 +215,11 @@ namespace TubeSort.Game
         {
             Board loaded = LevelLibrary.LoadFrom(PilotResource, index);
             if (loaded != null)
-                Debug.Log($"<color=cyan>Pilot önizleme {index}/{pilotCount}</color> — " +
+            {
+                string label = LevelLibrary.LabelOf(PilotResource, index);
+                Debug.Log($"<color=cyan>LEVEL {label}</color> (pilot önizleme {index}/{pilotCount}) — " +
                           $"kapasite {loaded[0].Capacity}, {loaded.TubeCount} tüp");
+            }
 
             return loaded;
         }

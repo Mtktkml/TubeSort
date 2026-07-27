@@ -30,9 +30,10 @@ girdiler, dogrudan konursa hacim cift sayilir. Ham sinyaller (enKisa/cozum/
 durum/olu) yine loglanir. NOT: yalniz 2 affetmez orneklem (11,12) var; T/A
 dengesi D'nin ters-uretimi cok affetmez level verince kesinlesecek.
 
-Slot ici secim: 30 aday SKORA gore siralanir, MEDYAN temsilci alinir (sinifin
-tipik zorlugu); 30 adayin ham dagilimi (min/medyan/maks) da raporlanir ki
-sinif zorluk-kararsiz mi gorulsun.
+Slot ici secim: 30 aday SKORA gore siralanir, ORTANIN HEMEN USTUNDEKI 2 aday
+temsilci alinir (ordered[15], ordered[16]; her tier ekranda X.1/X.2 diye 2
+tahta gosterilir; mentor karari 27 Tem 2026 — tam-orta 14,15 yerine bir kademe
+zora yaslanir). Ogretici tier'lar (1-2) bunun disinda: SABIT, skora girmez.
 
 Butce/OUT_OF_BUDGET ve cozulemez adaylar AYRI loglanir — sessizce elenip
 level havuzunu kolaya yamultmasin (Murase 1996 dersi).
@@ -44,7 +45,6 @@ import json
 import math
 import os
 import random
-import statistics
 import time
 
 import crosscheck as cc
@@ -60,6 +60,8 @@ import crosscheck as cc
 #     6, 11). Karar: merdiven HACME gore monoton dizilir; bos=1 ayni hacimde
 #     "daha dar" (az cozum) oldugu icin ikizinin hemen ardina konur.
 # Hacim (renk*kap) monoton: 12,16,20,20,24,24,25,30,30,35,36,42. Tup = renk+bos.
+# (4,4,1) KOPRU olarak eklendi: skora gore siralamada bos 2->1 ucurumunu
+# (~0.28->0.49) yumusatmak icin; yeri hacimle degil OLCULEN skorla belirlenir.
 LADDER = [
     (4, 3, 2),              # 12
     (4, 4, 2),              # 16
@@ -70,11 +72,26 @@ LADDER = [
     (5, 7, 2),              # 35
     (6, 6, 2),              # 36
     (6, 7, 2),              # 42
+    (4, 4, 1),              # KOPRU (bos=1, az renk): bos 2->1 ucurumu icin
 ]
 
 # Guvenlik: bos=1 yalniz kap<=4'te (Bulgu 1). Ihlal edilirse uretim cokerdi.
 assert all(empties >= 2 or cap <= 4 for cap, _c, empties in LADDER), \
     "bos=1 yalniz kap<=4'te olabilir (kap>=5'te rastgele uretim cokuyor)"
+
+# Ogretici tier'lar: ekranin en basi, SABIT sira (skora gore siralamaya
+# GIRMEZLER, yoksa bos=1 ogreticisi tuzak-yogunlugundan zor kumeye kayabilir).
+# Referans oyunun ilk 2 seviyesi ornek alindi: az tup, oyuncuyu korkutmasin.
+#   Tier 1: tek renk, 2 tup — uretici tek rengi karistiramaz, o yuzden ELLE.
+#           Iki varyant: 1+3 ve 2+2 bolunme. Tek amac "dokun-dok, birlesir".
+#   Tier 2: 2 renk, 1 bos, 3 tup — uretici uretir. Ilk gercek siralama.
+TUTORIAL_CAP = 4
+TUTORIAL_COLOR = 0
+TUTORIAL1_BOARDS = [
+    ((TUTORIAL_COLOR,), (TUTORIAL_COLOR,) * 3),      # 1.1: 1 + 3
+    ((TUTORIAL_COLOR,) * 2, (TUTORIAL_COLOR,) * 2),  # 1.2: 2 + 2
+]
+TUTORIAL2_PARAMS = (4, 2, 1)   # (kap, renk, bos)
 
 CANDIDATES_PER_SLOT = 30    # slot basina KABUL edilen (SOLVABLE) aday sayisi
 MAX_ATTEMPTS_FACTOR = 20    # sonsuz donguye karsi: en fazla 30*20 deneme
@@ -179,99 +196,117 @@ def make_scorer(all_cands):
     return score, bounds
 
 
-def choose_median(accepted, score_fn):
-    """Adaylari SKORA gore sirala, medyan (alt-orta) temsilciyi sec."""
-    ordered = sorted(accepted, key=lambda c: score_fn(c)["total"])
-    return ordered[len(ordered) // 2]
+def choose_two(accepted, key_fn):
+    """Adaylari key_fn'e gore sirala, ORTANIN HEMEN USTUNDEKI 2 temsilciyi
+    dondur (n=30 icin ordered[15], ordered[16]). Tam merdiven ortasi (14,15)
+    yerine bir kademe zora yaslanir — sinifin tipik-ama-biraz-zor tarafini
+    temsil eder (random katilmaz). Donen [X.1, X.2]: X.1 hafifce kolay (dusuk
+    key), X.2 hafifce zor."""
+    ordered = sorted(accepted, key=key_fn)
+    n = len(ordered)
+    if n == 0:
+        raise ValueError("bos aday listesi: temsilci secilemez")
+    if n == 1:
+        return [ordered[0], ordered[0]]
+    lo = min(n // 2, n - 2)   # n=30 -> 15; kucuk n'de listeyi tasmayi engeller
+    return [ordered[lo], ordered[lo + 1]]
 
 
-def dist(values):
-    """(min, medyan, maks) — dagilimi ozetler."""
-    return (min(values), statistics.median(values), max(values))
+def metrics_for(board, cap):
+    """Elle kurulan (ogretici) bir tahtanin ham metriklerini hesaplar ve ayni
+    zamanda cozulebilirligini DOGRULAR (cozulemez/butce asilirsa hata firlatir)."""
+    verdict, states, sol_count, _first = cc.solve(board, cap)
+    if verdict != "SOLVABLE":
+        raise ValueError(f"Ogretici tahta cozulemez ({verdict}): {fmt_tubes(board)}")
+    shortest, _s, short_hit = cc.shortest_solution(board, cap)
+    if short_hit or shortest is None:
+        raise ValueError(f"Ogretici enKisa butce asti: {fmt_tubes(board)}")
+    dratio, _r, dead_hit = cc.dead_ratio(board, cap)
+    if dead_hit or dratio is None:
+        raise ValueError(f"Ogretici dead_ratio butce asti: {fmt_tubes(board)}")
+    return {"shortest": shortest, "sol_count": sol_count, "states": states,
+            "dead": dratio, "board": board}
 
 
 def main():
     rng = random.Random(SEED)
 
-    print("Pilot merdiveni basliyor (skor = dort-terim agirlikli: "
+    print("Level merdiveni basliyor (skor = dort-terim agirlikli: "
           f"L{WEIGHTS['L']} C{WEIGHTS['C']} A{WEIGHTS['A']} T{WEIGHTS['T']})\n")
     wall0 = time.perf_counter()
 
-    # 1. GECIS: tum slotlarin adaylarini uret + olc (skor henuz yok).
+    # 1. RANKED slotlar: uret + olc. Bunlar skora gore KENDI aralarinda dizilir.
     slot_results = []
     all_cands = []
     for slot, (cap, colors, empties) in enumerate(LADDER, start=1):
         t0 = time.perf_counter()
         result = build_slot(cap, colors, empties, rng)
         secs = time.perf_counter() - t0
-        slot_results.append((slot, cap, colors, empties, result, secs))
+        slot_results.append((cap, colors, empties, result))
         all_cands.extend(result["accepted"])
-        n = len(result["accepted"])
         print(f"Slot {slot:2d}  kap={cap} renk={colors} bos={empties}  "
-              f"kabul={n}  eleme(coz-mez={result['unsolvable']},"
-              f"butce={result['budget']},bfs={result['short_budget']},"
-              f"olu={result['dead_budget']})  {secs:.1f}s")
+              f"kabul={len(result['accepted'])}  "
+              f"eleme(coz-mez={result['unsolvable']},butce={result['budget']},"
+              f"bfs={result['short_budget']},olu={result['dead_budget']})  {secs:.1f}s")
 
     if not all_cands:
         print("HIC KABUL EDILEN ADAY YOK — cikiliyor.")
         return
 
-    # 2. GECIS: havuz uzerinden skorla, her slotun temsilcisini sec.
+    # 2. Skorla; her ranked slot icin ORTADAKI 2 adayi sec, tier'lari skora sirala.
     score_fn, bounds = make_scorer(all_cands)
-    rows = []
-    for slot, cap, colors, empties, result, secs in slot_results:
-        accepted = result["accepted"]
-        if not accepted:
-            rows.append({"slot": slot, "cap": cap, "colors": colors,
-                         "empties": empties, "empty": True, **result})
+    ranked = []
+    for cap, colors, empties, result in slot_results:
+        acc = result["accepted"]
+        if not acc:
             continue
+        two = choose_two(acc, lambda c: score_fn(c)["total"])
+        tier_score = (score_fn(two[0])["total"] + score_fn(two[1])["total"]) / 2
+        ranked.append({"cap": cap, "colors": colors, "empties": empties,
+                       "boards": two, "score": tier_score})
+    ranked.sort(key=lambda r: r["score"])
 
-        chosen = choose_median(accepted, score_fn)
-        rows.append({
-            "slot": slot, "cap": cap, "colors": colors, "empties": empties,
-            "empty": False,
-            "tubes": colors + empties,
-            "n_accepted": len(accepted),
-            "short_dist": dist([c["shortest"] for c in accepted]),
-            "count_dist": dist([c["sol_count"] for c in accepted]),
-            "dead_dist": dist([c["dead"] for c in accepted]),
-            "chosen": chosen,
-            "cscore": score_fn(chosen),
-            "unsolvable": result["unsolvable"],
-            "budget": result["budget"],
-            "short_budget": result["short_budget"],
-            "dead_budget": result["dead_budget"],
-            "secs": secs,
-        })
+    # 3. Ogretici tier'lar (SABIT, en basa). Tier 1 elle, Tier 2 uretici.
+    tut1 = [metrics_for(b, TUTORIAL_CAP) for b in TUTORIAL1_BOARDS]
+    tut2_res = build_slot(*TUTORIAL2_PARAMS, rng)
+    if not tut2_res["accepted"]:
+        print("UYARI: ogretici 2 icin cozulebilir tahta uretilemedi — cikiliyor.")
+        return
+    tut2 = choose_two(tut2_res["accepted"], lambda c: c["shortest"])
+
+    # 4. Tier listesi: [ogretici1, ogretici2] + skora-gore-sirali ranked.
+    tiers = [(TUTORIAL_CAP, tut1), (TUTORIAL2_PARAMS[0], tut2)]
+    tiers += [(r["cap"], r["boards"]) for r in ranked]
 
     total_secs = time.perf_counter() - wall0
-    write_report(rows, bounds, total_secs)
-    levels_path, n_levels = write_pilot_levels(rows)
+    levels_path, n_levels = write_pilot_levels(tiers)
+    write_report(ranked, tut1, tut2, bounds, total_secs, score_fn)
     print(f"\nBITTI — {total_secs:.1f}s. Rapor: pilot_ladder.md · "
-          f"Oyun onizleme (SKORA gore sirali): {n_levels} level -> {levels_path}")
+          f"{len(tiers)} tier x 2 = {n_levels} tahta -> {levels_path}")
 
 
-def write_pilot_levels(rows):
-    """Secilen temsilcileri oyunun okudugu semaya yazar (SKORA gore artan
-    sirali): Assets/Resources/pilot_levels.json. Boylece onizlemede ok
-    tuslariyla gezerken level 1 = olculen en kolay, level N = en zor —
-    Adim 3'te "olculen sira hissettigimle uyusuyor mu" oynanarak sinanir.
-
-    Sema levels.json ile AYNI ({level, capacity, tubes[]}); zorluk/skor alani
-    YOK (o D'nin sema karari). levels.json'a DOKUNULMAZ. tube metni
-    LevelLibrary.ParseTube ile uyumlu: dipten yukari virgullu, bos tup "".
-    """
-    scored = [r for r in rows if not r["empty"]]
-    scored.sort(key=lambda r: r["cscore"]["total"])
-
+def write_pilot_levels(tiers):
+    """Tier listesini oyunun okudugu semaya yazar: Assets/Resources/
+    pilot_levels.json. Her tier 2 tahta -> label X.1 / X.2 (ekranda "LEVEL
+    1.1" gibi gosterilir). Sema alanlari:
+      level          — sirali int (1..N), LevelLibrary'nin indeksi
+      label          — "tier.varyant" ("1.1", "1.2", "2.1", ...)
+      capacity       — tup kapasitesi
+      tubes[]        — dipten yukari virgullu; bos tup "" (ParseTube uyumlu)
+      shortest       — enKisa cozum uzunlugu (ham metrik; C# okur, hesaplamaz)
+      solutionCount  — cozum sayisi (ham metrik)
+    Agirliga bagli SKOR yazilmaz: oyun testiyle degisecek (mentor karari)."""
     levels = []
-    for r in scored:
-        board = r["chosen"]["board"]
-        levels.append({
-            "level": len(levels) + 1,
-            "capacity": r["cap"],
-            "tubes": [",".join(str(c) for c in tube) for tube in board],
-        })
+    for t_idx, (cap, boards) in enumerate(tiers, start=1):
+        for v_idx, c in enumerate(boards, start=1):
+            levels.append({
+                "level": len(levels) + 1,
+                "label": f"{t_idx}.{v_idx}",
+                "capacity": cap,
+                "tubes": [",".join(str(x) for x in tube) for tube in c["board"]],
+                "shortest": c["shortest"],
+                "solutionCount": c["sol_count"],
+            })
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     out_path = os.path.normpath(os.path.join(
@@ -289,104 +324,89 @@ def fmt_tubes(board):
     return " ".join(parts)
 
 
-def write_report(rows, bounds, total_secs):
-    """pilot_ladder.md: (1) ham dagilim tablosu [merdiven sirasi],
-    (2) secilen temsilci + skor tablosu [merdiven sirasi],
-    (3) skora gore sirali ozet, (4) secilen tahtalar."""
+def write_report(ranked, tut1, tut2, bounds, total_secs, score_fn):
+    """pilot_ladder.md: (1) tier ozeti (ogretici + skora sirali ranked, her
+    tier 2 tahta), (2) kopru (4,4,1) kontrolu, (3) secilen 30 tahta (label ile)."""
     lines = []
-    lines.append("# TubeSort — Pilot Merdiveni Raporu (C asamasi)")
+    lines.append("# TubeSort — Level Merdiveni Raporu")
     lines.append("")
-    lines.append(f"Seed `{SEED}` · slot basina {CANDIDATES_PER_SLOT} kabul edilen aday · "
-                 f"toplam {total_secs:.1f}s")
+    lines.append(f"Seed `{SEED}` · slot basina {CANDIDATES_PER_SLOT} aday · "
+                 f"tier basina orta-ust 2 aday (X.1, X.2) · toplam {total_secs:.1f}s")
     lines.append("")
     lines.append("Skor **dort-terim agirlikli toplam** "
                  f"(L={WEIGHTS['L']} C={WEIGHTS['C']} A={WEIGHTS['A']} T={WEIGHTS['T']}); "
-                 "her terim tum havuz uzerinde [0,1]'e min-max normalize. "
+                 "her terim ranked havuz uzerinde [0,1]'e min-max normalize. "
                  "L=enKisa, C=log(durum), A=-log(cozum), T=olu-durum orani. "
-                 "Slot temsilcisi = skora gore **medyan** aday. Ham sinyaller de "
-                 "verilir (agirlik/egri Adim 3'te veriyle sekillenir).")
+                 "Ogretici tier'lar (1-2) SABIT, skora girmez.")
     lines.append("")
-    lines.append("Normalizasyon sinirlari (havuz min/maks): "
+    lines.append("Normalizasyon sinirlari (ranked havuz min/maks): "
                  f"enKisa `{bounds['L'][0]}..{bounds['L'][1]}`, "
                  f"log(durum) `{bounds['C'][0]:.2f}..{bounds['C'][1]:.2f}`, "
                  f"-log(cozum) `{bounds['A'][0]:.2f}..{bounds['A'][1]:.2f}`, "
                  f"olu `{bounds['T'][0]:.3f}..{bounds['T'][1]:.3f}`.")
     lines.append("")
 
-    # (1) Ham dagilim
-    lines.append("## 1. Ham dagilim (merdiven sirasi)")
+    def tier_row(tier_no, tip, cap, colors, empties, boards, score=None):
+        b1, b2 = boards
+        sc = f"{score:.3f}" if score is not None else "—"
+        return (f"| {tier_no} | {tip} | {cap} | {colors} | {empties} "
+                f"| {b1['shortest']},{b2['shortest']} "
+                f"| {b1['sol_count']},{b2['sol_count']} "
+                f"| {b1['dead']:.2f},{b2['dead']:.2f} | {sc} |")
+
+    # (1) Tier ozeti (ekran sirasi)
+    lines.append("## 1. Tier ozeti (ekran sirasi)")
     lines.append("")
-    lines.append("`[min/med/maks]` = 30 adayin dagilimi. `olu` = dead_ratio "
-                 "(tuzak yogunlugu). n = kabul edilen aday sayisi.")
+    lines.append("Ogretici 1-2 sabit; 3+ skora gore artan. enKisa/cozum/olu = "
+                 "iki tahtanin (X.1, X.2) degerleri. skor~ = iki tahtanin ortalamasi.")
     lines.append("")
-    lines.append("| # | kap | renk | bos | tup | n | enKisa[min/med/maks] | "
-                 "cozum[min/med/maks] | olu[min/med/maks] | eleme(cm/but/bfs/olu) |")
-    lines.append("|--:|--:|--:|--:|--:|--:|:--|:--|:--|:--|")
-    for r in rows:
-        if r["empty"]:
-            lines.append(f"| {r['slot']} | {r['cap']} | {r['colors']} | {r['empties']} "
-                         f"| — | 0 | KABUL YOK | — | — | "
-                         f"{r['unsolvable']}/{r['budget']}/{r['short_budget']}/{r['dead_budget']} |")
-            continue
-        smin, smed, smax = r["short_dist"]
-        cmin, cmed, cmax = r["count_dist"]
-        dmin, dmed, dmax = r["dead_dist"]
-        lines.append(
-            f"| {r['slot']} | {r['cap']} | {r['colors']} | {r['empties']} | {r['tubes']} "
-            f"| {r['n_accepted']} | {smin}/{smed}/{smax} | {cmin}/{cmed}/{cmax} "
-            f"| {dmin:.2f}/{dmed:.2f}/{dmax:.2f} "
-            f"| {r['unsolvable']}/{r['budget']}/{r['short_budget']}/{r['dead_budget']} |")
+    lines.append("| tier | tip | kap | renk | bos | enKisa(1,2) | cozum(1,2) | olu(1,2) | skor~ |")
+    lines.append("|--:|:--|--:|--:|--:|:--|:--|:--|--:|")
+    lines.append(tier_row(1, "ogretici", TUTORIAL_CAP, 1, 0, tut1))
+    lines.append(tier_row(2, "ogretici", *TUTORIAL2_PARAMS, tut2))
+    for i, r in enumerate(ranked, start=3):
+        lines.append(tier_row(i, "ranked", r["cap"], r["colors"], r["empties"],
+                              r["boards"], r["score"]))
     lines.append("")
 
-    # (2) Secilen temsilci + skor bilesenleri
-    lines.append("## 2. Secilen temsilci + skor (merdiven sirasi)")
+    # (2) Kopru (4,4,1) kontrolu
+    lines.append("## 2. Kopru (4,4,1) kontrolu")
     lines.append("")
-    lines.append("Ham = secilen adayin ham metrikleri. L/C/A/T = normalize terimler "
-                 "[0,1]. skor = agirlikli toplam.")
-    lines.append("")
-    lines.append("| # | tup | enKisa | cozum | durum | olu | L | C | A | T | **skor** |")
-    lines.append("|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
-    for r in rows:
-        if r["empty"]:
-            continue
-        ch = r["chosen"]
-        s = r["cscore"]
-        lines.append(
-            f"| {r['slot']} | {r['tubes']} | {ch['shortest']} | {ch['sol_count']} "
-            f"| {ch['states']} | {ch['dead']:.3f} "
-            f"| {s['L']:.2f} | {s['C']:.2f} | {s['A']:.2f} | {s['T']:.2f} "
-            f"| **{s['total']:.3f}** |")
-    lines.append("")
-
-    # (3) Skora gore sirali (Adim 3'un para gorunumu)
-    lines.append("## 3. Skora gore sirali (olculen zorluk artan)")
-    lines.append("")
-    lines.append("Merdiven sirasi ile bu sira UYUSUYOR mu? Uyusmuyorsa hangi slot "
-                 "nereye kaydi — Adim 3'te hissedilen zorlukla kiyaslanacak.")
-    lines.append("")
-    lines.append("| sira | slot | kap | renk | bos | enKisa | cozum | olu | **skor** |")
-    lines.append("|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
-    scored = sorted((r for r in rows if not r["empty"]),
-                    key=lambda r: r["cscore"]["total"])
-    for i, r in enumerate(scored, start=1):
-        ch = r["chosen"]
-        s = r["cscore"]
-        lines.append(
-            f"| {i} | {r['slot']} | {r['cap']} | {r['colors']} | {r['empties']} "
-            f"| {ch['shortest']} | {ch['sol_count']} | {ch['dead']:.3f} "
-            f"| **{s['total']:.3f}** |")
+    bridge_idx = next((i for i, r in enumerate(ranked)
+                       if (r["cap"], r["colors"], r["empties"]) == (4, 4, 1)), None)
+    if bridge_idx is None:
+        lines.append("Kopru (4,4,1) ranked icinde bulunamadi (?).")
+    else:
+        tier_no = bridge_idx + 3
+        bscore = ranked[bridge_idx]["score"]
+        lines.append(f"Kopru tier **{tier_no}** olarak yerlesti, skor **{bscore:.3f}**.")
+        if bridge_idx > 0:
+            prev_s = ranked[bridge_idx - 1]["score"]
+            lines.append(f"- Onceki tier skoru: {prev_s:.3f}  (fark {bscore - prev_s:+.3f})")
+        if bridge_idx + 1 < len(ranked):
+            next_s = ranked[bridge_idx + 1]["score"]
+            lines.append(f"- Sonraki tier skoru: {next_s:.3f}  (fark {next_s - bscore:+.3f})")
+        lines.append("")
+        lines.append("Beklenti: kopru bos=2 kumesi ile bos=1 kumesi ARASINA dusmeli; "
+                     "iki fark da makul olmali (tek buyuk ucurum kalmamali).")
     lines.append("")
 
-    # (4) Secilen tahtalar (skora gore sirali)
-    lines.append("## 4. Secilen (medyan) tahtalar — skora gore sirali")
+    # (3) Secilen tahtalar (label ile)
+    lines.append("## 3. Secilen tahtalar (label)")
     lines.append("")
-    for i, r in enumerate(scored, start=1):
-        ch = r["chosen"]
-        s = r["cscore"]
-        lines.append(f"- **{i}. (slot {r['slot']}, kap={r['cap']} renk={r['colors']} "
-                     f"bos={r['empties']})** skor={s['total']:.3f} "
-                     f"enKisa={ch['shortest']} cozum={ch['sol_count']} olu={ch['dead']:.3f}: "
-                     f"`{fmt_tubes(ch['board'])}`")
+
+    def board_lines(tier_no, cap, colors, empties, boards):
+        out = []
+        for v, c in enumerate(boards, start=1):
+            out.append(f"- **{tier_no}.{v}** (kap={cap} renk={colors} bos={empties}) "
+                       f"enKisa={c['shortest']} cozum={c['sol_count']} "
+                       f"olu={c['dead']:.3f}: `{fmt_tubes(c['board'])}`")
+        return out
+
+    lines += board_lines(1, TUTORIAL_CAP, 1, 0, tut1)
+    lines += board_lines(2, *TUTORIAL2_PARAMS, tut2)
+    for i, r in enumerate(ranked, start=3):
+        lines += board_lines(i, r["cap"], r["colors"], r["empties"], r["boards"])
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     out_path = os.path.join(script_dir, "pilot_ladder.md")

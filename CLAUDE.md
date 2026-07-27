@@ -192,19 +192,37 @@ Yol haritası — A, B, C tamam, sıra D'de:
      ve dar tahtalar 3-12× az çözümle doğru şekilde daha zor sıralanıyor.
      Yan bulgu: eşit hacimde sığ+çok-renk, derin+az-renkten daha dar
      (kapasitenin hacim ötesi etkisi — D'de mentöre).
-- [ ] **D. 300 level üretimi** + Unity tarafı. Pilotun açtığı işler:
-  - **Ters-üretim (üretici):** çözülmüş tahtadan rastgele ters-dökmelerle
-    karıştırıp garantili-çözülebilir tahta üret → boş=1 çöküşünü çözer,
-    her kapasitede kullanılabilir. Yeni fonksiyon + çapraz doğrulama.
-  - **Skora göre sıralama:** 300 level slot değil skor (enKısa, 1/çözüm)
-    ile artan sıraya dizilir; parametre kovaları hacmi monoton kapsar.
-  - **Ağırlık/eğri:** mentör kararı — pilot ham sinyalleri sunar; skalar
-    skor gerekiyorsa burada veriyle şekillenir.
-  - **Şema + Unity:** skoru/enKısayı `levels.json`'a taşı; `LevelLibraryTests`
-    güncelle, ekran kontrolü (13+ tüp sığıyor mu), `ColorPalette` (12 renk
-    ayırt edilebilir mi).
+- [~] **D. Level üretimi + Unity tarafı.** *(27 Tem 2026'da mentör + kullanıcı
+  kararlarıyla revize edildi; `feature/tutorial-levels` branch'inde sürüyor.)*
+  Pilotun açtığı işlerin güncel durumu:
+  - **Ters-üretim: İPTAL.** Gereksiz görüldü; mevcut rastgele generate-and-test
+    onaylandı. Karar: kap≤4'te boş=1 mümkün, **kap≥5'te her zaman 2 boş**
+    (piyasa oyunlarıyla uyumlu: kap4 + 2 boş standart). boş=1 çöküşü artık
+    "kabul et ve 2 boşa geç" ile yönetiliyor, ters-üretime gerek kalmadı.
+  - **Her tier'dan 2 tahta** (mentör): ekranda `level 1.1`, `1.2`, `2.1`…
+    `pilot_ladder.py` → `choose_two` slot başına skora göre **orta-üst 2 adayı**
+    (ordered[15], ordered[16]) seçer (30 aday, tek medyan yok).
+  - **Öğretici + köprü leveller** (kullanıcı, referans oyundan): başa 2 öğretici
+    tier (T1: 1 renk / 2 tüp, **elle**; T2: 2 renk / 1 boş / 3 tüp, üretici) —
+    SABİT, skora girmez (yoksa boş=1 öğreticisi zor kümeye kayardı). En büyük
+    skor uçurumuna (ölçülen 0.277→0.486, boş 2→1 geçişi) köprü `(4,4,1)`.
+    Sonuç: **15 tier × 2 = 30 tahta**.
+  - **Skora göre sıralama:** ranked tier'lar (12 mevcut + köprü) skora göre
+    artan; öğreticiler başa sabit. `pilot_levels.json`'a yazılır.
+  - **Ağırlık/eğri: oyuncu testiyle.** Mentör soyut karar vermeyecek; insanlar
+    oynayacak, feedback `WEIGHTS`'i (0.55T/0.20A/0.15L/0.10C) ayarlayacak. JSON'a
+    skor DEĞİL **ham metrik** (enKısa, çözümSayısı) yazılır — ağırlık değişince
+    yeniden sıralanır.
+  - **Şema + Unity:** `pilot_levels.json` şeması genişledi: `label`, `shortest`,
+    `solutionCount`. C# tarafı (`LevelLibrary` DTO'ya `label`, `BoardView`
+    "LEVEL 1.1" başlığı, `LevelLibraryTests` 30 tahta) — sürüyor. Ekran (13+
+    tüp sığıyor mu) ve `ColorPalette` (renkler ayırt edilebilir mi) kontrolü.
+  - **Mevcut leveller korunmuyor** (kullanıcı): üretim serbestçe yeniden
+    koşuluyor, RNG kayması sorun değil.
+  - **300 hedefi:** önce 30 tahta insan testine gidecek; ağırlık kalibre olunca
+    kovalar genişletilip ölçeklenecek.
   - **Maliyet notu:** solve() uzayı tükettiği için kap6 slotları pahalı
-    (~70 sn/30 aday); 300 level üretimi dakikalar sürer, kabul edilebilir.
+    (~70 sn/30 aday); üretim dakikalar sürer — build-time, telefonu etkilemez.
 
 Notlar:
 
