@@ -9,26 +9,24 @@ Iki katman (karistirilmasin):
   - Olculen skor: ince siralama + slot ici aday secimi.
 Pilotun isi bu ikisinin uyustugunu SINAMAK, varsaymak degil.
 
-Skor (mentor karari, 24 Tem 2026): AGIRLIKLI TOPLAM. Her terim tum aday havuzu
-uzerinde [0,1]'e min-max normalize edilir, boylece agirliklar dogrudan
-"zorlugun yuzde kaci" diye okunur.
-  T (0.55) = olu-durum orani (dead_ratio)      -> tuzak yogunlugu (cok=zor)
-  A (0.20) = -log(cozum sayisi)                -> affetmezlik (az cozum=zor)
-  L (0.15) = enKisa cozum uzunlugu             -> plan uzunlugu (buyuk=zor)
-  C (0.10) = log(durum sayisi)                 -> arama karmasikligi (buyuk=zor)
-Agirliklar oyun testiyle kalibre edildi (24 Tem, 12 pilot leveli oynandi):
-  - T baskın: tuzak = kullanicinin yeniden baslama/geri alma sayisi; insan
-    zorlugunun asil kaynagi. Playtest: yuksek-T level (11) dusuk-T'den (12)
-    ACIK ARA zor hissettirdi, 12'nin daha az cozumu (dusuk A) olmasina ragmen.
-  - A ikinci ama "kurtarilabilir": T~0 iken tek cozum bile cok hamleyle sabirla
-    bulunur; o yuzden T'den kritik degil.
-  - L~C boyut olcer (korele, neredeyse ayni); dusuk agirlik yalniz kolay
-    (T~0) levellerin kendi arasi yumusak siralamasi icin. Playtest: en buyuk
-    tahta (31 hamle) yalniz 3 hissettirdi -> L doyuyor.
-Yapisal parametreler (kap/renk/bos) BILEREK formulde YOK: metrikleri ureten
-girdiler, dogrudan konursa hacim cift sayilir. Ham sinyaller (enKisa/cozum/
-durum/olu) yine loglanir. NOT: yalniz 2 affetmez orneklem (11,12) var; T/A
-dengesi D'nin ters-uretimi cok affetmez level verince kesinlesecek.
+Skor: AGIRLIKLI TOPLAM. Her terim tum aday havuzu uzerinde [0,1]'e min-max
+normalize edilir, boylece agirliklar dogrudan "zorlugun yuzde kaci" diye okunur.
+  L (0.45) = enKisa cozum uzunlugu   -> plan uzunlugu ~= tahta HACMI (buyuk=zor)
+  C (0.25) = log(durum sayisi)       -> arama karmasikligi (buyuk=zor)
+  A (0.15) = -log(cozum sayisi)      -> affetmezlik (az cozum=zor)
+  T (0.15) = olu-durum orani         -> tuzak yogunlugu (cok=zor)
+Agirlik revizyonu (mentor karari, 27 Tem 2026): ESKI surumde T baskindi (0.55);
+mentor bunu begenmedi. Sikayet: leveller ~12'ye kadar tup/renk artiyor, sonra
+BIRDEN dusuyordu -- cunku bos=1 tahtalar KUCUK ama cok tuzakli (yuksek T) +
+az cozumlu (yuksek A); T/A agir oldugu icin zorluk siralamasinda SONA firliyordu.
+Cozum: boyutu (L,C) one cikar, tuzagi (T)/affetmezligi (A) geri cek -> siralama
+tahta hacmini izler, tup/renk monoton artar; bos=1 leveller kucuk boyutlarina
+gore yerine oturur (artik "en zor" degil).
+Yapisal parametreler (kap/renk/bos) formulde DOGRUDAN yok: L zaten hacmi temsil
+eder, kap/renk'i ayrica koymak hacmi cift sayardi.
+UYARI: L hacmi (renk*kap) izler ama tup=renk+bos ve kapasite degisken; boyuta
+gore siralamak tup VE rengi ayni anda birebir monoton yapmayabilir. Buyuk dususu
+duzeltir; kucuk dalgalanma kalirsa yapisal siralama (dogrudan tup/renk) gundeme gelir.
 
 Slot ici secim: 30 aday SKORA gore siralanir, ORTANIN HEMEN USTUNDEKI 2 aday
 temsilci alinir (ordered[15], ordered[16]; her tier ekranda X.1/X.2 diye 2
@@ -84,22 +82,24 @@ assert all(empties >= 2 or cap <= 4 for cap, _c, empties in LADDER), \
 # Referans oyunun ilk 2 seviyesi ornek alindi: az tup, oyuncuyu korkutmasin.
 #   Tier 1: tek renk, 2 tup — uretici tek rengi karistiramaz, o yuzden ELLE.
 #           Iki varyant: 1+3 ve 2+2 bolunme. Tek amac "dokun-dok, birlesir".
-#   Tier 2: 2 renk, 1 bos, 3 tup — uretici uretir. Ilk gercek siralama.
+#   Tier 2: 2 renk, 2 bos, 4 tup — uretici uretir. 2 bos tup: cikmaz neredeyse
+#           imkansiz (ogretici cikmaza dusmesin). (1 bos'ta 2.1/2.2 tuzakliydi.)
 TUTORIAL_CAP = 4
 TUTORIAL_COLOR = 0
 TUTORIAL1_BOARDS = [
     ((TUTORIAL_COLOR,), (TUTORIAL_COLOR,) * 3),      # 1.1: 1 + 3
     ((TUTORIAL_COLOR,) * 2, (TUTORIAL_COLOR,) * 2),  # 1.2: 2 + 2
 ]
-TUTORIAL2_PARAMS = (4, 2, 1)   # (kap, renk, bos)
+TUTORIAL2_PARAMS = (4, 2, 2)   # (kap, renk, bos) — 2 bos: cikmaz-guvenli ogretici
 
 CANDIDATES_PER_SLOT = 30    # slot basina KABUL edilen (SOLVABLE) aday sayisi
 MAX_ATTEMPTS_FACTOR = 20    # sonsuz donguye karsi: en fazla 30*20 deneme
 SEED = 42
 
-# Dort-terim skor agirliklari (toplam 1.0). Oyun testiyle kalibre edildi
-# (24 Tem): T baskin, sonra A, sonra L~C. Gerekce icin modul docstring'ine bak.
-WEIGHTS = {"T": 0.55, "A": 0.20, "L": 0.15, "C": 0.10}
+# Dort-terim skor agirliklari (toplam 1.0). BOYUT baskin (mentor karari, 27 Tem
+# 2026): L+C hakim, T/A geri cekildi ki tup/renk monoton artsin. Eskiden T=0.55
+# baskindi; mentor begenmedi (bos=1 kucuk-tuzakli leveller sona firliyordu).
+WEIGHTS = {"L": 0.45, "C": 0.25, "A": 0.15, "T": 0.15}
 
 
 def build_slot(cap, colors, empties, rng):
