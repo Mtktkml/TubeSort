@@ -46,9 +46,19 @@ def main():
         tubes = [",".join(str(c) for c in tube) for tube in board]
         levels.append({"level": index, "capacity": n, "tubes": tubes})
 
-        print(f"Level {index}  ({n} renk x {n} kapasite + {EMPTIES} bos)  "
-              f"deneme={attempts}  cozumSayisi={sol_count}  ilkYol={sol_len} hamle  "
-              f"durum={states}  dogrulama={ms:.1f} ms")
+        # Metrik makbuzu: zorluk siralamasinin girdileri — uretim parametreleri
+        # (kapasite, renk, bos) + olculenler (cozum sayisi, en kisa cozum,
+        # durum uzayi). En kisa BFS ile ayrica olculur (solve'un ilk yolu
+        # rastlantidir, metrik degildir). Simdilik yalniz log; levels.json
+        # semasina tasinmasi pilot merdiven (C asamasi) karari.
+        t0 = time.perf_counter()
+        shortest, _, short_budget = cc.shortest_solution(board, n)
+        short_ms = (time.perf_counter() - t0) * 1000
+        shortest_text = "bilinmiyor(butce)" if short_budget else str(shortest)
+
+        print(f"Level {index}  kapasite={n} renk={n} bos={EMPTIES}  "
+              f"cozumSayisi={sol_count}  enKisa={shortest_text}  ilkYol={sol_len}  "
+              f"durum={states}  deneme={attempts}  sure={ms:.1f}+{short_ms:.1f} ms")
         for t, tube in enumerate(board):
             print(f"    Tube {t}: [{tubes[t]}]")
 

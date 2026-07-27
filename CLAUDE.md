@@ -156,34 +156,86 @@ en iyileri seçilecek, zorluğu artan sırayla dosyaya yazılacak. Kapasite
 parametreler. Eski plan ("5 leveli EMPTIES=1 ile yeniden üret") bu hattın
 içine katlandı.
 
-Yol haritası — A tamam, sıra B'de:
+Yol haritası — A, B, C tamam, sıra D'de:
 
 - [x] **A. Solver sayım semantiği:** arama ilk çözümde durmaz, uzayı
   tüketir, çözüme düşen kenarları sayar (`SolutionCount`, `CountIsExact`).
-  C# + Python; EditMode 21/21; çapraz doğrulama 8/8 — artık karar +
-  durum + çözüm sayısı üçlüsü birebir kıyaslanıyor. Ayrıntı:
-  `Docs/SOLVER.md`.
-- [ ] **B. En kısa çözüm uzunluğu:** kanonik graf üzerinde BFS (Python,
-  build-time) + level başına metrik makbuzu (kapasite, renk, boş, çözüm
-  sayısı, en kısa, durum). Sağlama: BFS durum sayısı == DFS durum sayısı.
-- [ ] **C. ~15 levellik pilot merdiven** + zorluk skoru ilk sürüm →
-  mentör onayı (skor ağırlıkları ve eğri şekli açık soru).
-- [ ] **D. 300 level üretimi** + Unity tarafı: `LevelLibraryTests`
-  güncelleme, ekran kontrolü (13+ tüp sığıyor mu), `ColorPalette`
-  (12 renk ayırt edilebilir mi).
+  C# + Python; çapraz doğrulama 8/8 — karar + durum + çözüm sayısı
+  üçlüsü birebir kıyaslanıyor. Ayrıntı: `Docs/SOLVER.md`.
+- [x] **B. En kısa çözüm uzunluğu:** `crosscheck.py`'de `shortest_solution`
+  — kanonik graf üzerinde BFS, garantili en kısa (DFS ilk yolu metrik
+  değildir: level 5'te ilk yol 59, en kısa 41). Bilinçli olarak yalnız
+  Python'da: tek tüketicisi build-time; C# ileride sayıyı levels.json'dan
+  okur, algoritmayı koşmaz. Makbuz satırı `generate_levels.py`'de
+  (kapasite/renk/boş + çözümSayısı/enKısa/ilkYol/durum) — şimdilik log,
+  şema genişlemesi C'nin kararı.
+- [x] **C. Pilot merdiven + zorluk skoru ilk sürüm:**
+  `Tools/SolverBenchmark/pilot_ladder.py` (ayrı script; `generate_levels.py`
+  D'ye kadar yerinde). Skor **leksikografik** (mentör kararı, 24 Tem):
+  birincil enKısa, eşitlik bozucu `1/çözümSayısı`; **ağırlık yok** —
+  ham sinyaller (enKısa/çözüm/durum) her level için loglanır, ağırlık
+  kararı veriyle mentöre bırakıldı. Slot temsilcisi = 30 adayın **medyanı**,
+  dağılım (min/med/maks) raporlanır. Çıktı: `pilot_ladder.md` (levels.json'a
+  dokunmaz). 12 slotluk merdiven, seçilen enKısa **monoton** (8→33, düşüş
+  yok). Üç bulgu (aşağıda) D'yi şekillendiriyor. Skor doğrulandı; açık
+  kalan tek şey mentörün ağırlık/eğri kararı (pilot ona veriyi sunar).
+
+  **Pilot bulguları (24 Tem, D'nin girdisi):**
+  1. **boş=1 saf rastgele üretimde kap≥5'te çöküyor:** kabul oranı ~%0
+     (kap6 renk7 boş1: 600 denemede 0 kabul). Teoriyle uyumlu (Ito et al.:
+     ~3 boş / 4 dolu). **Karar:** boş=1 yalnız kap≤4'te (kabul ~%15-24).
+     Garantili boş=1 üretimi (**ters-üretim**) D'ye bırakıldı.
+  2. **enKısa ≈ 0.8·(renk×kap) = tahta hacmi**, slot sırasını değil hacmi
+     takip eder. **Karar:** merdiven hacme göre monoton dizilir; son 300
+     level **slot sırasına değil ölçülen skora göre** sıralanacak.
+  3. **`1/çözümSayısı` eşitlik bozucu doğrulandı:** eşit-uzunlukta boş=1
+     ve dar tahtalar 3-12× az çözümle doğru şekilde daha zor sıralanıyor.
+     Yan bulgu: eşit hacimde sığ+çok-renk, derin+az-renkten daha dar
+     (kapasitenin hacim ötesi etkisi — D'de mentöre).
+- [~] **D. Level üretimi + Unity tarafı.** *(27 Tem 2026'da mentör + kullanıcı
+  kararlarıyla revize edildi; `feature/tutorial-levels` branch'inde sürüyor.)*
+  Pilotun açtığı işlerin güncel durumu:
+  - **Ters-üretim: İPTAL.** Gereksiz görüldü; mevcut rastgele generate-and-test
+    onaylandı. Karar: kap≤4'te boş=1 mümkün, **kap≥5'te her zaman 2 boş**
+    (piyasa oyunlarıyla uyumlu: kap4 + 2 boş standart). boş=1 çöküşü artık
+    "kabul et ve 2 boşa geç" ile yönetiliyor, ters-üretime gerek kalmadı.
+  - **Her tier'dan 2 tahta** (mentör): ekranda `level 1.1`, `1.2`, `2.1`…
+    `pilot_ladder.py` → `choose_two` slot başına skora göre **orta-üst 2 adayı**
+    (ordered[15], ordered[16]) seçer (30 aday, tek medyan yok).
+  - **Öğretici + köprü leveller** (kullanıcı, referans oyundan): başa 2 öğretici
+    tier (T1: 1 renk / 2 tüp, **elle**; T2: 2 renk / 1 boş / 3 tüp, üretici) —
+    SABİT, skora girmez (yoksa boş=1 öğreticisi zor kümeye kayardı). En büyük
+    skor uçurumuna (ölçülen 0.277→0.486, boş 2→1 geçişi) köprü `(4,4,1)`.
+    Sonuç: **15 tier × 2 = 30 tahta**.
+  - **Skora göre sıralama:** ranked tier'lar (12 mevcut + köprü) skora göre
+    artan; öğreticiler başa sabit. `pilot_levels.json`'a yazılır.
+  - **Ağırlık/eğri: oyuncu testiyle.** Mentör soyut karar vermeyecek; insanlar
+    oynayacak, feedback `WEIGHTS`'i (0.55T/0.20A/0.15L/0.10C) ayarlayacak. JSON'a
+    skor DEĞİL **ham metrik** (enKısa, çözümSayısı) yazılır — ağırlık değişince
+    yeniden sıralanır.
+  - **Şema + Unity:** `pilot_levels.json` şeması genişledi: `label`, `shortest`,
+    `solutionCount`. C# tarafı (`LevelLibrary` DTO'ya `label`, `BoardView`
+    "LEVEL 1.1" başlığı, `LevelLibraryTests` 30 tahta) — sürüyor. Ekran (13+
+    tüp sığıyor mu) ve `ColorPalette` (renkler ayırt edilebilir mi) kontrolü.
+  - **Mevcut leveller korunmuyor** (kullanıcı): üretim serbestçe yeniden
+    koşuluyor, RNG kayması sorun değil.
+  - **300 hedefi:** önce 30 tahta insan testine gidecek; ağırlık kalibre olunca
+    kovalar genişletilip ölçeklenecek.
+  - **Maliyet notu:** solve() uzayı tükettiği için kap6 slotları pahalı
+    (~70 sn/30 aday); üretim dakikalar sürer — build-time, telefonu etkilemez.
 
 Notlar:
 
-- `BoardView.LogSolvability` yeni formatta ("N çözüm, örnek yol M hamle");
-  BoardView.cs değişikliği henüz Unity'de derlenmedi — ilk açılışta
-  doğrulanmalı, PlayMode testleri koşulmalı.
 - Benchmark Tablo 2 (2 boş çözülemez avı) yeni semantikte fiilen işlevsiz:
   avda elenen her çözülebilir aday tam tüketim maliyeti ödüyor, 45 sn'ye
   3-23 deneme sığıyor. Gerekirse solver'a "yalnız varlık" hızlı modu
   eklenebilir — mentörle konuşulacak.
 
-Bu iş `feature/deadlock-detection` branch'inde sürüyor (master'a merge
-edilmedi; mentörle süreç devam ediyor).
+Durum (23 Tem sonu): master'da her şey birleşik — solver + sayım, undo
+özelliği (`feature/undo` merge edildi), dökme donması düzeltmesi
+(`TiltedEdgeLevel`, `fix/pour-freeze` merge edildi). Çalışma
+`feature/level-metrics` branch'inde sürüyor; cihazda (APK) doğrulandı,
+telefonda fps gözlemi "Bilinen eksikler"de.
 
 ### Bilinen eksikler
 

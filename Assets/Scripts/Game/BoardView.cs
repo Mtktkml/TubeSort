@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using TMPro;
 using TubeSort.Core;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -33,6 +34,13 @@ namespace TubeSort.Game
                  "elle kurulmuş test tahtası kullanılır.")]
         [SerializeField] private int levelNumber;
 
+        [Header("Pilot Önizleme (geçici)")]
+        [Tooltip("C aşamasının pilot merdivenini (pilot_levels.json) yükle ve " +
+                 "ok tuşlarıyla (← →) gez. levelNumber ve test tahtasının önüne " +
+                 "geçer, LoadBoard'ın arkasında kalır. D'nin level dosyası " +
+                 "(levels.json) bundan etkilenmez.")]
+        [SerializeField] private bool pilotPreview;
+
         [Header("Teşhis")]
         [Tooltip("Çözülemez test tahtasını kur: solver'ın 'ÇÖZÜLEMEZ' kararını " +
                  "ve oyun içi çıkmazı elle denemek için. Yalnız levelNumber = 0 " +
@@ -49,10 +57,23 @@ namespace TubeSort.Game
         private readonly List<TubeView> tubeViews = new List<TubeView>();
         private StreamView streamView;
         private UndoButtonView undoButton;
+        private PilotNextButtonView pilotNextButton;
+        private ButtonView prevButton;      // önceki level (nav)
+        private ButtonView restartButton;   // leveli baştan
+        private ButtonView addTubeButton;   // +boş tüp
+        private TextMeshPro deadlockBannerTop;    // çıkmaz uyarısı üst parça (gizli başlar)
+        private TextMeshPro deadlockBannerBottom; // çıkmaz uyarısı alt parça
+        private TextMeshPro levelTitle;     // üst-orta "LEVEL x.y"
+        private Board pristineBoard;         // mevcut levelin bozulmamış kopyası (restart için)
 
         private int selectedIndex = -1;
         private bool isAnimating;
         private Camera mainCamera;
+
+        /// <summary>pilot_levels.json Resources kaynak adı (uzantısız).</summary>
+        private const string PilotResource = "pilot_levels";
+        private int pilotIndex = 1;   // 1-tabanlı; hangi pilot leveli gösteriliyor
+        private int pilotCount;       // pilot dosyasındaki level sayısı (gezinme sınırı)
 
         /// <summary>
         /// Start kurulumu tamamlandı mı? LoadBoard bununla karar verir:
@@ -91,20 +112,37 @@ namespace TubeSort.Game
                 return;
             }
 
-            // Tahta önceliği: dışarıdan verilen (LoadBoard) > seçili level >
-            // elle kurulmuş test tahtası (teşhis anahtarına göre çözülebilir
-            // ya da çözülemez olan). Level yüklenemezse test tahtasına düşer.
+            // Tahta önceliği: dışarıdan verilen (LoadBoard) > pilot önizleme >
+            // seçili level > elle kurulmuş test tahtası (teşhis anahtarına göre
+            // çözülebilir ya da çözülemez olan). Level yüklenemezse test tahtasına düşer.
+            if (board == null && pilotPreview)
+            {
+                pilotCount = LevelLibrary.LevelCount(PilotResource);
+                board = LoadPilot(pilotIndex);
+            }
+
             if (board == null && levelNumber > 0)
                 board = LevelLibrary.Load(levelNumber);
 
             if (board == null)
                 board = useUnsolvableBoard ? CreateUnsolvableTestBoard() : CreateTestBoard();
 
-            LogSolvability();
+            pristineBoard = board.Clone();   // restart bu kopyayı geri yükler
+
             BuildViews();
             BuildStreamView();
             BuildUndoButton();
+            BuildRestartButton();
+            BuildAddTubeButton();
+            if (pilotPreview)
+            {
+                BuildPilotNextButton();
+                BuildPrevButton();
+            }
+            BuildDeadlockBanner();
+            BuildLevelTitle();
             ApplyLayout();
+            UpdateLevelTitle();
             initialized = true;
         }
 
@@ -119,19 +157,141 @@ namespace TubeSort.Game
             undoButton.Initialize();
         }
 
-        /// <summary>Butonu görüş alanının sol üst köşesine yerleştirir.</summary>
-        private void PositionUndoButton()
+        /// <summary>
+        /// Pilot önizlemede sıradaki level butonunu kurar (sağ üst). Yalnız
+        /// pilot modunda; telefonda ok tuşu olmadığı için level gezmenin yolu.
+        /// </summary>
+        private void BuildPilotNextButton()
         {
-            if (undoButton == null) return;
+            var go = new GameObject("PilotNextButton");
+            pilotNextButton = go.AddComponent<PilotNextButtonView>();
+            pilotNextButton.Initialize();
+        }
 
+        private void BuildPrevButton()
+        {
+            var go = new GameObject("PrevButton");
+            prevButton = go.AddComponent<ButtonView>();
+            prevButton.Initialize(ButtonView.ButtonKind.Previous);
+        }
+
+        private void BuildRestartButton()
+        {
+            var go = new GameObject("RestartButton");
+            restartButton = go.AddComponent<ButtonView>();
+            restartButton.Initialize(ButtonView.ButtonKind.Restart);
+        }
+
+        private void BuildAddTubeButton()
+        {
+            var go = new GameObject("AddTubeButton");
+            addTubeButton = go.AddComponent<ButtonView>();
+            addTubeButton.Initialize(ButtonView.ButtonKind.AddTube);
+        }
+
+        /// <summary>
+        /// Çıkmaz uyarı banner'ını kurar (TMP, gizli başlar). Dünya uzayında,
+        /// butonlar gibi kameraya göre konumlanır; TMP varsayılan fontunu kullanır
+        /// (TMP Essentials import edilmiş olmalı). Boyut/konum placeholder — 1C'de cila.
+        /// </summary>
+        /// <summary>
+        /// Çıkmaz uyarısını iki TMP parçası olarak kurar (gizli başlar): üst parça
+        /// ekranın üstünde, alt parça altında, ikisi de yatayda ortada. Uzun mesaj
+        /// dar ekrana sığsın diye ikiye bölündü. Boyut/konum placeholder — 1C'de cila.
+        /// </summary>
+        private void BuildDeadlockBanner()
+        {
+            deadlockBannerTop = CreateBannerPart("DeadlockBannerTop", "Çıkmaz!", 4f);
+            deadlockBannerBottom = CreateBannerPart(
+                "DeadlockBannerBottom", "Geri al, tüp ekle ya da yeniden başla", 3.2f);
+        }
+
+        private TextMeshPro CreateBannerPart(string name, string text, float fontSize)
+        {
+            var go = new GameObject(name);
+            var tmp = go.AddComponent<TextMeshPro>();
+            tmp.text = text;
+            tmp.fontSize = fontSize;
+            tmp.color = new Color(1f, 0.45f, 0.35f, 1f);
+            tmp.alignment = TextAlignmentOptions.Center;
+            tmp.rectTransform.sizeDelta = new Vector2(7.5f, 3f);
+            tmp.sortingOrder = 101;   // tüplerin/butonların üstünde
+            go.SetActive(false);      // yalnız çıkmazda görünür
+            return tmp;
+        }
+
+        /// <summary>
+        /// Üst-orta level başlığını kurar (TMP). Metin UpdateLevelTitle ile her
+        /// level değişiminde tazelenir. Boyut/konum placeholder — 1C'de cila.
+        /// </summary>
+        private void BuildLevelTitle()
+        {
+            var go = new GameObject("LevelTitle");
+            levelTitle = go.AddComponent<TextMeshPro>();
+            levelTitle.fontSize = 3.5f;
+            levelTitle.color = new Color(1f, 1f, 1f, 0.9f);
+            levelTitle.alignment = TextAlignmentOptions.Center;
+            levelTitle.rectTransform.sizeDelta = new Vector2(6f, 2f);
+            levelTitle.sortingOrder = 101;
+        }
+
+        /// <summary>Başlığı mevcut levelin adına göre günceller ("LEVEL 1.1").</summary>
+        private void UpdateLevelTitle()
+        {
+            if (levelTitle == null) return;
+            string label = CurrentLabel();
+            levelTitle.text = string.IsNullOrEmpty(label) ? "" : $"LEVEL {label}";
+        }
+
+        /// <summary>Mevcut levelin ekran adı: pilot modunda label ("1.1"), yoksa numara.</summary>
+        private string CurrentLabel()
+        {
+            if (pilotPreview && pilotCount > 0)
+                return LevelLibrary.LabelOf(PilotResource, pilotIndex);
+            return levelNumber > 0 ? levelNumber.ToString() : "";
+        }
+
+        /// <summary>
+        /// Butonları görüş alanının üst köşelerine dizer. Sol küme (soldan sağa):
+        /// geri al, restart, +tüp — oyun aksiyonları. Sağ küme (sağdan sola):
+        /// skip, önceki — level navigasyonu. Üst-orta level başlığına (1B) ayrık.
+        /// Butonlar tahtanın çocuğu değil; tahta ölçeklense de sabit kalırlar.
+        /// (Placeholder yerleşim; kalabalık ve hizalama 1C'de sprite'larla cilalanır.)
+        /// </summary>
+        private void PositionButtons()
+        {
             Vector2 view = CameraView;
             Vector3 cam = mainCamera.transform.position;
-            float inset = UndoButtonView.Size;
+            float inset = ButtonView.Size;
+            float gap = ButtonView.Size * 1.15f;
+            float topY = cam.y + view.y * 0.5f - inset;
+            float leftX = cam.x - view.x * 0.5f + inset;
+            float rightX = cam.x + view.x * 0.5f - inset;
 
-            undoButton.transform.position = new Vector3(
-                cam.x - view.x * 0.5f + inset,
-                cam.y + view.y * 0.5f - inset,
-                0f);
+            // Sol küme: geri al, restart, +tüp (soldan sağa).
+            PlaceButton(undoButton, leftX, topY);
+            PlaceButton(restartButton, leftX + gap, topY);
+            PlaceButton(addTubeButton, leftX + 2f * gap, topY);
+
+            // Sağ küme: skip, önceki (sağdan sola).
+            PlaceButton(pilotNextButton, rightX, topY);
+            PlaceButton(prevButton, rightX - gap, topY);
+
+            // Level başlığı: üst-orta, buton sırasından biraz boşluklu.
+            if (levelTitle != null)
+                levelTitle.transform.position = new Vector3(cam.x, cam.y + view.y * 0.35f, 0f);
+
+            // Çıkmaz uyarısı: başlığın (0.35) hemen altında iki satır — üstte
+            // "Çıkmaz!", hemen altında talimat; ikisi de yatayda ortada.
+            if (deadlockBannerTop != null)
+                deadlockBannerTop.transform.position = new Vector3(cam.x, cam.y + view.y * 0.30f, 0f);
+            if (deadlockBannerBottom != null)
+                deadlockBannerBottom.transform.position = new Vector3(cam.x, cam.y + view.y * 0.255f, 0f);
+        }
+
+        private static void PlaceButton(MonoBehaviour button, float x, float y)
+        {
+            if (button != null) button.transform.position = new Vector3(x, y, 0f);
         }
 
         /// <summary>Aktif tahta. Testlerin ve dış katmanların durum sorgusu için.</summary>
@@ -155,9 +315,65 @@ namespace TubeSort.Game
             }
 
             board = newBoard;
+            pristineBoard = newBoard.Clone();   // restart bu kopyayı geri yükler
             history.Clear(); // eski tahtanın hamleleri yeni tahtada geri alınamaz
             if (initialized)
                 RebuildViews();
+        }
+
+        /// <summary>
+        /// Pilot merdiveninin verilen levelini pilot_levels.json'dan yükler ve
+        /// hangi levelde olduğumuzu Console'a yazar. Yalnız pilot önizleme modunda.
+        /// </summary>
+        private Board LoadPilot(int index)
+        {
+            Board loaded = LevelLibrary.LoadFrom(PilotResource, index);
+            if (loaded != null)
+            {
+                string label = LevelLibrary.LabelOf(PilotResource, index);
+                Debug.Log($"<color=cyan>LEVEL {label}</color> (pilot önizleme {index}/{pilotCount}) — " +
+                          $"kapasite {loaded[0].Capacity}, {loaded.TubeCount} tüp");
+            }
+
+            return loaded;
+        }
+
+        /// <summary>
+        /// Pilot önizlemede ok tuşlarıyla (← →) leveller arasında gezer;
+        /// 1..pilotCount arasında sarar. Bir geçiş yaptıysa true döner (o kare
+        /// tıklama işlenmesin). Klavye yoksa (telefon) sessizce false — dokunuş
+        /// akışı bozulmaz.
+        /// </summary>
+        private bool HandlePilotBrowse()
+        {
+            Keyboard keyboard = Keyboard.current;
+            if (keyboard == null || pilotCount <= 0) return false;
+
+            int step = 0;
+            if (keyboard.rightArrowKey.wasPressedThisFrame) step = 1;
+            else if (keyboard.leftArrowKey.wasPressedThisFrame) step = -1;
+            if (step == 0) return false;
+
+            StepPilot(step);
+            return true;
+        }
+
+        /// <summary>
+        /// Pilot levelleri arasında verilen adım kadar ilerler (ör. +1 sonraki)
+        /// ve 1..pilotCount arasında sarar. Ok tuşları, skip ve önceki butonları
+        /// aynı kapıyı kullanır.
+        /// </summary>
+        private void StepPilot(int step)
+        {
+            if (pilotCount <= 0) return;
+
+            pilotIndex = ((pilotIndex - 1 + step + pilotCount) % pilotCount) + 1;
+            Board next = LoadPilot(pilotIndex);
+            if (next != null)
+            {
+                LoadBoard(next);
+                UpdateLevelTitle();
+            }
         }
 
         /// <summary>
@@ -187,8 +403,39 @@ namespace TubeSort.Game
             if (!history.TryUndo(board, out PourResult undone)) return;
 
             ClearSelection();
+            HideDeadlock();   // önceki durum zaten çözülebilirdi: uyarı kalksın
             tubeViews[undone.FromIndex].Refresh();
             tubeViews[undone.ToIndex].Refresh();
+        }
+
+        /// <summary>
+        /// Mevcut leveli baştan yükler (çıkmaz/kötü gidişten kaçış). Levelin
+        /// yüklenirken saklanan bozulmamış kopyasını geri kurar; hamleler ve
+        /// eklenen +tüp geri alınır (LoadBoard geçmişi de temizler).
+        /// </summary>
+        public void RestartLevel()
+        {
+            if (isAnimating) return;
+            if (pristineBoard == null) return;
+
+            LoadBoard(pristineBoard.Clone());
+        }
+
+        /// <summary>
+        /// Tahtaya bir boş tüp ekler (+tüp meta). Board.AddTube tahtayı değiştirir;
+        /// görünümler yeniden kurulur. Geçmiş temizlenmez: önceki hamleler hâlâ
+        /// geri alınabilir (yeni tüp sona eklendi, indeksler kaymadı). +tüp'ün
+        /// kendisi geri alınmaz; restart onu da temizler (pristine kopyada yok).
+        /// </summary>
+        public void AddEmptyTube()
+        {
+            if (isAnimating) return;
+            if (board.TubeCount == 0) return;
+
+            board.AddTube(board[0].Capacity);
+            ClearSelection();
+            if (initialized)
+                RebuildViews();
         }
 
         /// <summary>Mevcut tüp görünümlerini yıkıp tahtayı baştan kurar.</summary>
@@ -198,6 +445,7 @@ namespace TubeSort.Game
             StopAllCoroutines();
             isAnimating = false;
             selectedIndex = -1;
+            HideDeadlock();   // restart/+tüp/level geçişi çıkmaz uyarısını sıfırlar
             if (streamView != null)
                 streamView.Hide();
 
@@ -265,43 +513,6 @@ namespace TubeSort.Game
             });
         }
 
-        /// <summary>
-        /// Tahtanın çözülebilirliğini Console'a yazar (geçici teşhis; level
-        /// üreticiyle birlikte generate-and-test döngüsüne taşınacak).
-        /// Çözüm yolu loglanır ki elle oynayıp doğrulanabilsin.
-        /// </summary>
-        private void LogSolvability()
-        {
-            var timer = System.Diagnostics.Stopwatch.StartNew();
-            SolveReport report = Solver.Solve(board);
-            timer.Stop();
-
-            switch (report.Verdict)
-            {
-                case SolveVerdict.Solvable:
-                    var path = new System.Text.StringBuilder();
-                    foreach (PourResult move in report.Solution)
-                        path.Append(' ').Append(move.FromIndex).Append("->").Append(move.ToIndex);
-
-                    // Çözüm sayısı zorluk/esneklik metriği; bütçe aşıldıysa alt sınırdır.
-                    string exactNote = report.CountIsExact ? "" : " (bütçe aşıldı: alt sınır)";
-                    Debug.Log($"<color=lime>Tahta çözülebilir:</color> {report.SolutionCount} çözüm{exactNote}, " +
-                              $"örnek yol {report.Solution.Count} hamle, " +
-                              $"{report.StatesVisited} durum, {timer.ElapsedMilliseconds} ms. Yol:{path}");
-                    break;
-
-                case SolveVerdict.Unsolvable:
-                    Debug.LogWarning(
-                        $"Tahta ÇÖZÜLEMEZ ({report.StatesVisited} durum, {timer.ElapsedMilliseconds} ms).");
-                    break;
-
-                case SolveVerdict.OutOfBudget:
-                    Debug.LogWarning(
-                        $"Çözülebilirlik bilinmiyor: bütçe aşıldı ({report.StatesVisited} durum).");
-                    break;
-            }
-        }
-
         private void BuildViews()
         {
             for (int i = 0; i < board.TubeCount; i++)
@@ -347,7 +558,7 @@ namespace TubeSort.Game
             lastFittedView = CameraView;
 
             // Buton görüş alanına bağlı: yerleşim her tazelendiğinde o da tazelenir.
-            PositionUndoButton();
+            PositionButtons();
         }
 
         /// <summary>
@@ -473,9 +684,12 @@ namespace TubeSort.Game
         /// </summary>
         private void OnDestroy()
         {
-            // Buton tahtanın çocuğu olmadığı için kendiliğinden yok olmaz.
+            // Butonlar tahtanın çocuğu olmadığı için kendiliğinden yok olmaz.
             if (undoButton != null)
                 Destroy(undoButton.gameObject);
+
+            if (pilotNextButton != null)
+                Destroy(pilotNextButton.gameObject);
 
             Destroy(glassMaterial);
             Destroy(liquidMaterial);
@@ -490,6 +704,11 @@ namespace TubeSort.Game
         private void Update()
         {
             RefitIfViewChanged();
+
+            // Pilot önizleme: ok tuşlarıyla level gezme. Geçiş yapıldıysa bu kare
+            // tıklama işlenmez (yeni tahta zaten kuruldu).
+            if (pilotPreview && !isAnimating && HandlePilotBrowse())
+                return;
 
             // Pointer, Mouse ve Touchscreen'in ortak atasıdır: masaüstünde fare,
             // telefonda (ve Device Simulator'da) parmak aynı kodla okunur.
@@ -519,9 +738,32 @@ namespace TubeSort.Game
                 return;
             }
 
+            if (hit.GetComponent<PilotNextButtonView>() != null)
+            {
+                StepPilot(1);   // skip: tamamlamadan sonraki level
+                return;
+            }
+
+            var button = hit.GetComponent<ButtonView>();
+            if (button != null)
+            {
+                HandleActionButton(button.Kind);
+                return;
+            }
+
             var view = hit.GetComponent<TubeView>();
             if (view != null && view.ContainsPoint(worldPoint))
                 HandleTubeClick(view.Index);
+        }
+
+        private void HandleActionButton(ButtonView.ButtonKind kind)
+        {
+            switch (kind)
+            {
+                case ButtonView.ButtonKind.Previous: StepPilot(-1); break;   // önceki level
+                case ButtonView.ButtonKind.Restart: RestartLevel(); break;
+                case ButtonView.ButtonKind.AddTube: AddEmptyTube(); break;
+            }
         }
 
         private void HandleTubeClick(int index)
@@ -564,12 +806,62 @@ namespace TubeSort.Game
             selectedIndex = -1;
         }
 
+        /// <summary>Level tamamlanınca oto-geçişten önceki bekleme (sn).</summary>
+        private const float AutoAdvanceDelay = 0.7f;
+
         private void ReportBoardState()
         {
             if (board.IsSolved)
+            {
+                HideDeadlock();
                 Debug.Log("<color=lime>Tahta çözüldü!</color>");
-            else if (!board.HasAnyValidMove)
-                Debug.Log("<color=orange>Çıkmaz: oynanacak hamle kalmadı.</color>");
+                if (pilotPreview && pilotCount > 0)
+                    StartCoroutine(AutoAdvanceToNext());
+            }
+            // Gerçek çıkmaz: hamle olsun olmasın, bu tahtadan artık kazanılamaz.
+            // Varlık kontrolü ucuz (ilk çözümde durur); dökmeler ayrık olduğu için
+            // hamle-başına-bir-kez çalışır.
+            else if (!Solver.IsSolvable(board))
+            {
+                Debug.Log("<color=orange>Çıkmaz: bu tahtadan kazanılamaz.</color>");
+                ShowDeadlock();
+            }
+            else
+            {
+                HideDeadlock();
+            }
+        }
+
+        /// <summary>Çıkmaz uyarısını gösterir: banner + kaçış butonlarını yanıp söndür.</summary>
+        private void ShowDeadlock()
+        {
+            if (deadlockBannerTop != null) deadlockBannerTop.gameObject.SetActive(true);
+            if (deadlockBannerBottom != null) deadlockBannerBottom.gameObject.SetActive(true);
+            if (undoButton != null) undoButton.SetHighlight(true);
+            if (restartButton != null) restartButton.SetHighlight(true);
+            if (addTubeButton != null) addTubeButton.SetHighlight(true);
+        }
+
+        /// <summary>Çıkmaz uyarısını gizler ve butonların yanıp sönmesini durdurur.</summary>
+        private void HideDeadlock()
+        {
+            if (deadlockBannerTop != null) deadlockBannerTop.gameObject.SetActive(false);
+            if (deadlockBannerBottom != null) deadlockBannerBottom.gameObject.SetActive(false);
+            if (undoButton != null) undoButton.SetHighlight(false);
+            if (restartButton != null) restartButton.SetHighlight(false);
+            if (addTubeButton != null) addTubeButton.SetHighlight(false);
+        }
+
+        /// <summary>
+        /// Level tamamlanınca kısa bir bekleme sonrası sonraki levele geçer.
+        /// Bekleme oyuncunun tamamlanan tahtayı görmesi için (tebrik pop-up'ı
+        /// 1B'de / ertelendi). Oyuncu bu arada skip/undo ile araya girerse
+        /// StepPilot'un RebuildViews'i StopAllCoroutines ile bunu iptal eder.
+        /// </summary>
+        private IEnumerator AutoAdvanceToNext()
+        {
+            yield return new WaitForSeconds(AutoAdvanceDelay);
+            StepPilot(1);
         }
 
         /// <summary>
