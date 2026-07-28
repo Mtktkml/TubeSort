@@ -147,6 +147,38 @@ doğrulamaz. Görsel doğrulama gözle yapılır.
 7. Cila + meta (undo, +1 tüp, kapak animasyonu, ses)
 8. Build
 
+### Kaldığımız yer (28 Tem 2026 — feature/design-integration)
+
+**Toon tasarım entegrasyonu:** ekip çizgi-film stili tüp+tıpa tasarımı gönderdi
+(referanslar kullanıcının Masaüstü'nde: `tube2.png`, `tube (2).png`, `mm.png`,
+`ağız kısmı.png`). Tasarım asset olarak değil **runtime'da shader ile** üretiliyor.
+~7 iterasyon turu (kullanıcı + ekip spec'leriyle) tamamlandı:
+
+- **Glass/Liquid/TubeShape:** düz toon tüp (mouth-expansion kalktı), kalın tek tip
+  kontur, iç açık çizgi, iki mavimsi-beyaz şerit (cam+sıvı hizalı, `_StreakScale`),
+  `MouthExtension` (cam tepesi yakanın arkasına uzar, sıvı matematiği değişmez).
+- **Collar.shader (yeni):** bej yaka — TEK düz elips silüet (simit; alt yarı %20
+  basık "yumurta"), üstte içeride kalan koyu delik, uçtan uzak aşağı-bombeli seam
+  çizgisi, yatay krem gradyan. **İki katman sandviç:** arka (order 2) + ön (order 4,
+  delik merkezi altı, delik içi şeffaf pencere) tıpayı (order 3) sarar → tıpalıyken
+  seam kesintisiz, tıpa tabanı deliğin ön kenarında.
+- **Cork.shader (yeni):** mantar tıpa — basık elips üst yüz + büyük koni + kademe +
+  küçük koni + oval dışbükey dip; prosedürel gözenekler **eleme** ile (çizgiye/
+  kontura değecek gözenek hiç çizilmez); üst yüz koyu dolgulu basık, yan açık
+  dolgulu yuvarlak. Yalnız `Tube.IsComplete` tüpte görünür.
+- **Mobil sağlamlık:** tüm `fwidth` çağrıları discard'lardan önce; ön katman kesimi
+  discard değil alfa ile (OpKill türev bozulması riski).
+- Kalınlık/konum sabitleri `TubeView.cs`'de yorumlu; doğrulamalar ultracode
+  workflow'larıyla yapıldı (3 tur, derleme+geometri+spec mercekleri).
+
+**Yarın devam:** (1) seam son hâlinin görsel onayı (sıfırdan yazıldı: üst bölgede,
+deliğin altından, uçlar ±0.42'de sönüyor — kullanıcı henüz bakmadı); (2) tıpalı
+varyantta delik-tıpa arası ~0.035'lik şeritte kesim hattı renk basamağı gözle
+kontrol (doğrulama bulgusu, kozmetik); (3) onay sonrası master'a merge; (4) cila
+adayları: tıpa pop animasyonu, `SdTube`'un no-op mouth parametre zincirinin
+sadeleştirilmesi. Not: `feature/asset-redesign` branch'inde ayrı bir CLAUDE.md
+güncellemesi (D adımı tamam işaretleri) bekliyor; merge sırasında birleştirilecek.
+
 ### Kaldığımız yer (23 Tem 2026)
 
 **Hedef (mentör kararı): 300 önceden üretilmiş-seçilmiş level.** Leveller

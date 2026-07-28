@@ -8,8 +8,8 @@ Shader "TubeSort/Glass"
         // Toon stil: soluk açık mavi gövde, kalın siyah outline, outline'ın
         // içinde açık bir kenar çizgisi (cam et-kalınlığı), sol tarafta beyaz şeritler.
         _BodyColor ("Gövde rengi", Color) = (0.73, 0.89, 0.96, 0.9)
-        _RimColor ("Outline rengi", Color) = (0.06, 0.06, 0.08, 1.0)
-        _RimWidth ("Outline kalınlığı", Float) = 0.03
+        _RimColor ("Outline rengi", Color) = (0.11, 0.09, 0.10, 1.0)
+        _RimWidth ("Outline kalınlığı", Float) = 0.025
         _InnerColor ("İç kenar çizgisi", Color) = (0.93, 0.97, 1.0, 0.9)
         _InnerWidth ("İç çizgi kalınlığı", Float) = 0.028
         _GlossStrength ("Şerit opaklığı", Range(0, 1)) = 0.85
@@ -54,6 +54,10 @@ Shader "TubeSort/Glass"
             float _BottomRadius;
             float _MouthRadius;
             float _MouthBlend;
+            // Cam gövdesi yaka arkasına uzatılmış yazılır; şeritler sıvıyla aynı
+            // dünya konumunda kalsın diye UV bu oranla sıvı-gövde uzayına çevrilir.
+            // Değer: (uzatılmış boy) / (sıvı gövde boyu). TubeView.ApplyShape yazar.
+            float _StreakScale;
 
             struct Attributes
             {
@@ -112,9 +116,12 @@ Shader "TubeSort/Glass"
                 // Solda iki dikey beyaz parlama şeridi (toon cam refleksi):
                 // üstte uzun, altında kısa; ikisi de aynı x'te, uçları yuvarlak.
                 float2 bodyUV = BodyUV(p, _QuadSize.xy, _BodySize.xy);
+                // refY: sıvı-gövde uzayındaki yükseklik — Liquid.shader'daki şerit
+                // bantlarıyla (0.50-0.85 / 0.32-0.45) birebir aynı dünya konumu.
+                float refY = bodyUV.y * max(_StreakScale, 1.0);
                 float streakX = smoothstep(0.05, 0.0, abs(bodyUV.x - 0.20));
-                float longY  = smoothstep(0.50, 0.53, bodyUV.y) * smoothstep(0.85, 0.82, bodyUV.y);
-                float shortY = smoothstep(0.32, 0.35, bodyUV.y) * smoothstep(0.45, 0.42, bodyUV.y);
+                float longY  = smoothstep(0.50, 0.53, refY) * smoothstep(0.85, 0.82, refY);
+                float shortY = smoothstep(0.32, 0.35, refY) * smoothstep(0.45, 0.42, refY);
                 float streak = streakX * max(longY, shortY) * (1.0 - outline);
 
                 // Şerit maviye çalan beyaza çeker + opaklığı artırır (saydam camda

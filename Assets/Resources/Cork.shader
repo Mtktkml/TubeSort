@@ -1,28 +1,31 @@
-// Tamamlanmış tüpü kapatan mantar tıpa. Yakanın ARKASINDA çizilir (sortingOrder 2);
-// yalnız delikten ve yakanın üstünden görünür (yaka önde, tıpa beji örtmez).
-// Yapı: eliptik ÜST YÜZ (açık) + yan yüz (gradyan, izleyiciye dönük gözenekler) +
-// eliptik oval DİP (camın arkasında, cam tonuyla hafif soluk). Üst yüz gözenekleri
-// perspektifle basık elips; yan gözenekler yuvarlak. Hepsi koyu iç + kalın kenar.
+// Tamamlanmış tüpü kapatan mantar tıpa (sortingOrder 3: arka yakanın (2) önünde,
+// yaka ön-overlay'inin (4) arkasında — tıpa yaka bandının içinden geçiyormuş gibi
+// okunur). Silüet: basık eliptik ÜST YÜZ + büyük kesik koni + içeri kademe +
+// küçük kesik koni + aşağı dışbükey oval DİP (sıvının önünde çizilir, kendi
+// rengini korur). Gözenekler prosedürel; hiçbir gözenek üst yüz/yan ayrım
+// çizgisine ya da silüet konturuna DEĞMEZ — değecek olan hücre hiç çizilmez.
+// Üst yüz gözenekleri koyu dolgulu basık elips, yan gözenekler açık dolgulu
+// daire; hepsi net koyu kenarlı ve tam opak.
 Shader "TubeSort/Cork"
 {
     Properties
     {
-        _CapColor ("Üst yüz (açık)", Color) = (0.85, 0.62, 0.38, 1)
+        _CapColor ("Üst yüz (açık, doygun tan)", Color) = (0.90, 0.67, 0.40, 1)
         _SideLight ("Yan açık (üst)", Color) = (0.74, 0.51, 0.28, 1)
-        _SideDark ("Yan koyu (alt/kenar)", Color) = (0.50, 0.31, 0.15, 1)
-        _OutlineColor ("Kontur", Color) = (0.12, 0.07, 0.04, 1)
-        _OutlineWidth ("Kontur kalınlığı", Float) = 0.03
+        _SideDark ("Yan koyu (alt/kenar)", Color) = (0.44, 0.26, 0.11, 1)
+        _OutlineColor ("Kontur", Color) = (0.11, 0.09, 0.10, 1)
+        _OutlineWidth ("Kontur kalınlığı", Float) = 0.025
         _EdgeShade ("Kenar koyulaşması", Float) = 0.09
         _CornerRadius ("Köşe yuvarlaklığı", Float) = 0.02
-        _RimShade ("Üst yüz/yan ayrım", Range(0,1)) = 0.22
         _ContactShade ("Temas gölgesi", Range(0,1)) = 0.30
         // Gözenekler:
-        _PoreFill ("Gözenek iç (koyu)", Color) = (0.55, 0.35, 0.17, 1)
-        _PoreEdge ("Gözenek kenar (kalın)", Color) = (0.24, 0.13, 0.05, 1)
-        _PoreDensity ("Gözenek sıklığı", Float) = 9
+        _PoreFill ("Yan gözenek içi (açık turuncu-tan)", Color) = (0.86, 0.60, 0.34, 1)
+        _PoreTopFill ("Üst yüz gözenek içi (koyu kahve)", Color) = (0.38, 0.20, 0.08, 1)
+        _PoreEdge ("Gözenek kenarı (koyu kahve)", Color) = (0.30, 0.16, 0.06, 1)
+        _PoreDensity ("Gözenek sıklığı", Float) = 7
         _PoreThreshold ("Gözenek seyrekliği", Range(0,1)) = 0.12
-        _PoreMin ("Gözenek min yarıçap", Float) = 0.13
-        _PoreMax ("Gözenek maks yarıçap", Float) = 0.28
+        _PoreMin ("Gözenek min yarıçap", Float) = 0.20
+        _PoreMax ("Gözenek maks yarıçap", Float) = 0.38
     }
 
     SubShader
@@ -48,9 +51,9 @@ Shader "TubeSort/Cork"
                 float _OutlineWidth;
                 float _EdgeShade;
                 float _CornerRadius;
-                float _RimShade;
                 float _ContactShade;
                 float4 _PoreFill;
+                float4 _PoreTopFill;
                 float4 _PoreEdge;
                 float _PoreDensity;
                 float _PoreThreshold;
@@ -74,13 +77,7 @@ Shader "TubeSort/Cork"
                 return o;
             }
 
-            float SdEllipse(float2 p, float2 ab)
-            {
-                float k1 = length(p / ab);
-                float k2 = length(p / (ab * ab));
-                return k1 * (k1 - 1.0) / max(k2, 1e-4);
-            }
-
+            // Kesik koni (trapez) SDF — Quilez. r1 alt yarı-genişlik, r2 üst.
             float SdTrapezoid(float2 p, float r1, float r2, float he)
             {
                 float2 k1 = float2(r2, he);
@@ -92,6 +89,13 @@ Shader "TubeSort/Cork"
                 return s * sqrt(min(dot(ca, ca), dot(cb, cb)));
             }
 
+            float SdEllipse(float2 p, float2 ab)
+            {
+                float k1 = length(p / ab);
+                float k2 = length(p / (ab * ab));
+                return k1 * (k1 - 1.0) / max(k2, 1e-4);
+            }
+
             float Hash21(float2 p)
             {
                 p = frac(p * float2(123.34, 345.45));
@@ -99,8 +103,35 @@ Shader "TubeSort/Cork"
                 return frac(p.x * p.y);
             }
 
-            // Gözenek alanı: 3x3 hücre. flatten>1 ise dikey basıklık (üst yüz perspektifi).
-            // rScale ile üst yüz gözenekleri büyütülür.
+            // Silüet SDF — hem piksel boyama hem gözenek eleme aynı fonksiyonu
+            // kullanır; ikisi ayrı hesaplansaydı eleme payları kayardı.
+            float CorkSil(float2 q)
+            {
+                float yTop = _CorkYs.x, yStep = _CorkYs.y, yBase = _CorkYs.z;
+                float W = _CapRadii.x;
+                float wStepTop = 0.89 * W;   // büyük koni ALT (kademe üstü)
+                float wStepBot = 0.80 * W;   // küçük koni ÜST (içeri basamak)
+                float wBase    = 0.70 * W;   // taban
+
+                float dCap = SdEllipse(q - float2(0.0, yTop), _CapRadii.xy);
+                float dUpper = SdTrapezoid(q - float2(0.0, (yTop + yStep) * 0.5),
+                    wStepTop, W, (yTop - yStep) * 0.5);
+                float dLower = SdTrapezoid(q - float2(0.0, (yStep + yBase) * 0.5),
+                    wBase, wStepBot, (yStep - yBase) * 0.5);
+                float dBase = SdEllipse(q - float2(0.0, yBase), float2(wBase, wBase * 0.35));
+                return min(min(dCap, dUpper), min(dLower, dBase)) - _CornerRadius;
+            }
+
+            // Üst yüz elipsine mesafe (ayrım çizgisi bu elipsin kenarı).
+            float CapDist(float2 q)
+            {
+                return SdEllipse(q - float2(0.0, _CorkYs.x), _CapRadii.xy);
+            }
+
+            // Gözenekler: 3x3 hücre taraması, hücre başına jitterlı bir gözenek.
+            // flatten>1 üst yüz perspektifi (basık elips), rScale üst yüz
+            // gözeneklerini büyütür. ELEME: ayrım çizgisine ya da silüete değecek
+            // gözenek hiç çizilmez — kesik/yarım/hayalet gözenek kalmaz.
             void Pores(float2 sp, float flatten, float rScale, out float fill, out float edge)
             {
                 float2 pu = sp * _PoreDensity;
@@ -114,6 +145,19 @@ Shader "TubeSort/Cork"
                     if (Hash21(cid) < _PoreThreshold) continue;
                     float2 off = float2(Hash21(cid + 11.3), Hash21(cid + 27.7)) - 0.5;
                     float r = lerp(_PoreMin, _PoreMax, Hash21(cid + 5.1)) * rScale;
+
+                    // Gözeneğin dünya-uzayı merkezi ve yarıçapları (eleme testleri).
+                    float2 center = (cid + 0.5 + off * 0.5) / _PoreDensity;
+                    float rw = r / _PoreDensity;          // x yarıçapı
+                    float rwY = rw / max(flatten, 1.0);   // y yarıçapı (yüzde basık)
+
+                    float dCapC = CapDist(center);
+                    bool onFace = dCapC < -(rwY + 0.02);  // tamamen üst yüz içinde
+                    bool onSide = dCapC >  (rw + 0.05);   // ayrım bandının belirgin altında
+                    if (!onFace && !onSide) continue;
+                    if (CorkSil(center) > -(rwY + 0.02)) continue;
+                    if (onFace && abs(center.x) > _CapRadii.x - rw - 0.02) continue;
+
                     float2 q = (gv - (float2(ox, oy) + off * 0.5)) * float2(1.0, flatten);
                     float d = length(q) - r;
                     fill = max(fill, 1.0 - smoothstep(-0.02, 0.02, d));
@@ -124,31 +168,15 @@ Shader "TubeSort/Cork"
             half4 Fragment(Varyings input) : SV_Target
             {
                 float2 p = QuadPoint(input.uv, _CorkQuad.xy);
-                float yTop = _CorkYs.x, yStep = _CorkYs.y, yBase = _CorkYs.z;
-                float W = _CapRadii.x;
-                float wStepTop = 0.89 * W;   // büyük koni ALT (kademe üstü)
-                float wStepBot = 0.80 * W;   // küçük koni ÜST (kademe: içeri basamak)
-                float wBase    = 0.70 * W;   // taban
+                float yTop = _CorkYs.x, yBase = _CorkYs.z;
 
-                // Tepe elipsi — en geniş yer, basık (ry≈W/5); hem ön hem arka yay çizili.
-                float dCap = SdEllipse(p - float2(0.0, yTop), _CapRadii.xy);
-                // Büyük kesik koni (üst gövde, ~2/3): yStep..yTop, alt wStepTop → üst W.
-                float dUpper = SdTrapezoid(p - float2(0.0, (yTop + yStep) * 0.5),
-                    wStepTop, W, (yTop - yStep) * 0.5);
-                // Küçük kesik koni (alt gövde, ~1/3): yBase..yStep, alt wBase → üst
-                // wStepBot. wStepBot < wStepTop olduğu için yStep'te içeri KADEME oluşur.
-                float dLower = SdTrapezoid(p - float2(0.0, (yStep + yBase) * 0.5),
-                    wBase, wStepBot, (yStep - yBase) * 0.5);
-                // Taban — aşağı dışbükey ön yay (alçak elipsin alt yayı; arka yay
-                // koninin içinde kaldığı için silüette çizilmez).
-                float dBase = SdEllipse(p - float2(0.0, yBase), float2(wBase, wBase * 0.30));
-
-                float dSil = min(min(dCap, dUpper), min(dLower, dBase)) - _CornerRadius;
-
+                float dSil = CorkSil(p);
                 float e = fwidth(dSil);
                 float inside = 1.0 - smoothstep(-e, e, dSil);
                 if (inside <= 0.001)
                     discard;
+
+                float dCap = CapDist(p);
 
                 // Yan yüz dikey gradyan (üst açık → alt koyu).
                 float sny = saturate((p.y - yBase) / max(yTop - yBase, 1e-4));
@@ -163,18 +191,17 @@ Shader "TubeSort/Cork"
                 float inCap = 1.0 - smoothstep(-ec, ec, dCap);
                 col = lerp(col, _CapColor.rgb, inCap);
 
-                // Gözenekler: üst yüzde basık (perspektif), yanda yuvarlak.
+                // Gözenekler: üst yüzde koyu dolgulu basık elips, yanda açık
+                // dolgulu daire; ikisi de net koyu kenarlı.
                 float flatten = lerp(1.0, _CapRadii.x / max(_CapRadii.y, 1e-4), inCap);
-                float rScale = lerp(1.0, 1.7, inCap);   // üst yüz gözenekleri daha büyük
+                float rScale = lerp(1.0, 1.7, inCap);
                 float pf, pe;
                 Pores(p, flatten, rScale, pf, pe);
-                // kenara/uca taşmasın
-                float poreMask = smoothstep(0.0, 0.05, -dSil);
-                pf *= poreMask; pe *= poreMask;
-                col = lerp(col, _PoreFill.rgb, pf * 0.7);
-                col = lerp(col, _PoreEdge.rgb, pe * 0.8);
+                half3 poreFillCol = lerp(_PoreFill.rgb, _PoreTopFill.rgb, inCap);
+                col = lerp(col, poreFillCol, pf * 0.95);
+                col = lerp(col, _PoreEdge.rgb, pe * 0.95);
 
-                // Üst yüz / yan ayrım çizgisi (kapak ön kenarı) — KALIN, net koyu.
+                // Üst yüz / yan ayrım çizgisi — kontur ile aynı koyulukta, kalın.
                 float rim = (1.0 - smoothstep(0.0, 0.040, abs(dCap)))
                     * smoothstep(0.05, -0.06, p.y - yTop) * (1.0 - inCap);
                 col = lerp(col, _OutlineColor.rgb, rim);

@@ -64,12 +64,6 @@ float2 BodyCenter(float2 quadSize, float2 bodySize)
     return float2(0.0, -quadSize.y * 0.5 + bodySize.y * 0.5);
 }
 
-// Ağız dörtgenin tepesine hizalanır, yatayda ortalanır.
-float2 MouthCenter(float2 quadSize, float2 mouthSize)
-{
-    return float2(0.0, quadSize.y * 0.5 - mouthSize.y * 0.5);
-}
-
 // Toon tasarımda tüp DÜZ: yalnızca gövde kutusu. Eski ağız genişlemesi ve
 // yumuşak birleşim kaldırıldı — SdSmoothUnion eşit genişlikte bile birleşme
 // yerinde dışa şişirip üstte istenmeyen bombe yapıyordu. Genişleme artık ayrı
