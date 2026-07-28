@@ -53,6 +53,8 @@ namespace TubeSort.Game
         private Sprite unitSprite;
         private Material glassMaterial;
         private Material liquidMaterial;
+        private Material collarMaterial;
+        private Material corkMaterial;
         private Material streamMaterial;
         private readonly List<TubeView> tubeViews = new List<TubeView>();
         private StreamView streamView;
@@ -104,9 +106,12 @@ namespace TubeSort.Game
 
             glassMaterial = CreateMaterial("Glass");
             liquidMaterial = CreateMaterial("Liquid");
+            collarMaterial = CreateMaterial("Collar");
+            corkMaterial = CreateMaterial("Cork");
             streamMaterial = CreateMaterial("Stream");
 
-            if (glassMaterial == null || liquidMaterial == null || streamMaterial == null)
+            if (glassMaterial == null || liquidMaterial == null || collarMaterial == null
+                || corkMaterial == null || streamMaterial == null)
             {
                 enabled = false;
                 return;
@@ -521,7 +526,7 @@ namespace TubeSort.Game
                 go.transform.SetParent(transform, false);
 
                 var view = go.AddComponent<TubeView>();
-                view.Initialize(i, board[i], palette, unitSprite, glassMaterial, liquidMaterial);
+                view.Initialize(i, board[i], palette, unitSprite, glassMaterial, liquidMaterial, collarMaterial, corkMaterial);
                 tubeViews.Add(view);
             }
         }
@@ -693,6 +698,8 @@ namespace TubeSort.Game
 
             Destroy(glassMaterial);
             Destroy(liquidMaterial);
+            Destroy(collarMaterial);
+            Destroy(corkMaterial);
             Destroy(streamMaterial);
 
             if (unitSprite != null)

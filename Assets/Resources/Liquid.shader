@@ -16,7 +16,7 @@ Shader "TubeSort/Liquid"
         _WaveSpeed ("Dalga hızı", Float) = 2.5
         _EdgeSoftness ("Yüzey yumuşaklığı (dünya birimi)", Float) = 0.012
         _SideShading ("Kenar gölgesi", Range(0, 1)) = 0.35
-        _Glossiness ("Parlaklık", Range(0, 1)) = 0.25
+        _Glossiness ("Şerit parlaklığı", Range(0, 1)) = 0.5
         _WallThickness ("Cam et kalınlığı", Float) = 0.05
     }
 
@@ -185,14 +185,16 @@ Shader "TubeSort/Liquid"
                 float shade = 1.0 - distanceFromCenter * distanceFromCenter * _SideShading;
                 color.rgb *= shade;
 
-                // Sol tarafta ince bir parlama şeridi; camdan yansıyan ışık hissi.
-                // Şerit dar tutulmalı: genişledikçe sıvının rengine beyaz katar ve
-                // paletteki renkler birbirine yaklaşıp ayırt edilemez hale gelir.
-                const float highlightCenter = 0.22;
-                const float highlightWidth = 0.05;
-
-                float highlight = smoothstep(highlightWidth, 0.0, abs(uv.x - highlightCenter));
-                color.rgb += highlight * _Glossiness * 0.5;
+                // Camdaki iki beyaz şeritle AYNI: sıvı bölgesinde de sürsün, böylece
+                // parlama şeridi cam+sıvı boyunca kesintisiz görünür (cam arkada
+                // kaldığı için dolu bölgede şeridi sıvı çizmeli). Konum/aralıklar
+                // Glass.shader ile birebir tutulmalı.
+                float streakX = smoothstep(0.05, 0.0, abs(uv.x - 0.20));
+                float longY  = smoothstep(0.50, 0.53, uv.y) * smoothstep(0.85, 0.82, uv.y);
+                float shortY = smoothstep(0.32, 0.35, uv.y) * smoothstep(0.45, 0.42, uv.y);
+                float streak = streakX * max(longY, shortY);
+                // Renk Glass.shader'daki şeritle aynı (mavimsi beyaz).
+                color.rgb = lerp(color.rgb, float3(0.94, 0.97, 1.0), streak * _Glossiness);
 
                 color.a *= inside * insideGlass;
                 return (half4)color;

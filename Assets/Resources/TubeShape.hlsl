@@ -70,20 +70,17 @@ float2 MouthCenter(float2 quadSize, float2 mouthSize)
     return float2(0.0, quadSize.y * 0.5 - mouthSize.y * 0.5);
 }
 
-// Tüpün tamamı: gövde ile ağız üst üste biner ve yumuşak birleşimle
-// tek bir gövdeye kaynar. Aralarında boşluk yoktur; ağız gövdeden
-// yalnızca daha geniştir.
+// Toon tasarımda tüp DÜZ: yalnızca gövde kutusu. Eski ağız genişlemesi ve
+// yumuşak birleşim kaldırıldı — SdSmoothUnion eşit genişlikte bile birleşme
+// yerinde dışa şişirip üstte istenmeyen bombe yapıyordu. Genişleme artık ayrı
+// bej halka (Collar) ile sağlanır. mouthSize/mouthRadius/blend imza uyumu için
+// duruyor; kullanılmıyor.
 float SdTube(float2 p, float2 quadSize, float2 bodySize, float2 mouthSize,
     float topRadius, float bottomRadius, float mouthRadius, float blend)
 {
     float2 bodyLocal = p - BodyCenter(quadSize, bodySize);
     float4 bodyRadii = float4(topRadius, bottomRadius, topRadius, bottomRadius);
-    float bodyDistance = SdRoundedBox(bodyLocal, bodySize * 0.5, bodyRadii);
-
-    float2 mouthLocal = p - MouthCenter(quadSize, mouthSize);
-    float mouthDistance = SdRoundedBox(mouthLocal, mouthSize * 0.5, mouthRadius.xxxx);
-
-    return SdSmoothUnion(bodyDistance, mouthDistance, blend);
+    return SdRoundedBox(bodyLocal, bodySize * 0.5, bodyRadii);
 }
 
 // Gövdenin kendi doku koordinatı: dibinde 0, tepesinde 1.

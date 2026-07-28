@@ -69,10 +69,14 @@ namespace TubeSort.Tests.PlayMode
 
             var glassShader = Resources.Load<Shader>("Glass");
             var liquidShader = Resources.Load<Shader>("Liquid");
+            var collarShader = Resources.Load<Shader>("Collar");
+            var corkShader = Resources.Load<Shader>("Cork");
             var glassMat = new Material(glassShader);
             var liquidMat = new Material(liquidShader);
+            var collarMat = new Material(collarShader);
+            var corkMat = new Material(corkShader);
 
-            tubeView.Initialize(0, tube, palette, sprite, glassMat, liquidMat);
+            tubeView.Initialize(0, tube, palette, sprite, glassMat, liquidMat, collarMat, corkMat);
 
             yield return null;
         }
