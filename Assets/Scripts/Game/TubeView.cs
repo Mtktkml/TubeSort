@@ -82,72 +82,58 @@ namespace TubeSort.Game
         /// </summary>
         private const float MouthExtension = Width * 0.15f;
 
-        /// <summary>Elipslerin ortak basıklık oranı (ry/rx ≈ 1/5) — delik ve tıpa
-        /// üst yüz elipsi aynı perspektifi paylaşır. (Tıpa DİP elipsi bilinçli
-        /// olarak daha tok: 0.35, aşağı dışbükey kapanış için.)</summary>
-        private const float EllipseRatio = 0.20f;
-
-        // ── Bej yaka (collar) — DÜZ, geniş washer (yatık ince elips) + koyu delik. ──
-        /// <summary>Yaka elipsinin x yarıçapı — tüp genişliğinin ~1.5 katı toplam en.</summary>
+        // ── Sprite yaka + tıpa (feature/asset-tube): ekip PNG'leri, runtime
+        // shader yerine SpriteRenderer. Ölçek çapası: yaka görselinin tam
+        // genişliği = FullWidth (1.2 birim); PPU'lar buna göre girildi
+        // (collar 244, cork 229 — birleşik referans `tube (2).png` piksel
+        // ölçümleri, 29 Tem 2026). Görsel ya da PPU değişirse buradaki
+        // piksel/PPU sabitleri de birlikte güncellenmeli. ──
+        /// <summary>Yakanın yarı genişliği (yerleşim çapası; FullWidth = 2×bu).</summary>
         public const float CollarRx = Width * 0.75f;
-        /// <summary>Silüet elipsinin yarı-yüksekliğine ek pay: ry = yarıKalınlık + bu.
-        /// Silüet TEK DÜZ ELİPS (simit) — kompozit şekiller birleşimde kıvrım
-        /// yaratıyordu, kullanıcı düz yuvarlak istedi.</summary>
-        private const float CollarArcRise = Width * 0.05f;
-        /// <summary>Bandın yarı kalınlığı; delik/seam ölçüleri buradan türetilir.
-        /// Silüet elipsinin yarı-yüksekliği = bu + CollarArcRise.</summary>
-        private const float CollarSideHalf = Width * 0.25f;
-        /// <summary>Koyu eliptik deliğin x yarıçapı. Tıpanın delik hizasındaki
-        /// yarı-genişliğinden (≈0.41×Width) DAR: tıpa takılıyken deliği tamamen
-        /// örter, arkasında koyu değil BEJ okunur. Tüp iç genişliğinden de dar.</summary>
-        private const float CollarHoleRx = Width * 0.375f;
-        /// <summary>Deliğin y yarıçapı (ortak basıklık).</summary>
-        private const float CollarHoleRy = CollarHoleRx * EllipseRatio;
-        /// <summary>Delik merkezinin yaka merkezine göre y'si — delik üst yüzeyde
-        /// tamamen İÇERİDE: arkada ince, önde geniş bej pay; kontura değmez
-        /// (silüet tepesi ARCH+yarıKalınlık=0.26, delik üstü+kenarı 0.182).
-        /// Round-6'da AYRICA ön/arka katman ayrım hattı: ön katman bu hattın
-        /// altını çizer, delik içi pencerede arkadaki tıpa görünür.</summary>
-        private const float CollarHoleCenterY = CollarSideHalf * 0.55f;
-        /// <summary>Yaka merkezinin tüp tepesine göre y'si. Round-5: SABİT merkez
-        /// hattı — kalınlaşma bu hattan simetrik yukarı/aşağı büyür (eski B+kavis
-        /// bağı koparıldı; bağlı kalsaydı yaka yukarı kayıp tıpanın görünen üstünü
-        /// yutardı). Alt kenar tüp tepesinin ~0.06 altına iner: tüp ağzı yakanın
-        /// arkasında, fon boşluğu yok; tıpanın orta bandından biraz daha fazlası
-        /// örtülür (Round-5 madde 3'ün istediği davranış).</summary>
+        /// <summary>Yaka merkezinin tüp tepesine göre y'si (shader sürümünden
+        /// devralınan onaylı konum: yakanın alt kenarı tüp ağzını örter).</summary>
         private const float CollarCenterY = Width * 0.21f;
-        /// <summary>Konturun kırpılmaması için dörtgene bırakılan pay.</summary>
-        private const float CollarPadding = 0.06f;
-
-        // ── Mantar tıpa (cork) — tepe elipsi + büyük koni + kademe + küçük koni + dışbükey
-        // ön yay taban. Alt genişlikler Cork.shader'da CapRx oranı olarak türetilir. ──
-        /// <summary>Tıpanın en geniş yeri (tepe elipsi x yarıçapı).</summary>
-        private const float CorkCapRx = Width * 0.42f;
-        /// <summary>Tıpanın yarı-yüksekliği (üst yüzden dibe). Bodur: yaka üstünde
-        /// görünen kısım ≈ yakanın kendi kalınlığı; orta bant yaka arkasında; ~%25-30
-        /// tüpün içinde (referans oranı).</summary>
-        private const float CorkHalfHeight = Width * 0.55f;
-        /// <summary>Tıpanın oval dibinin tüp ağzından ne kadar içeri indiği (dünya birimi
-        /// Width oranı) — alt frustum tüpe girer, dibi sıvının önünde görünür.</summary>
-        private const float CorkBottomInset = Width * 0.33f;
-        /// <summary>Kontur/pay.</summary>
-        private const float CorkPadding = 0.06f;
-
-        // Tıpa dikey yerleşim türevleri — CreateCork ile yakanın tıpa penceresi
-        // (_CorkSilYs, bkz. Collar.shader CorkWinSil) aynı sayıları kullanmak
-        // zorunda; tek yerde türetilir.
-        /// <summary>Tepe elipsinin y yarıçapı (ortak basıklık).</summary>
-        private static float CorkCapRy => EllipseRatio * CorkCapRx;
-        /// <summary>Tepe elipsi merkezi (tıpa dörtgen merkezine göre).</summary>
-        private static float CorkYTop => CorkHalfHeight - CorkCapRy;
-        /// <summary>Dip ovali merkezi (y yarıçapı = 0.35 × taban genişliği).</summary>
-        private static float CorkYBase => -CorkHalfHeight + 0.35f * (0.70f * CorkCapRx);
-        /// <summary>Kademe: küçük koninin başladığı y (alt 1/3'ün başı).</summary>
-        private static float CorkYStep => CorkYBase + (CorkYTop - CorkYBase) / 3f;
-        /// <summary>Tıpa dörtgen merkezinin yaka merkezine göre y'si. Kapasiteden
-        /// bağımsız: iki merkez de tüp tepesine göre sabit uzaklıkta.</summary>
-        private static float CorkCenterAboveCollar =>
-            CorkHalfHeight - CorkBottomInset - CollarCenterY;
+        /// <summary>Resources yolları — BoardView yükler, TubeView kullanır.</summary>
+        public const string CollarSpritePath = "Sprites/collar";
+        public const string CorkSpritePath = "Sprites/cork";
+        /// <summary>Yaka görselinin dünya yüksekliği (113 px / 244 PPU).</summary>
+        private const float CollarSpriteHeight = 113f / 244f;
+        // collar.png eğri sınırları (piksel, satırlar ÜSTTEN; 29 Tem taraması).
+        // Ön parçalar dikdörtgen DEĞİL eğri maskeyle kesilir: düz kenarlar
+        // tıpayı cetvelle kesilmiş gösteriyordu (kullanıcı bulgusu). Görsel
+        // değişirse bu sayılar yeniden ölçülmeli (tarama: koyu piksel sütun
+        // taraması, delik altı 40→48, seam 59→66 parabolü).
+        /// <summary>Delik elipsinin merkezi (x).</summary>
+        private const float CollarHoleCx = 146f;
+        /// <summary>Delik elipsinin merkezi (satır).</summary>
+        private const float CollarHoleCy = 25f;
+        /// <summary>Delik dış yarıçapları (ön yay bu elipsi izler).</summary>
+        private const float CollarHoleRx = 100f;
+        private const float CollarHoleRy = 24f;
+        /// <summary>Deliğin ön kenar çizgisi kalınlığı: pencere bu kadar içeride
+        /// biter, koyu yay tıpanın ÖNÜNDE kalır → "deliğe girmiş" okunur.</summary>
+        private const float CollarHoleRim = 3.5f;
+        // Parantez (seam) sınırı sabit eğri DEĞİL: çizginin alt kenarı çalışma
+        // anında sütun sütun ölçülür (MeasureSeamBottom) — el çizimi çizgi
+        // simetrik değil (sol uç dx-60'ta satır 63, sağ uçta 61), parabol
+        // uydurması uçlarda 1-2 px bej sızdırıyordu.
+        /// <summary>Çizgi araması bu satır aralığında yapılır (üstten).</summary>
+        private const int CollarSeamScanTop = 56;
+        private const int CollarSeamScanBottom = 76;
+        /// <summary>Aramanın yatay sınırı (delik merkezine göre): ötesinde aynı
+        /// satırlardan yan kontur geçiyor, çizgiyle karışırdı.</summary>
+        private const float CollarSeamScanHalfWidth = 130f;
+        /// <summary>Hiç çizgi bulunamayan sütun için yedek sınır (görsel
+        /// değişirse sessiz bozulma yerine makul varsayılan).</summary>
+        private const float CollarSeamFallbackRow = 67f;
+        /// <summary>Alt şeridin üst kenarı: aşağı-dışbükey oval — yanlarda bu
+        /// satırdan, ortada +dip kadar aşağıdan geçer (tıpa dip ovali hissi).</summary>
+        private const float CollarStripSideRow = 88f;
+        private const float CollarStripDip = 15f;
+        private const float CollarStripHalfWidth = 96f;
+        /// <summary>Tıpa tepesinin yaka üst kenarına göre yüksekliği (birleşik
+        /// referansta 41 px; referans ölçeği 247.5 px/birim).</summary>
+        private const float CorkTopAboveCollarTop = 0.166f;
 
         private static readonly int LayerColorsId = Shader.PropertyToID("_LayerColors");
         private static readonly int LayerTopsId = Shader.PropertyToID("_LayerTops");
@@ -162,17 +148,6 @@ namespace TubeSort.Game
         private static readonly int MouthBlendId = Shader.PropertyToID("_MouthBlend");
         private static readonly int StreakScaleId = Shader.PropertyToID("_StreakScale");
         private static readonly int TiltAngleId = Shader.PropertyToID("_TiltAngle");
-        private static readonly int CollarQuadId = Shader.PropertyToID("_CollarQuad");
-        private static readonly int TopRadiiId = Shader.PropertyToID("_TopRadii");
-        private static readonly int HoleRadiiId = Shader.PropertyToID("_HoleRadii");
-        private static readonly int SideHalfId = Shader.PropertyToID("_SideHalf");
-        private static readonly int HoleCenterYId = Shader.PropertyToID("_HoleCenterY");
-        private static readonly int FrontOnlyId = Shader.PropertyToID("_FrontOnly");
-        private static readonly int CorkSilRadiiId = Shader.PropertyToID("_CorkSilRadii");
-        private static readonly int CorkSilYsId = Shader.PropertyToID("_CorkSilYs");
-        private static readonly int CorkQuadId = Shader.PropertyToID("_CorkQuad");
-        private static readonly int CapRadiiId = Shader.PropertyToID("_CapRadii");
-        private static readonly int CorkYsId = Shader.PropertyToID("_CorkYs");
 
         private Tube tube;
         private ColorPalette palette;
@@ -182,7 +157,8 @@ namespace TubeSort.Game
         private SpriteRenderer liquid;
         private SpriteRenderer collar;
         private SpriteRenderer cork;
-        private SpriteRenderer collarFront;
+        private SpriteRenderer collarFrontTop;
+        private SpriteRenderer collarFrontBottom;
         private MaterialPropertyBlock properties;
         private Vector3 restPosition;
         private bool isSelected;
@@ -198,8 +174,8 @@ namespace TubeSort.Game
         public int Index { get; private set; }
 
         public void Initialize(int index, Tube tube, ColorPalette palette, Sprite unitSprite,
-            Material glassMaterial, Material liquidMaterial, Material collarMaterial,
-            Material corkMaterial)
+            Material glassMaterial, Material liquidMaterial, Sprite collarSprite,
+            Sprite collarFrontTopSprite, Sprite collarFrontBottomSprite, Sprite corkSprite)
         {
             Index = index;
             this.tube = tube;
@@ -225,8 +201,8 @@ namespace TubeSort.Game
             liquid = CreateQuad("Liquid", liquidMaterial, sortingOrder: 1, QuadHeight);
 
             ApplyShape(glass);
-            CreateCork(corkMaterial);      // order 3: arka yakanın önünde
-            CreateCollar(collarMaterial);  // order 2 (arka) + order 4 (ön overlay)
+            CreateCollar(collarSprite, collarFrontTopSprite, collarFrontBottomSprite);
+            CreateCork(corkSprite);
             CreateClickArea();
             Refresh();
         }
@@ -255,91 +231,183 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// Kalın bej yakayı iki quad ile kurar: arka/tam yaka (order 2, tıpanın
-        /// ARKASINDA — koyu delik burada) ve ön yüz overlay'i (order 4, tıpanın
-        /// ÖNÜNDE — collar'ın ön kenarı tıpayı sarsın). Böylece tıpa halkadan geçer:
-        /// kapak önde, ortada collar önde, tüp içinde tekrar görünür. Ön overlay yalnız
-        /// mantar varken açılır (bkz. Refresh).
+        /// Bej yakayı ekip görseliyle üç katman kurar — shader sürümündeki onaylı
+        /// sandviçin sprite karşılığı:
+        ///   arka (order 2): görselin tamamı (delik dahil), tıpanın ARKASINDA;
+        ///   ön-üst parça (order 4): delik ön yayı (kenar çizgisi dahil, delik
+        ///     içi pencere şeffaf) → parantez çizgisinin altı — tıpa deliğe
+        ///     girmiş okunur, delikle parantez arasında bej tıpayı örter;
+        ///   ön-alt şerit (order 4): üst kenarı oval, altta yakanın konturu —
+        ///     tıpanın önünde.
+        /// Ön parçalar tıpasız tüpte kapalı: arka katman zaten aynı pikselleri
+        /// gösterir, açık kalsalar AA kenarları çift binerdi. Parça sprite'ları
+        /// BoardView'da bir kez üretilir (CreateCollarFront*Sprite) ve paylaşılır.
         /// </summary>
-        private void CreateCollar(Material material)
+        private void CreateCollar(Sprite full, Sprite frontTop, Sprite frontBottom)
         {
-            collar = CreateCollarQuad("Collar", material, 2, frontOnly: false);
-            collarFront = CreateCollarQuad("CollarFront", material, 4, frontOnly: true);
-            collarFront.enabled = false;
+            collar = CreateCollarPiece("Collar", full, 2);
+            collarFrontTop = CreateCollarPiece("CollarFrontTop", frontTop, 4);
+            collarFrontBottom = CreateCollarPiece("CollarFrontBottom", frontBottom, 4);
+            collarFrontTop.enabled = false;
+            collarFrontBottom.enabled = false;
         }
 
-        private SpriteRenderer CreateCollarQuad(string name, Material material, int sortingOrder, bool frontOnly)
+        /// <summary>
+        /// Yaka parçasını, pikselleri tam görselle birebir hizalanacak şekilde
+        /// yerleştirir: parçanın doku dikdörtgeni tam görselin merkezinden ne
+        /// kadar aşağıdaysa dünya konumu da o kadar kaydırılır (tam görsel için
+        /// kayma sıfırdır; dilimler üst üste bindiğinde pikseller örtüşür).
+        /// </summary>
+        private SpriteRenderer CreateCollarPiece(string name, Sprite sprite, int sortingOrder)
         {
             var go = new GameObject(name);
             go.transform.SetParent(transform, false);
 
             var r = go.AddComponent<SpriteRenderer>();
-            r.sprite = unitSprite;
-            r.sharedMaterial = material;
+            r.sprite = sprite;
             r.sortingOrder = sortingOrder;
-            go.transform.localScale = new Vector3(CollarQuadWidth, CollarQuadHeight, 1f);
-            go.transform.localPosition = new Vector3(0f, BodyHeight + CollarCenterY, 0f);
 
-            r.GetPropertyBlock(properties);
-            properties.SetVector(CollarQuadId, new Vector4(CollarQuadWidth, CollarQuadHeight, 0f, 0f));
-            properties.SetVector(TopRadiiId, new Vector4(CollarRx, CollarArcRise, 0f, 0f));
-            properties.SetVector(HoleRadiiId, new Vector4(CollarHoleRx, CollarHoleRy, 0f, 0f));
-            properties.SetFloat(SideHalfId, CollarSideHalf);
-            properties.SetFloat(HoleCenterYId, CollarHoleCenterY);
-            properties.SetFloat(FrontOnlyId, frontOnly ? 1f : 0f);
-            // Tıpa penceresi: ön katman, parantez çizgisinin altında tıpa
-            // gövdesini örtmesin diye yaka shader'ı tıpanın silüetini bilir
-            // (Collar.shader CorkWinSil). Aynı geometri CreateCork'a da gider;
-            // w bileşeni = tıpa merkezinin yaka merkezine göre y'si.
-            properties.SetVector(CorkSilRadiiId, new Vector4(CorkCapRx, CorkCapRy, 0f, 0f));
-            properties.SetVector(CorkSilYsId,
-                new Vector4(CorkYTop, CorkYStep, CorkYBase, CorkCenterAboveCollar));
-            r.SetPropertyBlock(properties);
+            float offset = (sprite.textureRect.center.y - sprite.texture.height * 0.5f)
+                / sprite.pixelsPerUnit;
+            go.transform.localPosition = new Vector3(0f, BodyHeight + CollarCenterY + offset, 0f);
             return r;
         }
 
-        private static float CollarQuadWidth => 2f * CollarRx + 2f * CollarPadding;
-        private static float CollarQuadHeight => 2f * (CollarSideHalf + CollarArcRise) + 2f * CollarPadding;
+        /// <summary>Ön-üst parça: delik merkezinden parantezin altına kadar, delik
+        /// içi PENCERE (kenar çizgisi hariç) şeffaf — tıpa pencereden görünür,
+        /// deliğin ön yayı tıpanın önünde kalır. BoardView bir kez yaratır,
+        /// yaşam döngüsünü (doku dahil) o yönetir.</summary>
+        public static Sprite CreateCollarFrontTopSprite(Sprite collar)
+        {
+            float[] seamBottom = MeasureSeamBottom(collar.texture);
+            return MaskedCollarPiece(collar, (x, row) => FrontTopKeep(x, row, seamBottom));
+        }
+
+        /// <summary>Ön-alt şerit: üst kenarı aşağı-dışbükey oval, altta yakanın
+        /// kendi konturuna kadar.</summary>
+        public static Sprite CreateCollarFrontBottomSprite(Sprite collar) =>
+            MaskedCollarPiece(collar, FrontBottomKeep);
+
+        private static bool FrontTopKeep(int x, int row, float[] seamBottom)
+        {
+            float dx = x - CollarHoleCx;
+            // Delik merkezinin üstü arka bandın malı: tıpa arka kenarın önünde.
+            if (row < CollarHoleCy) return false;
+            // Parça, çizginin ölçülen ALT kenarına kadar iner (son koyu satır
+            // dahil); bir alt satırdan itibaren tıpa — çizgiye tam değer.
+            if (row > seamBottom[x]) return false;
+            // Delik içi pencere: kenar çizgisi kadar içeride biten elips.
+            float nx = dx / (CollarHoleRx - CollarHoleRim);
+            float ny = (row - CollarHoleCy) / (CollarHoleRy - CollarHoleRim);
+            return nx * nx + ny * ny >= 1f;
+        }
 
         /// <summary>
-        /// Mantar tıpayı kurar (yakanın ÖNÜNDE, sortingOrder 3). Başlangıçta gizli;
-        /// yalnız tüp tamamlanınca görünür (bkz. Refresh). Şekil: kesik koni — üst elips
-        /// yüz (geniş) + daralan yan + oval dar dip. Tüpün ağzından içeri girer.
+        /// Parantez çizgisinin ALT kenarını sütun sütun ölçer: koyu piksel
+        /// araması (çizgi rengi koyu kahve, bej zeminden net ayrışır). Çizginin
+        /// bittiği/olmadığı sütunlar en yakın ölçülü değeri sürdürür; hiç
+        /// ölçüm yoksa yedek sabit kullanılır.
         /// </summary>
-        private void CreateCork(Material material)
+        private static float[] MeasureSeamBottom(Texture2D tex)
+        {
+            int w = tex.width, h = tex.height;
+            Color[] pixels = tex.GetPixels();
+            var bottom = new float[w];
+            for (int x = 0; x < w; x++)
+            {
+                bottom[x] = -1f;
+                if (Mathf.Abs(x - CollarHoleCx) > CollarSeamScanHalfWidth) continue;
+                for (int row = CollarSeamScanTop; row <= CollarSeamScanBottom; row++)
+                {
+                    Color c = pixels[(h - 1 - row) * w + x];
+                    if (c.a > 0.5f && c.r < 0.52f && c.g < 0.42f)
+                        bottom[x] = row;
+                }
+            }
+
+            // Boş sütunları komşu ölçümlerle doldur: soldan sürdür, sonra baştaki
+            // boşluklar için sağdan sürdür.
+            float last = -1f;
+            for (int x = 0; x < w; x++)
+            {
+                if (bottom[x] >= 0f) last = bottom[x];
+                else bottom[x] = last;
+            }
+            last = CollarSeamFallbackRow;
+            for (int x = w - 1; x >= 0; x--)
+            {
+                if (bottom[x] >= 0f) last = bottom[x];
+                else bottom[x] = last;
+            }
+            return bottom;
+        }
+
+        private static bool FrontBottomKeep(int x, int row)
+        {
+            float nx = (x - CollarHoleCx) / CollarStripHalfWidth;
+            float top = CollarStripSideRow
+                + CollarStripDip * Mathf.Sqrt(Mathf.Max(0f, 1f - nx * nx));
+            return row >= top;
+        }
+
+        /// <summary>
+        /// Yaka dokusundan eğri sınırlı parça üretir: tam boyutlu kopya, bölge
+        /// dışı alfa sıfır (tam boyut = konum kaymaz, CreateCollarPiece hizası
+        /// kendiliğinden doğru). collar.png Read/Write açık olmalı.
+        /// </summary>
+        private static Sprite MaskedCollarPiece(Sprite source, System.Func<int, int, bool> keep)
+        {
+            var src = source.texture;
+            int w = src.width, h = src.height;
+            Color[] pixels = src.GetPixels();
+            for (int ty = 0; ty < h; ty++)
+            {
+                int row = h - 1 - ty;   // üstten satır numarası (tarama tablosuyla aynı)
+                for (int x = 0; x < w; x++)
+                {
+                    if (keep(x, row)) continue;
+                    // Yalnız alfa sıfırlanır, RGB korunur: Color.clear (şeffaf
+                    // SİYAH) kullanılınca bilinear filtre kenar pikselini siyahla
+                    // harmanlıyor ve maske sınırları boyunca soluk koyu çizgiler
+                    // beliriyordu (kullanıcı bulgusu).
+                    Color c = pixels[ty * w + x];
+                    c.a = 0f;
+                    pixels[ty * w + x] = c;
+                }
+            }
+
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false)
+            {
+                filterMode = src.filterMode,
+                wrapMode = TextureWrapMode.Clamp,
+            };
+            tex.SetPixels(pixels);
+            tex.Apply(false, makeNoLongerReadable: true);
+            return Sprite.Create(tex, new Rect(0f, 0f, w, h), new Vector2(0.5f, 0.5f),
+                source.pixelsPerUnit, 0, SpriteMeshType.FullRect);
+        }
+
+        /// <summary>
+        /// Mantar tıpayı ekip görseliyle kurar (order 3: arka yakanın önünde, ön
+        /// dilimlerin arkasında — sandviç). Konum birleşik referanstan: tepe, yaka
+        /// üst kenarının CorkTopAboveCollarTop kadar üstünde; boy PPU'dan gelir,
+        /// alt ucu tüp ağzından içeri sarkar. Başlangıçta gizli; yalnız tamamlanan
+        /// tüpte görünür (bkz. Refresh).
+        /// </summary>
+        private void CreateCork(Sprite sprite)
         {
             var go = new GameObject("Cork");
             go.transform.SetParent(transform, false);
 
             cork = go.AddComponent<SpriteRenderer>();
-            cork.sprite = unitSprite;
-            cork.sharedMaterial = material;
-            cork.sortingOrder = 3;   // yakanın ÖNÜNDE
+            cork.sprite = sprite;
+            cork.sortingOrder = 3;   // yakanın ÖNÜNDE, ön dilimlerin arkasında
             cork.enabled = false;
 
-            // Spec geometrisi (dörtgen merkezine göre):
-            // tepe elipsi ry ≈ W/5; büyük koni üst 2/3, küçük koni alt 1/3; kademe
-            // alttaki 1/3'ün başında; taban dışbükey ön yay.
-            float W = CorkCapRx;
-            float capRy = CorkCapRy;
-            float halfH = CorkHalfHeight;
-            float yTop = CorkYTop;
-            float yBase = CorkYBase;
-            float yStep = CorkYStep;   // kademe = küçük koninin başı
-
-            float quadW = 2f * W + 2f * CorkPadding;
-            float quadH = 2f * (halfH + CorkPadding);
-            go.transform.localScale = new Vector3(quadW, quadH, 1f);
-            // Konum dipten: oval dip tüp ağzının CorkBottomInset kadar altında biter.
-            // Kademe böylece yaka bandının arkasına düşer (bantça gizlenir).
-            float centerY = BodyHeight - CorkBottomInset + halfH;
-            go.transform.localPosition = new Vector3(0f, centerY, 0f);
-
-            cork.GetPropertyBlock(properties);
-            properties.SetVector(CorkQuadId, new Vector4(quadW, quadH, 0f, 0f));
-            properties.SetVector(CapRadiiId, new Vector4(W, capRy, 0f, 0f));
-            properties.SetVector(CorkYsId, new Vector4(yTop, yStep, yBase, 0f));
-            cork.SetPropertyBlock(properties);
+            float collarTop = BodyHeight + CollarCenterY + CollarSpriteHeight * 0.5f;
+            float corkTop = collarTop + CorkTopAboveCollarTop;
+            go.transform.localPosition =
+                new Vector3(0f, corkTop - sprite.bounds.extents.y, 0f);
         }
 
         /// <summary>
@@ -350,20 +418,20 @@ namespace TubeSort.Game
         public static float FullWidth => 2f * CollarRx;
 
         /// <summary>
-        /// Görsellerin tüp tepesinin (BodyHeight) üstüne taşan kısmı. En yükseğe
-        /// uzanan dörtgen tıpanınki; tıpa gizliyken de yer ayrılır — hem tüp
-        /// tamamlanınca tahta yeniden ölçeklenmesin, hem de kapalı renderer'ın
-        /// dörtgeni de ekran ölçümüne girer (LayoutFitTests bounds toplar).
-        /// Yaka dörtgeni daha kısa kalır (CollarCenterY + CollarQuadHeight/2).
+        /// Görsellerin tüp tepesinin (BodyHeight) üstüne taşan kısmı: tıpanın
+        /// tepesi (yaka üst kenarı + CorkTopAboveCollarTop). Tıpa gizliyken de
+        /// yer ayrılır — hem tüp tamamlanınca tahta yeniden ölçeklenmesin, hem de
+        /// kapalı renderer'ın sınırları da ekran ölçümüne girer (LayoutFitTests
+        /// bounds toplar).
         /// </summary>
-        public static float TopOverhang => 2f * CorkHalfHeight - CorkBottomInset + CorkPadding;
+        public static float TopOverhang =>
+            CollarCenterY + CollarSpriteHeight * 0.5f + CorkTopAboveCollarTop;
 
         /// <summary>
-        /// En geniş dörtgenin (yaka) FullWidth dışına taşan tek yan payı: kontur
-        /// kırpılmasın diye bırakılan CollarPadding. Yerleşim toplam genişliğe
-        /// iki yanda birer tane ekler.
+        /// FullWidth dışına taşan yan pay. Yaka görseli tam FullWidth
+        /// genişliğinde (PPU çapası öyle seçildi), tıpa daha dar — taşma yok.
         /// </summary>
-        public static float SideOverhang => CollarPadding;
+        public static float SideOverhang => 0f;
 
         /// <summary>Verilen kapasitedeki bir tüpün ekranda kaplayacağı yükseklik.</summary>
         public static float HeightFor(int capacity) => capacity * UnitHeight;
@@ -459,7 +527,8 @@ namespace TubeSort.Game
             // boş tüp için de true döner; boşta mantar istemiyoruz, o yüzden !IsEmpty.
             // Collar'ın ön overlay'i de yalnız mantar varken çizilir.
             cork.enabled = tube.IsComplete && !tube.IsEmpty;
-            collarFront.enabled = cork.enabled;
+            collarFrontTop.enabled = cork.enabled;
+            collarFrontBottom.enabled = cork.enabled;
         }
 
         /// <summary>Tube'un güncel verisine göre doluluk seviyesinin olması gereken değer.</summary>
@@ -592,7 +661,8 @@ namespace TubeSort.Game
             liquid.sortingOrder = 1 + offset;
             collar.sortingOrder = 2 + offset;
             cork.sortingOrder = 3 + offset;
-            collarFront.sortingOrder = 4 + offset;
+            collarFrontTop.sortingOrder = 4 + offset;
+            collarFrontBottom.sortingOrder = 4 + offset;
         }
 
         /// <summary>Seçili tüp yukarı kalkar; oyuncu neyi seçtiğini görsün.</summary>

@@ -53,9 +53,12 @@ namespace TubeSort.Game
         private Sprite unitSprite;
         private Material glassMaterial;
         private Material liquidMaterial;
-        private Material collarMaterial;
-        private Material corkMaterial;
         private Material streamMaterial;
+        private Sprite collarSprite;            // ekip görseli (Resources/Sprites)
+        private Sprite corkSprite;
+        private Sprite collarFrontTopSprite;    // yakadan eğri maskeyle üretilen ön
+        private Sprite collarFrontBottomSprite; // sandviç parçaları; doku + sprite bizde,
+                                                // OnDestroy temizler
         private readonly List<TubeView> tubeViews = new List<TubeView>();
         private StreamView streamView;
         private UndoButtonView undoButton;
@@ -106,16 +109,23 @@ namespace TubeSort.Game
 
             glassMaterial = CreateMaterial("Glass");
             liquidMaterial = CreateMaterial("Liquid");
-            collarMaterial = CreateMaterial("Collar");
-            corkMaterial = CreateMaterial("Cork");
             streamMaterial = CreateMaterial("Stream");
 
-            if (glassMaterial == null || liquidMaterial == null || collarMaterial == null
-                || corkMaterial == null || streamMaterial == null)
+            // Yaka ve tıpa artık shader değil ekip görseli (feature/asset-tube).
+            collarSprite = LoadSprite(TubeView.CollarSpritePath);
+            corkSprite = LoadSprite(TubeView.CorkSpritePath);
+
+            if (glassMaterial == null || liquidMaterial == null || streamMaterial == null
+                || collarSprite == null || corkSprite == null)
             {
                 enabled = false;
                 return;
             }
+
+            // Ön sandviç parçaları yakadan BİR kez üretilir ve tüm tüplere
+            // paylaştırılır; kesim bilgisi TubeView'da, sahiplik (OnDestroy) burada.
+            collarFrontTopSprite = TubeView.CreateCollarFrontTopSprite(collarSprite);
+            collarFrontBottomSprite = TubeView.CreateCollarFrontBottomSprite(collarSprite);
 
             // Tahta önceliği: dışarıdan verilen (LoadBoard) > pilot önizleme >
             // seçili level > elle kurulmuş test tahtası (teşhis anahtarına göre
@@ -479,6 +489,26 @@ namespace TubeSort.Game
             return new Material(shader);
         }
 
+        private static Sprite LoadSprite(string resourcePath)
+        {
+            var sprite = Resources.Load<Sprite>(resourcePath);
+            if (sprite == null)
+            {
+                Debug.LogError($"{resourcePath} sprite bulunamadı (Assets/Resources/{resourcePath}.png).");
+            }
+
+            return sprite;
+        }
+
+        /// <summary>Çalışma anında üretilen yaka parçasını dokusuyla yok eder.
+        /// Asset sprite'larına UYGULANMAZ: onların dokusu paylaşımlıdır.</summary>
+        private static void DestroyCollarPiece(Sprite piece)
+        {
+            if (piece == null) return;
+            Destroy(piece.texture);
+            Destroy(piece);
+        }
+
         /// <summary>
         /// Elle kurulmuş geçici bir tahta. Level üretici gelene kadar bununla test ediyoruz.
         /// Kasıtlı olarak karışık: hem tam dökme, hem kısmi dökme denenebilsin.
@@ -526,7 +556,8 @@ namespace TubeSort.Game
                 go.transform.SetParent(transform, false);
 
                 var view = go.AddComponent<TubeView>();
-                view.Initialize(i, board[i], palette, unitSprite, glassMaterial, liquidMaterial, collarMaterial, corkMaterial);
+                view.Initialize(i, board[i], palette, unitSprite, glassMaterial, liquidMaterial,
+                    collarSprite, collarFrontTopSprite, collarFrontBottomSprite, corkSprite);
                 tubeViews.Add(view);
             }
         }
@@ -707,9 +738,12 @@ namespace TubeSort.Game
 
             Destroy(glassMaterial);
             Destroy(liquidMaterial);
-            Destroy(collarMaterial);
-            Destroy(corkMaterial);
             Destroy(streamMaterial);
+
+            // Yaka/tıpa görselleri asset olduğu için yok edilmez; ama ön parçalar
+            // (sprite + kendi dokuları) çalışma anında üretildi, birikmesinler.
+            DestroyCollarPiece(collarFrontTopSprite);
+            DestroyCollarPiece(collarFrontBottomSprite);
 
             if (unitSprite != null)
                 Destroy(unitSprite.texture);
