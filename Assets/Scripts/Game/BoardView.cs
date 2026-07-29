@@ -51,10 +51,10 @@ namespace TubeSort.Game
         private readonly MoveHistory history = new MoveHistory();
         private ColorPalette palette;
         private Sprite unitSprite;
-        private Material glassMaterial;
         private Material liquidMaterial;
         private Material streamMaterial;
-        private Sprite collarSprite;            // ekip görseli (Resources/Sprites)
+        private Sprite tubeSprite;              // ekip görselleri (Resources/Sprites)
+        private Sprite collarSprite;
         private Sprite corkSprite;
         private Sprite collarFrontTopSprite;    // yakadan eğri maskeyle üretilen ön
         private Sprite collarFrontBottomSprite; // sandviç parçaları; doku + sprite bizde,
@@ -107,16 +107,16 @@ namespace TubeSort.Game
             palette = new ColorPalette();
             unitSprite = CreateSquareSprite();
 
-            glassMaterial = CreateMaterial("Glass");
             liquidMaterial = CreateMaterial("Liquid");
             streamMaterial = CreateMaterial("Stream");
 
-            // Yaka ve tıpa artık shader değil ekip görseli (feature/asset-tube).
+            // Cam, yaka ve tıpa artık shader değil ekip görseli (feature/asset-tube).
+            tubeSprite = LoadSprite(TubeView.TubeSpritePath);
             collarSprite = LoadSprite(TubeView.CollarSpritePath);
             corkSprite = LoadSprite(TubeView.CorkSpritePath);
 
-            if (glassMaterial == null || liquidMaterial == null || streamMaterial == null
-                || collarSprite == null || corkSprite == null)
+            if (liquidMaterial == null || streamMaterial == null
+                || tubeSprite == null || collarSprite == null || corkSprite == null)
             {
                 enabled = false;
                 return;
@@ -556,7 +556,7 @@ namespace TubeSort.Game
                 go.transform.SetParent(transform, false);
 
                 var view = go.AddComponent<TubeView>();
-                view.Initialize(i, board[i], palette, unitSprite, glassMaterial, liquidMaterial,
+                view.Initialize(i, board[i], palette, unitSprite, liquidMaterial, tubeSprite,
                     collarSprite, collarFrontTopSprite, collarFrontBottomSprite, corkSprite);
                 tubeViews.Add(view);
             }
@@ -736,7 +736,6 @@ namespace TubeSort.Game
             if (pilotNextButton != null)
                 Destroy(pilotNextButton.gameObject);
 
-            Destroy(glassMaterial);
             Destroy(liquidMaterial);
             Destroy(streamMaterial);
 

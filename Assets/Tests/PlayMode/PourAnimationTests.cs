@@ -67,19 +67,18 @@ namespace TubeSort.Tests.PlayMode
             var sprite = Sprite.Create(texture, new Rect(0f, 0f, 1f, 1f),
                 new Vector2(0.5f, 0.5f), 1f);
 
-            var glassShader = Resources.Load<Shader>("Glass");
             var liquidShader = Resources.Load<Shader>("Liquid");
-            var glassMat = new Material(glassShader);
             var liquidMat = new Material(liquidShader);
 
-            // Yaka/tıpa artık ekip görseli: BoardView'ın yaptığı gibi sprite'lar
-            // yüklenir, ön sandviç parçaları yakadan üretilir.
+            // Cam/yaka/tıpa artık ekip görseli: BoardView'ın yaptığı gibi
+            // sprite'lar yüklenir, ön sandviç parçaları yakadan üretilir.
+            var tubeSprite = Resources.Load<Sprite>(TubeView.TubeSpritePath);
             var collarSprite = Resources.Load<Sprite>(TubeView.CollarSpritePath);
             var corkSprite = Resources.Load<Sprite>(TubeView.CorkSpritePath);
             var frontTop = TubeView.CreateCollarFrontTopSprite(collarSprite);
             var frontBottom = TubeView.CreateCollarFrontBottomSprite(collarSprite);
 
-            tubeView.Initialize(0, tube, palette, sprite, glassMat, liquidMat,
+            tubeView.Initialize(0, tube, palette, sprite, liquidMat, tubeSprite,
                 collarSprite, frontTop, frontBottom, corkSprite);
 
             yield return null;

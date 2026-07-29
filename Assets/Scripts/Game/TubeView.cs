@@ -96,6 +96,10 @@ namespace TubeSort.Game
         /// <summary>Resources yolları — BoardView yükler, TubeView kullanır.</summary>
         public const string CollarSpritePath = "Sprites/collar";
         public const string CorkSpritePath = "Sprites/cork";
+        /// <summary>Cam tüp görseli (204×766, PPU 247.5 → gövde 0.824 birim;
+        /// 9-slice alt border 88 px import'ta tanımlı — dip kavisi sabit kalır,
+        /// düz gövde kapasiteye göre uzar).</summary>
+        public const string TubeSpritePath = "Sprites/tube";
         /// <summary>Yaka görselinin dünya yüksekliği (113 px / 244 PPU).</summary>
         private const float CollarSpriteHeight = 113f / 244f;
         // collar.png eğri sınırları (piksel, satırlar ÜSTTEN; 29 Tem taraması).
@@ -146,7 +150,6 @@ namespace TubeSort.Game
         private static readonly int BottomRadiusId = Shader.PropertyToID("_BottomRadius");
         private static readonly int MouthRadiusId = Shader.PropertyToID("_MouthRadius");
         private static readonly int MouthBlendId = Shader.PropertyToID("_MouthBlend");
-        private static readonly int StreakScaleId = Shader.PropertyToID("_StreakScale");
         private static readonly int TiltAngleId = Shader.PropertyToID("_TiltAngle");
 
         private Tube tube;
@@ -174,7 +177,7 @@ namespace TubeSort.Game
         public int Index { get; private set; }
 
         public void Initialize(int index, Tube tube, ColorPalette palette, Sprite unitSprite,
-            Material glassMaterial, Material liquidMaterial, Sprite collarSprite,
+            Material liquidMaterial, Sprite tubeSprite, Sprite collarSprite,
             Sprite collarFrontTopSprite, Sprite collarFrontBottomSprite, Sprite corkSprite)
         {
             Index = index;
@@ -195,12 +198,12 @@ namespace TubeSort.Game
 
             properties = new MaterialPropertyBlock();
 
-            // Cam quad'ı MouthExtension kadar uzun: tepe kenarı yakanın arkasına
-            // saklanır. Sıvı kendi kısa gövdesiyle kırpılır (fill matematiği aynı).
-            glass = CreateQuad("Glass", glassMaterial, sortingOrder: 0, GlassQuadHeight);
+            // Cam artık ekip görseli (9-slice); tepesi MouthExtension kadar
+            // yakanın arkasına uzanır. Sıvı shader'ı aynı kalır: kendi şeklini
+            // kendisi çizer, kısa gövdeyle kırpılır (fill matematiği aynı).
+            CreateGlass(tubeSprite);
             liquid = CreateQuad("Liquid", liquidMaterial, sortingOrder: 1, QuadHeight);
 
-            ApplyShape(glass);
             CreateCollar(collarSprite, collarFrontTopSprite, collarFrontBottomSprite);
             CreateCork(corkSprite);
             CreateClickArea();
@@ -455,16 +458,24 @@ namespace TubeSort.Game
         /// <summary>Cam dörtgeninin boyu: gövde + yaka arkasına saklanan uzantı.</summary>
         private float GlassQuadHeight => BodyHeight + MouthExtension;
 
-        /// <summary>Cam şekil ölçülerini shader'a bildirir. Bir kez yeter; boyutu değişmez.
-        /// Cam gövdesi MouthExtension kadar uzun yazılır (uzantı yakanın arkasında).</summary>
-        private void ApplyShape(SpriteRenderer renderer)
+        /// <summary>
+        /// Cam tüpü ekip görseliyle kurar (order 0, sıvının arkasında). 9-slice:
+        /// import'ta tanımlı alt border dip kavisini korur, yalnız düz gövde
+        /// kapasiteye göre uzar (görseldeki parlama şeritleri de orantılı
+        /// uzar — dikey çizgiler, doğal durur). Pivot Bottom olduğu için yerel
+        /// sıfır tüpün dibidir; genişlik görselin doğal genişliği (0.824 birim,
+        /// birleşik referans gövde/yaka oranı).
+        /// </summary>
+        private void CreateGlass(Sprite sprite)
         {
-            renderer.GetPropertyBlock(properties);
-            WriteShape(BodyHeight + MouthExtension, GlassQuadHeight);
-            // Şeritler sıvıyla aynı dünya konumunda kalsın: cam UV'si bu oranla
-            // sıvı-gövde uzayına çevrilir (Glass.shader'daki refY).
-            properties.SetFloat(StreakScaleId, (BodyHeight + MouthExtension) / BodyHeight);
-            renderer.SetPropertyBlock(properties);
+            var go = new GameObject("Glass");
+            go.transform.SetParent(transform, false);
+
+            glass = go.AddComponent<SpriteRenderer>();
+            glass.sprite = sprite;
+            glass.sortingOrder = 0;
+            glass.drawMode = SpriteDrawMode.Sliced;
+            glass.size = new Vector2(sprite.bounds.size.x, GlassQuadHeight);
         }
 
         private void WriteShape(float bodyHeight, float quadHeight)
