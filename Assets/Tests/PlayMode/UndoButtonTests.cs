@@ -36,7 +36,8 @@ namespace TubeSort.Tests.PlayMode
             cameraObject.transform.position = new Vector3(0f, 0f, -10f);
 
             boardObject = new GameObject("BoardView");
-            boardObject.AddComponent<BoardView>();
+            // Tahta enjekte edilir: test, level verisinden bağımsız kalır.
+            boardObject.AddComponent<BoardView>().LoadBoard(TestBoards.Classic());
 
             yield return new WaitForFixedUpdate();
             yield return null;

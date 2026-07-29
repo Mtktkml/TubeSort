@@ -6,9 +6,9 @@
 // İki taraf ayrı hesaplasaydı en küçük fark bile sıvının tıklama alanından
 // ya da cam görselinin içinden sapmasına yol açardı.
 //
-// Tüp tek parçadır: dibi yarım daire, gövdesi düz. (Ağız genişletme
-// parametreleri MouthWidth = Width iken etkisizdir; görseldeki genişleme
-// bej yakanın işi.)
+// Tüp tek parçadır: dibi yarım daire, gövdesi düz. (Görseldeki ağız
+// genişlemesi bej yakanın işi; eski ağız genişletme parametre zinciri
+// etkisiz kaldığı için kaldırıldı.)
 //
 //      |     |
 //      |     |      <- gövde: sıvı burada durur
@@ -38,19 +38,6 @@ float SdRoundedBox(float2 p, float2 b, float4 r)
     return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r.x;
 }
 
-// Yumuşak birleşim: iki şekli tek şekilde toplar, ama kesiştikleri yerde
-// keskin köşe bırakmak yerine kavis oluşturur.
-//
-// Düz min(d1, d2) de iki şekli birleştirir, ancak birleşme yeri bir basamak
-// gibi görünür. Burada geçiş bölgesinde iki mesafeyi harmanlayıp k kadar
-// içeri çekiyoruz: gövdeden ağza geçiş basamak değil huni gibi akıyor.
-// k büyüdükçe kavis yayvanlaşır.
-float SdSmoothUnion(float d1, float d2, float k)
-{
-    float h = saturate(0.5 + 0.5 * (d2 - d1) / k);
-    return lerp(d2, d1, h) - k * h * (1.0 - h);
-}
-
 // Doku koordinatını dünya birimine çevirir; orijin dörtgenin merkezinde olur.
 // Dünya birimine geçmek şart: dörtgen yatayda ve dikeyde farklı ölçeklendiği
 // için uv uzayında hesaplanan köşeler daire değil elips olurdu.
@@ -65,11 +52,11 @@ float2 BodyCenter(float2 quadSize, float2 bodySize)
     return float2(0.0, -quadSize.y * 0.5 + bodySize.y * 0.5);
 }
 
-// Tüp DÜZ: yalnızca gövde kutusu (görseldeki genişleme bej yakanın işi).
-// mouthSize/mouthRadius/blend parametreleri imza uyumu için duruyor;
-// kullanılmıyorlar (sadeleştirme cila adayı — bkz. CLAUDE.md).
-float SdTube(float2 p, float2 quadSize, float2 bodySize, float2 mouthSize,
-    float topRadius, float bottomRadius, float mouthRadius, float blend)
+// Sıvının şekli: yalnızca gövde kutusu — dibi yarım daire, tepesi hafif
+// yuvarlak köşe. (Görseldeki ağız genişlemesi bej yakanın işi; eski ağız
+// parametre zinciri etkisiz kaldığı için imzadan da temizlendi.)
+float SdTube(float2 p, float2 quadSize, float2 bodySize,
+    float topRadius, float bottomRadius)
 {
     float2 bodyLocal = p - BodyCenter(quadSize, bodySize);
     float4 bodyRadii = float4(topRadius, bottomRadius, topRadius, bottomRadius);

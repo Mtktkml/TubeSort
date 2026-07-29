@@ -85,11 +85,8 @@ Shader "TubeSort/Liquid"
             int _LayerCount;
             float4 _QuadSize;
             float4 _BodySize;
-            float4 _MouthSize;
             float _TopRadius;
             float _BottomRadius;
-            float _MouthRadius;
-            float _MouthBlend;
             float _TiltAngle;
             // Eğik yüzeyin dudak demirlemesi (normalize, gövde oranı): düzlem
             // kaydırması dik açılarda dudaktaki sıvıyı gerçek (hacim korunumlu)
@@ -139,8 +136,8 @@ Shader "TubeSort/Liquid"
                 // içeri doğru daraltır. Böylece sıvı camın bir tık içinden başlar
                 // ve yuvarlak dibe kusursuz oturur - ayrı bir maske dokusu ve
                 // piksel hizalama derdi olmadan.
-                float glassDistance = SdTube(p, _QuadSize.xy, _BodySize.xy, _MouthSize.xy,
-                    _TopRadius, _BottomRadius, _MouthRadius, _MouthBlend);
+                float glassDistance = SdTube(p, _QuadSize.xy, _BodySize.xy,
+                    _TopRadius, _BottomRadius);
                 float innerDistance = glassDistance + _WallThickness;
 
                 float innerEdge = fwidth(innerDistance);

@@ -47,23 +47,11 @@ namespace TubeSort.Game
         private const float BottomRadius = Width * 0.5f;
 
         /// <summary>
-        /// Sıvının gövdesi DÜZ tüp: ağız genişlemesi yok (MouthWidth = Width
-        /// olunca SdSmoothUnion düz bir tüp verir; görseldeki genişleme bej
-        /// yakanın işi). Şekil hem sıvı shader'ına (WriteShape) hem CPU tıklama
-        /// SDF'ine (SdTube) bu sabitten gider; ikisi birlikte güncellenir.
+        /// Sıvı/tıklama dörtgeninin gövde dışına yan payı: kenar yumuşaması
+        /// kırpılmasın. (Eski ağız-harman payının halefi — ağız genişletme
+        /// zinciri kaldırıldı, toplam dörtgen genişliği aynı kaldı.)
         /// </summary>
-        public const float MouthWidth = Width;
-
-        /// <summary>Genişlemenin başladığı yükseklik: tüpün üst ucundan bu kadar aşağısı.</summary>
-        private const float MouthHeight = 0.22f;
-
-        private const float MouthRadius = 0.05f;
-
-        /// <summary>
-        /// Gövde ile ağzın kaynaşma yumuşaklığı. Büyüdükçe genişleme daha yayvan
-        /// bir huniye dönüşür; sıfıra yaklaştıkça basamak gibi keskinleşir.
-        /// </summary>
-        private const float MouthBlend = 0.06f;
+        private const float QuadPadding = 0.06f;
 
         /// <summary>
         /// Tüp ağzına kadar dolu olsa bile sıvının tepesiyle tüpün ucu arasında
@@ -158,11 +146,8 @@ namespace TubeSort.Game
         private static readonly int LayerCountId = Shader.PropertyToID("_LayerCount");
         private static readonly int QuadSizeId = Shader.PropertyToID("_QuadSize");
         private static readonly int BodySizeId = Shader.PropertyToID("_BodySize");
-        private static readonly int MouthSizeId = Shader.PropertyToID("_MouthSize");
         private static readonly int TopRadiusId = Shader.PropertyToID("_TopRadius");
         private static readonly int BottomRadiusId = Shader.PropertyToID("_BottomRadius");
-        private static readonly int MouthRadiusId = Shader.PropertyToID("_MouthRadius");
-        private static readonly int MouthBlendId = Shader.PropertyToID("_MouthBlend");
         private static readonly int TiltAngleId = Shader.PropertyToID("_TiltAngle");
         private static readonly int SurfaceLiftId = Shader.PropertyToID("_SurfaceLift");
         private static readonly int RippleStrengthId = Shader.PropertyToID("_RippleStrength");
@@ -485,12 +470,8 @@ namespace TubeSort.Game
         /// <summary>Sıvı gövdenin en fazla bu kadarını kaplar. Gövde uzadıkça 1'e yaklaşır.</summary>
         private float FillSpan => 1f - FillHeadroom / BodyHeight;
 
-        /// <summary>
-        /// Dörtgen genişleyen ağzı kapsayacak kadar geniştir. Yumuşak birleşim
-        /// kavis oluştururken şekli bir miktar dışarı taşırdığı için ayrıca
-        /// harmanlama payı kadar boşluk bırakılır; yoksa kavis kenardan kırpılır.
-        /// </summary>
-        private static float QuadWidth => MouthWidth + 2f * MouthBlend;
+        /// <summary>Sıvı/tıklama dörtgeninin genişliği: gövde + iki yanda pay.</summary>
+        private static float QuadWidth => Width + 2f * QuadPadding;
 
         /// <summary>Sıvı dörtgeninin boyu: gövdenin boyu (fill matematiği buna göre).</summary>
         private float QuadHeight => BodyHeight;
@@ -522,11 +503,8 @@ namespace TubeSort.Game
         {
             properties.SetVector(QuadSizeId, new Vector4(QuadWidth, quadHeight, 0f, 0f));
             properties.SetVector(BodySizeId, new Vector4(Width, bodyHeight, 0f, 0f));
-            properties.SetVector(MouthSizeId, new Vector4(MouthWidth, MouthHeight, 0f, 0f));
             properties.SetFloat(TopRadiusId, TopRadius);
             properties.SetFloat(BottomRadiusId, BottomRadius);
-            properties.SetFloat(MouthRadiusId, MouthRadius);
-            properties.SetFloat(MouthBlendId, MouthBlend);
         }
 
         /// <summary>Tıklamayı yakalayacak görünmez alan. Cam gövdenin tamamını kaplar.</summary>
