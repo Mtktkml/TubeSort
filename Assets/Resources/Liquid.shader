@@ -18,6 +18,10 @@ Shader "TubeSort/Liquid"
         _SideShading ("Kenar gölgesi", Range(0, 1)) = 0.35
         _Glossiness ("Şerit parlaklığı", Range(0, 1)) = 0.5
         _WallThickness ("Cam et kalınlığı", Float) = 0.05
+        // 2.5D: hafif üstten bakış. Varsayılan, yaka perspektifiyle uyumlu:
+        // sıvı yarı genişliği (0.375) × görsellerin elips oranı (0.2) ≈ 0.075.
+        _SurfaceEllipse ("2.5D yüzey derinliği (dünya birimi)", Float) = 0.075
+        _SurfaceLight ("Yüzey diski açık ton karışımı", Range(0, 1)) = 0.3
     }
 
     SubShader
@@ -57,6 +61,8 @@ Shader "TubeSort/Liquid"
                 float _SideShading;
                 float _Glossiness;
                 float _WallThickness;
+                float _SurfaceEllipse;
+                float _SurfaceLight;
             CBUFFER_END
 
             // Bu değerler her tüp için farklı; MaterialPropertyBlock ile
@@ -141,9 +147,23 @@ Shader "TubeSort/Liquid"
                 float wave = sin(uv.x * _WaveFrequency + _Time.y * _WaveSpeed) * waveAmplitude;
                 float surface = _FillLevel + tiltOffset + wave;
 
-                // Yüzeyin altındaysak 1, üstündeysek 0. Aradaki dar bant
-                // kenarın testere gibi görünmesini engeller.
-                float inside = smoothstep(surface, surface - edgeSoftness, uv.y);
+                // ── 2.5D: hafif üstten bakış. Yüzey, üstten görünen ELİPS bir
+                // disk; katman sınırları da diskin ÖN yayı gibi aşağı kavisli.
+                // nx: sıvı genişliğinde -1..1; arc: elips yay profili (kenarda
+                // 0, ortada 1). Efekt eğik (döken) tüpte de KORUNUR (kullanıcı
+                // isteği): bant eğimli yüzey çizgisini izlediği için disk yana
+                // yatmış mercek olarak okunur.
+                float halfWidthUV = (_BodySize.x * 0.5 - _WallThickness) / _BodySize.x;
+                float nx = clamp((uv.x - 0.5) / halfWidthUV, -1.0, 1.0);
+                float arc = sqrt(saturate(1.0 - nx * nx));
+                float ellipseDepth = _SurfaceEllipse / _BodySize.y;
+
+                // Sıvının üst kenarı diskin ARKA yayı (yüzey çizgisinin
+                // ellipseDepth·arc kadar üstü); disk bölgesi aşağıda açık
+                // tonla boyanır. Yüzeyin altındaysak 1, üstündeysek 0; dar
+                // bant kenarın testere gibi görünmesini engeller.
+                float surfaceTop = surface + ellipseDepth * arc;
+                float inside = smoothstep(surfaceTop, surfaceTop - edgeSoftness, uv.y);
                 if (inside <= 0.001)
                     discard;
 
@@ -173,7 +193,10 @@ Shader "TubeSort/Liquid"
                 int layerIndex = 0;
                 for (int k = 0; k < MAX_LAYERS; k++)
                 {
-                    if (k < _LayerCount && uv.y >= _LayerTops[k] + tiltOffset)
+                    // Sınır, 2.5D diskin ön yayı gibi ortada ellipseDepth kadar
+                    // aşağı kavisli (üstten bakışta kesitin ön kenarı alçak görünür).
+                    if (k < _LayerCount && uv.y >= _LayerTops[k] + tiltOffset
+                        - ellipseDepth * arc)
                         layerIndex = k + 1;
                 }
                 layerIndex = clamp(layerIndex, 0, _LayerCount - 1);
@@ -195,6 +218,16 @@ Shader "TubeSort/Liquid"
                 float streak = streakX * max(longY, shortY);
                 // Mavimsi beyaz — görseldeki şerit tonuyla aynı aile.
                 color.rgb = lerp(color.rgb, float3(0.94, 0.97, 1.0), streak * _Glossiness);
+
+                // 2.5D yüzey diski: yüzey çizgisinin ±ellipseDepth·arc bandı,
+                // üstten görünen elips — en üst katmanın açık tonu. Gölge ve
+                // şeritten SONRA basılır ki disk temiz, düz bir yüzey okunsun.
+                // Kenarlarda arc sıfıra indiği için disk cama sivrilerek kapanır.
+                float discEdge = ellipseDepth * arc - abs(uv.y - surface);
+                float inDisc = smoothstep(0.0, edgeSoftness, discEdge);
+                float3 discColor = lerp(_LayerColors[_LayerCount - 1].rgb,
+                    float3(1.0, 1.0, 1.0), _SurfaceLight);
+                color.rgb = lerp(color.rgb, discColor, inDisc);
 
                 color.a *= inside * insideGlass;
                 return (half4)color;
