@@ -185,15 +185,15 @@ Shader "TubeSort/Liquid"
                 float shade = 1.0 - distanceFromCenter * distanceFromCenter * _SideShading;
                 color.rgb *= shade;
 
-                // Camdaki iki beyaz şeritle AYNI: sıvı bölgesinde de sürsün, böylece
-                // parlama şeridi cam+sıvı boyunca kesintisiz görünür (cam arkada
-                // kaldığı için dolu bölgede şeridi sıvı çizmeli). Konum/aralıklar
-                // Glass.shader ile birebir tutulmalı.
+                // Cam görselindeki (tube.png) beyaz şeritlerin sıvı bölgesindeki
+                // devamı: cam arkada kaldığı için dolu bölgede şeridi sıvı
+                // çizmeli. Konum/aralıklar görseldeki şeritlerle göz kararı
+                // hizalı; görsel değişirse birlikte ayarlanmalı.
                 float streakX = smoothstep(0.05, 0.0, abs(uv.x - 0.20));
                 float longY  = smoothstep(0.50, 0.53, uv.y) * smoothstep(0.85, 0.82, uv.y);
                 float shortY = smoothstep(0.32, 0.35, uv.y) * smoothstep(0.45, 0.42, uv.y);
                 float streak = streakX * max(longY, shortY);
-                // Renk Glass.shader'daki şeritle aynı (mavimsi beyaz).
+                // Mavimsi beyaz — görseldeki şerit tonuyla aynı aile.
                 color.rgb = lerp(color.rgb, float3(0.94, 0.97, 1.0), streak * _Glossiness);
 
                 color.a *= inside * insideGlass;

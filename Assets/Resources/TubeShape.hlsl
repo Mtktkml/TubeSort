@@ -1,14 +1,15 @@
 #ifndef TUBESORT_TUBE_SHAPE_INCLUDED
 #define TUBESORT_TUBE_SHAPE_INCLUDED
 
-// Tüpün şekli tek bir yerde tanımlanır; hem cam hem sıvı bu dosyayı kullanır.
-// İkisi ayrı ayrı hesaplasaydı en küçük fark bile sıvının camdan taşmasına
-// ya da içeride boşluk kalmasına yol açardı.
+// Sıvının şekli tek bir yerde tanımlanır; sıvı shader'ı bu dosyayı kullanır,
+// CPU tıklama doğrulaması (TubeView.SdTube) aynı formülleri C#'ta uygular.
+// İki taraf ayrı hesaplasaydı en küçük fark bile sıvının tıklama alanından
+// ya da cam görselinin içinden sapmasına yol açardı.
 //
-// Tüp tek parçadır: dibi yarım daire, gövdesi düz, ağzına doğru yatayda
-// hafifçe genişler. Genişleme ayrı bir parça değil, camın kendi devamıdır.
+// Tüp tek parçadır: dibi yarım daire, gövdesi düz. (Ağız genişletme
+// parametreleri MouthWidth = Width iken etkisizdir; görseldeki genişleme
+// bej yakanın işi.)
 //
-//     \_______/     <- ağız: gövdeden geniş
 //      |     |
 //      |     |      <- gövde: sıvı burada durur
 //      |     |
@@ -64,11 +65,9 @@ float2 BodyCenter(float2 quadSize, float2 bodySize)
     return float2(0.0, -quadSize.y * 0.5 + bodySize.y * 0.5);
 }
 
-// Toon tasarımda tüp DÜZ: yalnızca gövde kutusu. Eski ağız genişlemesi ve
-// yumuşak birleşim kaldırıldı — SdSmoothUnion eşit genişlikte bile birleşme
-// yerinde dışa şişirip üstte istenmeyen bombe yapıyordu. Genişleme artık ayrı
-// bej halka (Collar) ile sağlanır. mouthSize/mouthRadius/blend imza uyumu için
-// duruyor; kullanılmıyor.
+// Tüp DÜZ: yalnızca gövde kutusu (görseldeki genişleme bej yakanın işi).
+// mouthSize/mouthRadius/blend parametreleri imza uyumu için duruyor;
+// kullanılmıyorlar (sadeleştirme cila adayı — bkz. CLAUDE.md).
 float SdTube(float2 p, float2 quadSize, float2 bodySize, float2 mouthSize,
     float topRadius, float bottomRadius, float mouthRadius, float blend)
 {

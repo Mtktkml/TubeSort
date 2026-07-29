@@ -27,7 +27,8 @@ Tests.EditMode ──────────> Core
 `Vector3`, `Color`, `MonoBehaviour` buraya yazılamaz; yazılırsa proje derlenmez.
 
 Kazancı: kurallar sahne kurmadan, EditMode'da saniyeler içinde test edilebiliyor.
-Görsel katman baştan yazıldı (sprite → shader), Core'un tek satırı değişmedi.
+Görsel katman iki kez baştan yazıldı (basit sprite → shader → ekip asset'leri),
+Core'un tek satırı değişmedi.
 
 - `Tube.cs` — bir tüpün içeriği. Sıvı dipten yukarı `int` listesi. Kilit özellik
   `TopSegmentLength`: üstteki bitişik aynı renk sayısı.
@@ -44,28 +45,46 @@ Renkler `int`; `Color` bir Unity tipi olduğu için Core'a giremez. Çeviri
 
 - `ColorPalette.cs` — Core'un `int` renk kimliğini ekran rengine çevirir.
   Tanımsız kimlikte parlak pembe döner (hata gizlenmesin diye).
-- `TubeView.cs` — çevirmen. Core'un verisini shader diline çevirir: bitişik aynı
-  renkleri tek katmanda birleştirir, sınırları ve doluluğu
-  `MaterialPropertyBlock` ile gönderir.
+- `TubeView.cs` — çevirmen. Tüpün görünümünü kurar: cam/yaka/tıpa ekip
+  görselleri (SpriteRenderer katmanları), sıvı shader — Core'un verisini
+  bitişik aynı renkleri tek katmanda birleştirip `MaterialPropertyBlock`
+  ile sıvıya gönderir.
 - `BoardView.cs` — tahtayı kurar, dokunuşu `Board`'a hamleye çevirir, yerleşimi
   ekrana göre hesaplar. Tek oyun kuralı içermez; hepsini `Board`'a sorar.
 
-### Shader'lar — `Assets/Resources/`
+### Görseller ve shader'lar — `Assets/Resources/`
 
-`Resources` altındalar çünkü `Shader.Find` build'de kullanılmayan shader'ları
-bulamaz; `Resources` altındakiler garanti dahil edilir.
+Statik parçalar (cam tüp, bej yaka, mantar tıpa) ekipten gelen PNG
+sprite'lardır; dinamik olanlar (sıvı, dökme akışı) shader'la çizilir —
+seviye/renk/dalga çalışma anında değiştiği için asset'le yapılamazlar.
+`Resources` altındalar çünkü her şey koddan kurulur: sahnede/prefab'da
+referans yok, `Resources` dışında build'e girmezlerdi.
 
-- `TubeShape.hlsl` — şekil matematiği (SDF). Cam ve sıvı ikisi de `#include`
-  eder; formül tek yerde olmasa sıvı camdan taşardı.
-- `Glass.shader` — cam tüp. Tek parça: dibi yarım daire, ağzına doğru yatayda
-  genişler (`SdSmoothUnion` ile kaynatılmış iki yuvarlak dikdörtgen).
-- `Liquid.shader` — sıvı. Camın şeklini alıp et kalınlığı kadar daraltarak
-  kırpar, içine katmanları ve yüzey dalgasını çizer.
+Katman sırası (sortingOrder): cam 0 < sıvı 1 < arka yaka 2 < tıpa 3 <
+ön yaka parçaları 4 < akış 5.
+
+- `Sprites/tube.png` — cam tüp (PPU 247.5, pivot Bottom, **9-slice** alt
+  border 88: dip kavisi sabit kalır, düz gövde kapasiteyle uzar).
+- `Sprites/collar.png` — bej yaka (PPU 244; tam genişliği = `FullWidth`
+  yerleşim çapası). Tıpa sandviçinin ön parçaları bu görselden çalışma
+  anında **eğri alfa maskesiyle** üretilir (`TubeView.CreateCollarFront*`;
+  bu yüzden Read/Write açık). Maske dışı pikselde yalnız alfa sıfırlanır,
+  RGB korunur — yoksa bilinear filtre kenarda koyu çizgi bırakır.
+- `Sprites/cork.png` — mantar tıpa (PPU 229); yalnız `Tube.IsComplete`
+  tüpte görünür.
+- `TubeShape.hlsl` — sıvının şekil matematiği (SDF); CPU tıklama
+  doğrulaması (`TubeView.SdTube`) aynı formülleri C#'ta uygular.
+- `Liquid.shader` — sıvı: katmanlar, doluluk, yüzey dalgası, eğim.
 - `Stream.shader` — dökme akışı. Kuadratik Bezier eğrisini SDF ile çizer,
   kaynakta geniş hedefte daralır, akış yönünde parlaklık dalgası kayar.
 
-Elle HLSL yazıldı, Shader Graph değil: katman renkleri **dizi** ve döngüyle
-işleniyor, Shader Graph'ta dizi/döngü yok.
+PPU'lar tek kaynaktan türetilir: yaka görselinin tam genişliği 1.2 birim
+kabul edilir, diğerleri birleşik referans görselindeki (`tube (2).png`)
+piksel oranlarından hesaplanır. Ekip exportları farklı ölçekte
+gelebiliyor — yeni görselde oran birleşik referansla doğrulanmalı.
+
+Sıvı elle HLSL yazıldı, Shader Graph değil: katman renkleri **dizi** ve
+döngüyle işleniyor, Shader Graph'ta dizi/döngü yok.
 
 ## Kurallar ve tuzaklar
 
@@ -77,7 +96,7 @@ işleniyor, Shader Graph'ta dizi/döngü yok.
 |---|---|
 | Doluluk seviyesi | Dalga yüksekliği |
 | Katman sınırları | Yüzey yumuşaklığı, `FillHeadroom` |
-| | Ağız genişlemesi, cam et kalınlığı |
+| | `MouthExtension`, 9-slice dip kavisi |
 
 Dalga bir zamanlar gövde oranındaydı; 12 birimlik tüpte 4 birimliğin üç katı
 oluyordu.
@@ -92,10 +111,10 @@ katman sayısı kapasiteye eşittir, yani bu sayı aynı zamanda **desteklenen e
 büyük tüp kapasitesi**. Aşılırsa `TubeView.Initialize` hata basar (sessizce
 yanlış çizmek yerine).
 
-**SDF formülleri iki yerde:** `TubeShape.hlsl` (shader, piksel boyama) ve
-`TubeView.cs` (C#, tıklama doğrulama). GPU ile CPU arasında kod paylaşılamadığı
-için tekrar kaçınılmaz. Tüp şekli değişirse ikisi birlikte güncellenmelidir:
-`SdRoundedBox`, `SdSmoothUnion` ve `SdTube`.
+**SDF formülleri iki yerde:** `TubeShape.hlsl` (sıvı shader'ı, piksel boyama)
+ve `TubeView.cs` (C#, tıklama doğrulama). GPU ile CPU arasında kod
+paylaşılamadığı için tekrar kaçınılmaz. Sıvının şekli değişirse ikisi birlikte
+güncellenmelidir: `SdRoundedBox`, `SdSmoothUnion` ve `SdTube`.
 
 **Sabitleri ölçüden türet, uydurma.** `horizontalSpacing = 1.2f` ve
 `maxTubesPerRow = 5` gibi ekranla/ölçüyle ilgisiz sayılar iki kez sorun çıkardı.
@@ -140,57 +159,45 @@ doğrulamaz. Görsel doğrulama gözle yapılır.
 
 1. ~~Sıvı mantığı (headless)~~
 2. ~~Basit görsel~~
-3. ~~Sıvı shader'ı~~ (SDF, cam, genişleyen ağız)
+3. ~~Sıvı shader'ı~~ (SDF)
 4. ~~Ekrana uyarlanan yerleşim~~
 5. ~~Dökme animasyonu~~
 6. Level üretici
 7. Cila + meta (undo, +1 tüp, kapak animasyonu, ses)
 8. Build
 
-### Kaldığımız yer (29 Tem 2026 — toon tasarım TAMAM, sırada: feature/asset-tube)
+### Kaldığımız yer (29 Tem 2026 — görsel katman ekip asset'leriyle)
 
-**Toon tasarım entegrasyonu:** ekip çizgi-film stili tüp+tıpa tasarımı gönderdi
-(referanslar kullanıcının Masaüstü'nde: `tube2.png`, `tube (2).png`, `mm.png`,
-`ağız kısmı.png`). Tasarım asset olarak değil **runtime'da shader ile** üretiliyor.
-~7 iterasyon turu (kullanıcı + ekip spec'leriyle) tamamlandı:
+**Görsel katman asset'e geçti (mentör onayı):** cam tüp + bej yaka + mantar
+tıpa, ekipten gelen çizgi-film stili PNG'lerle (`Resources/Sprites/`)
+kuruluyor. Sıvı ve dökme akışı dinamik oldukları için shader olarak kaldı.
+Görsel katmanın runtime'da shader'la çizilen önceki sürümünün tamamı
+**`runtime-shaders`** branch'inde yaşıyor (silinmedi; gerekirse dönülür).
+Butonlar BAŞKA ekibin işi — bizim kapsam tüp + sıvı + akış.
 
-- **Glass/Liquid/TubeShape:** düz toon tüp (mouth-expansion kalktı), kalın tek tip
-  kontur, iç açık çizgi, iki mavimsi-beyaz şerit (cam+sıvı hizalı, `_StreakScale`),
-  `MouthExtension` (cam tepesi yakanın arkasına uzar, sıvı matematiği değişmez).
-- **Collar.shader (yeni):** bej yaka — TEK düz elips silüet (simit; alt yarı %20
-  basık "yumurta"), üstte içeride kalan koyu delik, deliğin ALTINDA ön bandın üst
-  1/3 diliminden geçen aşağı-bombeli PARANTEZ çizgisi (kontur renginde, gövdesi
-  sabit kalın, uçlara sivrilir; kendi `fwidth`'i), yatay krem gradyan. **İki
-  katman sandviç:** arka (order 2) + ön (order 4) tıpayı (order 3) sarar; ön
-  katmanın şeffaf penceresi = delik içi + parantez ALTINDAKİ tıpa gövdesi (alt
-  sınır tıpa dip ovali gibi dışbükey yay; en altta kontur + bej şerit tıpanın
-  önünde). Tıpa silüeti `CorkWinSil` olarak Collar'a kopya — Cork ile birlikte
-  güncellenmeli.
-- **Cork.shader (yeni):** mantar tıpa — basık elips üst yüz + büyük koni + kademe +
-  küçük koni + oval dışbükey dip; prosedürel gözenekler **eleme** ile (çizgiye/
-  kontura değecek gözenek hiç çizilmez); üst yüz koyu dolgulu basık, yan açık
-  dolgulu yuvarlak. Yalnız `Tube.IsComplete` tüpte görünür. (Kademe hizasındaki
-  "temas gölgesi" bandı kaldırıldı — pencereden görününce çizgi gibi duruyordu.)
-- **Mobil sağlamlık:** tüm `fwidth` çağrıları discard'lardan önce; ön katman kesimi
-  discard değil alfa ile (OpKill türev bozulması riski).
-- Kalınlık/konum sabitleri `TubeView.cs`'de yorumlu; doğrulamalar ultracode
-  workflow'larıyla yapıldı (3 tur, derleme+geometri+spec mercekleri).
+Kurulumun kritik noktaları (ayrıntı "Görseller ve shader'lar" bölümünde):
 
-**Tamam (29 Tem 2026, gözle onaylandı, master'a birleşti):** parantez seam +
-açılan renkler (cam 0.82,0.94,0.99; yaka 0.99,0.96,0.82 → 0.91,0.85,0.70) +
-tıpa yaka penceresi (katman sırası referans `tube (2).png`: tıpa → delik → bej →
-parantez → tıpa → ince bej + kontur → tüpte tıpa). Kalan cila adayları (asset
-işi sonrasına): tıpa pop animasyonu, `SdTube`'un no-op mouth parametre zincirinin
-sadeleştirilmesi.
+- **Cam 9-slice:** dip kavisi sabit, düz gövde kapasiteyle uzar; tepe
+  `MouthExtension` kadar yakanın arkasına uzanır. Görseldeki parlama
+  şeritleri gövdeyle orantılı uzar; sıvı bölgesindeki devamını
+  `Liquid.shader` çizer (göz kararı hizalı).
+- **Yaka sandviçi:** arka katman görselin tamamı; tıpa; ön parçalar yakadan
+  eğri alfa maskesiyle üretilir — delik ön yayı pencere (tıpa deliğe girmiş
+  okunur), parantez çizgisi sınırı **çalışma anında sütun sütun ölçülür**
+  (el çizimi çizgi asimetrik, sabit eğri uçlarda sızdırıyordu), alt şerit
+  üstü aşağı-dışbükey oval.
+- **Tıpa konumu** birleşik referans (`tube (2).png`) piksel ölçümünden
+  (`CorkTopAboveCollarTop`); ayrı cork.png farklı ölçekte export edilmişti,
+  PPU bunu telafi ediyor (genişlik çapa, boy ~%8 uzun — gözle onaylı).
+- **Yerleşim payları:** `TopOverhang` (tıpa tepesi; tıpa gizliyken de yer
+  ayrılır), `SideOverhang` (0 — yaka görseli tam FullWidth).
 
-**Sırada — feature/asset-tube:** AYNI tasarım ekipten gelecek sprite
-asset'leriyle yeniden kurulacak (deney; shader sürümü yedek olarak master'da
-kalır, asset sürümü onaylanırsa temizlenir). Butonlar BAŞKA ekibin işi — kapsam
-yalnız tüp (cam+yaka+tıpa). Dikkat: tüp gövdesi kapasiteyle uzuyor
-(`HeightFor`) — tube.png düz ölçeklenemez, 9-slice (dip sabit, gövde uzar) ya
-da kapasite başına varyant gerekir; ekiple konuşulacak. Eski deneme branch'i
-`feature/asset-redesign` (buton sprite'ları + deneme tüp asset'i + AssetTest
-sahnesi) 29 Tem'de silindi; commit `1ec9f9f` reflog'da.
+Sırada:
+- İstenirse ekipten: yakanın "tıpa önü" parçasının ayrı PNG'si (şimdilik
+  maske üretimi yeterli), görsel revizyonlar aynı canvas'tan export.
+- Cila adayları: sıvı-cam dip kavisi ince hizası cihazda gözden geçirilecek
+  (görselin dibi sıvı yarım dairesinden hafif basık), tıpa pop animasyonu,
+  `SdTube`'un no-op mouth parametre zincirinin sadeleştirilmesi, ses/ikon.
 
 ### Kaldığımız yer (23 Tem 2026)
 
@@ -291,12 +298,11 @@ Notlar:
 Durum (29 Tem sonu): master'da her şey birleşik — solver + sayım, undo
 özelliği (`feature/undo`), dökme donması düzeltmesi (`TiltedEdgeLevel`,
 `fix/pour-freeze`), **D adımının tamamı** (level akışı + navigasyon +
-çıkmaz tespiti + formül revizyonu, `b17251a`) ve **toon tasarım
-entegrasyonu** (`feature/design-integration` birleşti). `feature/level-metrics`
-ve `feature/asset-redesign` (butonlar başka ekibe geçti; son hâli `1ec9f9f`)
-silindi. Çalışma **`feature/asset-tube`** branch'inde: toon tasarımın
-asset'lerle yeniden yapımı. Cihazda (APK) doğrulandı, telefonda fps gözlemi
-"Bilinen eksikler"de.
+çıkmaz tespiti + formül revizyonu, `b17251a`) ve **asset görsel katmanı**
+(mentör onayı; shader sürümü `runtime-shaders` branch'inde).
+`feature/level-metrics` ve `feature/asset-redesign` (butonlar başka ekibe
+geçti; son hâli `1ec9f9f`) silindi. Cihazda (APK) doğrulandı, telefonda fps
+gözlemi "Bilinen eksikler"de.
 
 ### Bilinen eksikler
 
@@ -306,9 +312,8 @@ asset'lerle yeniden yapımı. Cihazda (APK) doğrulandı, telefonda fps gözlemi
   yapılır, oyun sırasında çağrılırsa görünümler yıkılıp yeniden kurulur.
   Level üretici ve level geçişi bu kapıyı kullanacak.)
 - Sahne hâlâ `SampleScene` adında; içindeki `BoardView` nesnesi `GameObject`.
-- Görsel asset'e geçiş `feature/asset-tube`'da deneniyor (ekip tasarımları);
-  yazı tipi TMP LiberationSans ile geldi (Faz 1B). Ses ve ikon cila adımında
-  (Kenney.nl, freesound.org).
+- Ses ve ikon cila adımında (Kenney.nl, freesound.org); yazı tipi TMP
+  LiberationSans ile geldi (Faz 1B).
 - **Telefonda akıcılık (23 Tem 2026, cihaz testi):** animasyonlar cihazda
   editördekinden az akıcı. Muhtemel sebepler, olasılık sırasıyla:
   (1) `Application.targetFrameRate` ayarlanmadı — Unity mobilde varsayılan
@@ -395,11 +400,13 @@ Basit görsel (adım 2) sonrasını anlamak için aşağıdan yukarı:
 1. `Assets/Scripts/Core/Tube.cs` — tüpün veri modeli (tazeleme)
 2. `Assets/Scripts/Core/Board.cs` — hamle kuralları (tazeleme)
 3. `Assets/Scripts/Core/PourResult.cs` — hamle raporu (tazeleme)
-4. **`Assets/Resources/TubeShape.hlsl`** — şekil matematiği (SDF), cam ve sıvı ortak
-5. **`Assets/Resources/Glass.shader`** — cam tüp
-6. **`Assets/Resources/Liquid.shader`** — sıvı, katmanlar, dalga
+4. **`Assets/Resources/TubeShape.hlsl`** — sıvının şekil matematiği (SDF)
+5. **`Assets/Resources/Liquid.shader`** — sıvı, katmanlar, dalga
+6. **`Assets/Resources/Sprites/`** — cam/yaka/tıpa görselleri (import
+   ayarları önemli: PPU, pivot, 9-slice border)
 7. **`Assets/Scripts/Game/ColorPalette.cs`** — int renk → ekran rengi
-8. **`Assets/Scripts/Game/TubeView.cs`** — Core → shader köprüsü
+8. **`Assets/Scripts/Game/TubeView.cs`** — Core → görünüm köprüsü (sprite
+   katmanları + sıvı MPB)
 9. **`Assets/Scripts/Game/StreamView.cs`** — dökme akış görseli
 10. **`Assets/Scripts/Game/BoardView.cs`** — tahta, dokunuş, yerleşim
 11. `Assets/Tests/EditMode/` — Core testleri

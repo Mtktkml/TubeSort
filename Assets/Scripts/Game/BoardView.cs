@@ -670,8 +670,9 @@ namespace TubeSort.Game
         /// Verilen ızgaranın kaplayacağı alan. Tüplerin gerçek ölçülerinden
         /// hesaplanır; gövdeye ek olarak üstte tıpa/yaka dörtgenlerinin taşması
         /// (TopOverhang), yanlarda yaka dörtgeninin payı (SideOverhang) da
-        /// dahildir. Bunlar sayılmayınca dar ekranda tahta üstten/yandan
-        /// taşıyordu (toon yaka+tıpa ile ortaya çıktı, LayoutFitTests yakaladı).
+        /// dahildir. Yaka/tıpa görselleri gövdeden taştığı için bunlar
+        /// sayılmayınca dar ekranda tahta üstten/yandan taşar (LayoutFitTests
+        /// yakalar).
         /// </summary>
         private Vector2 MeasureBoard(int columns, int rows)
         {

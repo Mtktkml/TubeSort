@@ -47,11 +47,10 @@ namespace TubeSort.Game
         private const float BottomRadius = Width * 0.5f;
 
         /// <summary>
-        /// Toon tasarımda cam DÜZ tüp: ağız genişlemesi yok, genişleme ayrı bej
-        /// halkaya (collar) devredildi. MouthWidth = Width olunca ağız kutusu
-        /// gövdeyle aynı genişliğe iner ve SdSmoothUnion düz bir tüp verir.
-        /// Şekil hem shader'a (WriteShape) hem CPU tıklama SDF'ine (SdTube) bu
-        /// sabitten gider; ikisi birlikte güncellenir.
+        /// Sıvının gövdesi DÜZ tüp: ağız genişlemesi yok (MouthWidth = Width
+        /// olunca SdSmoothUnion düz bir tüp verir; görseldeki genişleme bej
+        /// yakanın işi). Şekil hem sıvı shader'ına (WriteShape) hem CPU tıklama
+        /// SDF'ine (SdTube) bu sabitten gider; ikisi birlikte güncellenir.
         /// </summary>
         public const float MouthWidth = Width;
 
@@ -75,23 +74,23 @@ namespace TubeSort.Game
         private const float FillHeadroom = 0.2f;
 
         /// <summary>
-        /// Cam tüpün üst kenarı yakanın ARKASINA bu kadar uzar: yaka tüpün üstüne
-        /// oturur, tüp ağzı/kenarı yakanın altından sırıtmaz, arada fon boşluğu
-        /// kalmaz. Sıvı matematiği etkilenmez — uzantı yalnız cam quad'ına yazılır,
-        /// sıvı kendi kısa gövde ölçüsüyle kırpılır.
+        /// Cam görselinin üst kenarı yakanın ARKASINA bu kadar uzar: yaka tüpün
+        /// üstüne oturur, tüp ağzı/kenarı yakanın altından sırıtmaz, arada fon
+        /// boşluğu kalmaz. Sıvı matematiği etkilenmez — uzantı yalnız cam
+        /// sprite'ının boyuna eklenir, sıvı kendi kısa gövde ölçüsüyle kırpılır.
         /// </summary>
         private const float MouthExtension = Width * 0.15f;
 
-        // ── Sprite yaka + tıpa (feature/asset-tube): ekip PNG'leri, runtime
-        // shader yerine SpriteRenderer. Ölçek çapası: yaka görselinin tam
-        // genişliği = FullWidth (1.2 birim); PPU'lar buna göre girildi
-        // (collar 244, cork 229 — birleşik referans `tube (2).png` piksel
+        // ── Görsel katman: cam/yaka/tıpa ekip PNG'leri (Resources/Sprites),
+        // SpriteRenderer ile. Ölçek çapası: yaka görselinin tam genişliği =
+        // FullWidth (1.2 birim); PPU'lar buna göre girildi (collar 244,
+        // cork 229, tube 247.5 — birleşik referans `tube (2).png` piksel
         // ölçümleri, 29 Tem 2026). Görsel ya da PPU değişirse buradaki
         // piksel/PPU sabitleri de birlikte güncellenmeli. ──
         /// <summary>Yakanın yarı genişliği (yerleşim çapası; FullWidth = 2×bu).</summary>
         public const float CollarRx = Width * 0.75f;
-        /// <summary>Yaka merkezinin tüp tepesine göre y'si (shader sürümünden
-        /// devralınan onaylı konum: yakanın alt kenarı tüp ağzını örter).</summary>
+        /// <summary>Yaka merkezinin tüp tepesine göre y'si: yakanın alt kenarı
+        /// tüp ağzını örter, arada fon boşluğu kalmaz.</summary>
         private const float CollarCenterY = Width * 0.21f;
         /// <summary>Resources yolları — BoardView yükler, TubeView kullanır.</summary>
         public const string CollarSpritePath = "Sprites/collar";
@@ -234,8 +233,8 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// Bej yakayı ekip görseliyle üç katman kurar — shader sürümündeki onaylı
-        /// sandviçin sprite karşılığı:
+        /// Bej yakayı üç katman kurar — tıpa yakanın içinden geçiyormuş gibi
+        /// okunsun diye sandviç:
         ///   arka (order 2): görselin tamamı (delik dahil), tıpanın ARKASINDA;
         ///   ön-üst parça (order 4): delik ön yayı (kenar çizgisi dahil, delik
         ///     içi pencere şeffaf) → parantez çizgisinin altı — tıpa deliğe
@@ -414,9 +413,9 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// Tüpün ekranda kapladığı toplam genişlik. Toon tasarımda en geniş parça
-        /// bej yaka olduğu için yerleşim ona göre yapılır; yoksa komşu tüplerin
-        /// yakaları birbirine girer. (Cam/sıvı dörtgeni daha dar: QuadWidth.)
+        /// Tüpün ekranda kapladığı toplam genişlik. En geniş parça bej yaka
+        /// olduğu için yerleşim ona göre yapılır; yoksa komşu tüplerin
+        /// yakaları birbirine girer. (Cam/sıvı daha dar.)
         /// </summary>
         public static float FullWidth => 2f * CollarRx;
 
