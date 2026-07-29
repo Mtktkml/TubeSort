@@ -65,18 +65,20 @@ namespace TubeSort.Tests.PlayMode
         }
 
         [Test]
-        public void Pilot_SecondTutorial_IsTwoColorWithOneEmpty()
+        public void Pilot_SecondTutorial_IsTwoColorWithTwoEmpties()
         {
-            // Tier 2 (level 3-4): 2 renk, 1 boş, 3 tüp.
+            // Tier 2 (level 3-4): 2 renk, 2 boş, 4 tüp. Başta 1 boştu; mentör
+            // kararıyla (`e11e871`) çıkmaz-güvenli yapıldı — tek boşla 2.1/2.2
+            // tuzaklıydı. Test o değişiklikte güncellenmeyi atlamıştı.
             Board board = LevelLibrary.LoadFrom(Pilot, 3);
             Assert.AreEqual("2.1", LevelLibrary.LabelOf(Pilot, 3));
-            Assert.AreEqual(3, board.TubeCount, "Öğretici 2: 3 tüp olmalı");
+            Assert.AreEqual(4, board.TubeCount, "Öğretici 2: 4 tüp olmalı");
             Assert.AreEqual(2, DistinctColors(board).Count, "Öğretici 2: 2 renk olmalı");
 
             int emptyCount = 0;
             foreach (Tube tube in board.Tubes)
                 if (tube.IsEmpty) emptyCount++;
-            Assert.AreEqual(1, emptyCount, "Öğretici 2: 1 boş tüp olmalı");
+            Assert.AreEqual(2, emptyCount, "Öğretici 2: 2 boş tüp olmalı");
         }
 
         [Test]

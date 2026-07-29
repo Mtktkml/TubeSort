@@ -349,6 +349,22 @@ namespace TubeSort.Game
         /// </summary>
         public static float FullWidth => 2f * CollarRx;
 
+        /// <summary>
+        /// Görsellerin tüp tepesinin (BodyHeight) üstüne taşan kısmı. En yükseğe
+        /// uzanan dörtgen tıpanınki; tıpa gizliyken de yer ayrılır — hem tüp
+        /// tamamlanınca tahta yeniden ölçeklenmesin, hem de kapalı renderer'ın
+        /// dörtgeni de ekran ölçümüne girer (LayoutFitTests bounds toplar).
+        /// Yaka dörtgeni daha kısa kalır (CollarCenterY + CollarQuadHeight/2).
+        /// </summary>
+        public static float TopOverhang => 2f * CorkHalfHeight - CorkBottomInset + CorkPadding;
+
+        /// <summary>
+        /// En geniş dörtgenin (yaka) FullWidth dışına taşan tek yan payı: kontur
+        /// kırpılmasın diye bırakılan CollarPadding. Yerleşim toplam genişliğe
+        /// iki yanda birer tane ekler.
+        /// </summary>
+        public static float SideOverhang => CollarPadding;
+
         /// <summary>Verilen kapasitedeki bir tüpün ekranda kaplayacağı yükseklik.</summary>
         public static float HeightFor(int capacity) => capacity * UnitHeight;
 
