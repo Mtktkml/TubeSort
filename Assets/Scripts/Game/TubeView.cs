@@ -67,11 +67,17 @@ namespace TubeSort.Game
 
         /// <summary>
         /// Tüp ağzına kadar dolu olsa bile sıvının tepesiyle tüpün ucu arasında
-        /// kalan boşluk. Dünya birimi: hem yüzey dalgasının yeri hem de sıvıyı
-        /// genişleyen ağzın altında tutar, ikisi de tüpün boyuyla ölçeklenmez.
-        /// Oran olarak tutulsaydı uzun tüpte tepede kocaman bir boşluk kalırdı.
+        /// kalan boşluk (dünya birimi, tüpün boyuyla ölçeklenmez). Ölçüden
+        /// türer: tıpanın tüpe sarkan kısmı + görünür pay — tıpa takılıyken
+        /// üst sıvı katmanı da tamamen görünür kalır. (Sabit 0.2'yken tıpa,
+        /// sıvının tepesini örtüyordu.) HeightFor tüpü bu pay kadar uzatır;
+        /// birim sıvı boyu etkilenmez.
         /// </summary>
-        private const float FillHeadroom = 0.2f;
+        private static float FillHeadroom => CorkSpriteHeight - TopOverhang + CorkLiquidGap;
+
+        /// <summary>Tıpa dibi ile dolu sıvının tepesi arasında istenen görünür
+        /// boşluk (2.5D yüzey elipsine de yer bırakır).</summary>
+        private const float CorkLiquidGap = 0.12f;
 
         /// <summary>
         /// Cam görselinin üst kenarı yakanın ARKASINA bu kadar uzar: yaka tüpün
@@ -101,6 +107,10 @@ namespace TubeSort.Game
         public const string TubeSpritePath = "Sprites/tube";
         /// <summary>Yaka görselinin dünya yüksekliği (113 px / 244 PPU).</summary>
         private const float CollarSpriteHeight = 113f / 244f;
+        /// <summary>Tıpa görselinin dünya yüksekliği (201 px / 229 PPU) —
+        /// FillHeadroom türetimi statik kalsın diye sabit; görsel/PPU değişirse
+        /// birlikte güncellenir (CreateCork konumu çalışma anında sprite'tan okur).</summary>
+        private const float CorkSpriteHeight = 201f / 229f;
         // collar.png eğri sınırları (piksel, satırlar ÜSTTEN; 29 Tem taraması).
         // Ön parçalar dikdörtgen DEĞİL eğri maskeyle kesilir: düz kenarlar
         // tıpayı cetvelle kesilmiş gösteriyordu (kullanıcı bulgusu). Görsel
@@ -435,8 +445,12 @@ namespace TubeSort.Game
         /// </summary>
         public static float SideOverhang => 0f;
 
-        /// <summary>Verilen kapasitedeki bir tüpün ekranda kaplayacağı yükseklik.</summary>
-        public static float HeightFor(int capacity) => capacity * UnitHeight;
+        /// <summary>Verilen kapasitedeki bir tüpün ekranda kaplayacağı yükseklik:
+        /// sıvı alanı (kapasite × birim) + tepe payı (FillHeadroom). Böylece her
+        /// birim sıvı tam UnitHeight boyundadır ve dolu tüpte bile tepede tıpaya
+        /// yetecek boşluk kalır.</summary>
+        public static float HeightFor(int capacity) =>
+            capacity * UnitHeight + FillHeadroom;
 
         /// <summary>Sıvının durduğu gövdenin yüksekliği; tüpün tam boyu.</summary>
         private float BodyHeight => HeightFor(tube.Capacity);

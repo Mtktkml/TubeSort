@@ -192,12 +192,24 @@ Kurulumun kritik noktaları (ayrıntı "Görseller ve shader'lar" bölümünde):
 - **Yerleşim payları:** `TopOverhang` (tıpa tepesi; tıpa gizliyken de yer
   ayrılır), `SideOverhang` (0 — yaka görseli tam FullWidth).
 
-Sırada:
-- İstenirse ekipten: yakanın "tıpa önü" parçasının ayrı PNG'si (şimdilik
-  maske üretimi yeterli), görsel revizyonlar aynı canvas'tan export.
-- Cila adayları: sıvı-cam dip kavisi ince hizası cihazda gözden geçirilecek
-  (görselin dibi sıvı yarım dairesinden hafif basık), tıpa pop animasyonu,
-  `SdTube`'un no-op mouth parametre zincirinin sadeleştirilmesi, ses/ikon.
+**Aktif iş — `feature/liquid-stream`:** akış ve sıvı görünümü. Onaylı yol
+haritası (29 Tem; sırayla, her madde gözle onay + commit):
+
+- [x] **1. Tüp boyu + sıvı tepe payı:** tüp uzadı (`HeightFor` = sıvı alanı +
+  `FillHeadroom`; pay = tıpa sarkması 0.312 + görünür boşluk 0.12). Birim
+  sıvı boyu artık tam `UnitHeight` (kapasiteler arası tutarlı). Tıpalıyken
+  üst katman tamamen görünür.
+- [ ] **2. 2.5D sıvı:** üst yüzey elips (sıvının açık tonu), katman sınırları
+  aynı basıklıkta kavisli; basıklık yaka perspektifiyle uyumlu.
+- [ ] **3. Dikdörtgen akış + kaynak yaka ağzı:** Bezier yerine ağızdan dik
+  inen kolon; kaynak noktası YAKA AĞZI olur (şu an akış yakanın içinden
+  çıkıyor — kullanıcı bulgusu).
+- [ ] **4. Damla efekti:** sürekli dalga kalkar; akış yüzeye değdiği sürece
+  değme noktasından yayılan eş merkezli elips halkalar; boşta yüzey durgun.
+
+Cila adayları (harita dışı): sıvı-cam dip kavisi ince hizası, tıpa pop
+animasyonu, `SdTube` no-op mouth zinciri sadeleştirme, ses/ikon; ekipten
+istenirse "tıpa önü" yaka parçasının ayrı PNG'si.
 
 ### Kaldığımız yer (23 Tem 2026)
 
