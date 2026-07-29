@@ -5,10 +5,14 @@ Shader "TubeSort/Glass"
 {
     Properties
     {
-        _BodyColor ("Gövde rengi", Color) = (0.75, 0.82, 0.90, 0.18)
-        _RimColor ("Kenar rengi", Color) = (0.85, 0.90, 0.95, 0.6)
-        _RimWidth ("Kenar kalınlığı", Float) = 0.035
-        _GlossStrength ("Parlama şiddeti", Range(0, 1)) = 0.08
+        // Toon stil: soluk açık mavi gövde, kalın siyah outline, outline'ın
+        // içinde açık bir kenar çizgisi (cam et-kalınlığı), sol tarafta beyaz şeritler.
+        _BodyColor ("Gövde rengi", Color) = (0.82, 0.94, 0.99, 0.9)
+        _RimColor ("Outline rengi", Color) = (0.11, 0.09, 0.10, 1.0)
+        _RimWidth ("Outline kalınlığı", Float) = 0.025
+        _InnerColor ("İç kenar çizgisi", Color) = (0.93, 0.97, 1.0, 0.9)
+        _InnerWidth ("İç çizgi kalınlığı", Float) = 0.028
+        _GlossStrength ("Şerit opaklığı", Range(0, 1)) = 0.85
     }
 
     SubShader
@@ -37,6 +41,8 @@ Shader "TubeSort/Glass"
                 float4 _BodyColor;
                 float4 _RimColor;
                 float _RimWidth;
+                float4 _InnerColor;
+                float _InnerWidth;
                 float _GlossStrength;
             CBUFFER_END
 
@@ -48,6 +54,10 @@ Shader "TubeSort/Glass"
             float _BottomRadius;
             float _MouthRadius;
             float _MouthBlend;
+            // Cam gövdesi yaka arkasına uzatılmış yazılır; şeritler sıvıyla aynı
+            // dünya konumunda kalsın diye UV bu oranla sıvı-gövde uzayına çevrilir.
+            // Değer: (uzatılmış boy) / (sıvı gövde boyu). TubeView.ApplyShape yazar.
+            float _StreakScale;
 
             struct Attributes
             {
@@ -88,16 +98,37 @@ Shader "TubeSort/Glass"
                 if (inside <= 0.001)
                     discard;
 
-                // Kenara yakın piksellerden ince bir çerçeve: camın et kalınlığı.
-                // Şekil tek parça olduğu için çerçeve de ağzın etrafından
-                // kesintisiz dolaşır.
-                float rim = 1.0 - smoothstep(_RimWidth - edge, _RimWidth + edge, abs(distance));
-                half4 color = lerp(_BodyColor, _RimColor, rim);
+                // Kalın siyah outline: kenardan _RimWidth kadar içeride opak bir
+                // bant. Şekil tek parça olduğu için outline tüpün etrafından
+                // kesintisiz dolaşır. _RimColor opak (a=1), gövde saydam olsa da
+                // çizgi tam çıksın.
+                float outline = 1.0 - smoothstep(_RimWidth - edge, _RimWidth + edge, abs(distance));
 
-                // Solda dikey bir parlama şeridi; camın kendi yansıması.
+                // Outline'ın hemen içinde açık bir kenar çizgisi (cam et-kalınlığı
+                // highlight'ı): abs(distance) [_RimWidth, _RimWidth+_InnerWidth] bandı.
+                float innerA = _RimWidth + _InnerWidth;
+                float innerBand = saturate((1.0 - smoothstep(innerA - edge, innerA + edge, abs(distance))) - outline);
+
+                half4 color = _BodyColor;
+                color = lerp(color, _InnerColor, innerBand);   // önce iç açık çizgi
+                color = lerp(color, _RimColor, outline);       // üstüne siyah outline (daha dışta)
+
+                // Solda iki dikey beyaz parlama şeridi (toon cam refleksi):
+                // üstte uzun, altında kısa; ikisi de aynı x'te, uçları yuvarlak.
                 float2 bodyUV = BodyUV(p, _QuadSize.xy, _BodySize.xy);
-                float gloss = smoothstep(0.06, 0.0, abs(bodyUV.x - 0.22));
-                color.rgb += gloss * _GlossStrength * (1.0 - rim);
+                // refY: sıvı-gövde uzayındaki yükseklik — Liquid.shader'daki şerit
+                // bantlarıyla (0.50-0.85 / 0.32-0.45) birebir aynı dünya konumu.
+                float refY = bodyUV.y * max(_StreakScale, 1.0);
+                float streakX = smoothstep(0.05, 0.0, abs(bodyUV.x - 0.20));
+                float longY  = smoothstep(0.50, 0.53, refY) * smoothstep(0.85, 0.82, refY);
+                float shortY = smoothstep(0.32, 0.35, refY) * smoothstep(0.45, 0.42, refY);
+                float streak = streakX * max(longY, shortY) * (1.0 - outline);
+
+                // Şerit maviye çalan beyaza çeker + opaklığı artırır (saydam camda
+                // bile görünsün). Renk Liquid.shader'daki şeritle aynı tutulmalı.
+                float streakAmt = streak * _GlossStrength;
+                color.rgb = lerp(color.rgb, half3(0.94, 0.97, 1.0), streakAmt);
+                color.a = lerp(color.a, 1.0, streakAmt);
 
                 color.a *= inside;
                 return color;

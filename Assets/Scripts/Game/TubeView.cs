@@ -47,10 +47,13 @@ namespace TubeSort.Game
         private const float BottomRadius = Width * 0.5f;
 
         /// <summary>
-        /// Tüp ağzına doğru yatayda genişler. Ağız gövdeden bu kadar geniştir;
-        /// ayrı bir parça değil, camın devamıdır.
+        /// Toon tasarımda cam DÜZ tüp: ağız genişlemesi yok, genişleme ayrı bej
+        /// halkaya (collar) devredildi. MouthWidth = Width olunca ağız kutusu
+        /// gövdeyle aynı genişliğe iner ve SdSmoothUnion düz bir tüp verir.
+        /// Şekil hem shader'a (WriteShape) hem CPU tıklama SDF'ine (SdTube) bu
+        /// sabitten gider; ikisi birlikte güncellenir.
         /// </summary>
-        public const float MouthWidth = Width * 1.16f;
+        public const float MouthWidth = Width;
 
         /// <summary>Genişlemenin başladığı yükseklik: tüpün üst ucundan bu kadar aşağısı.</summary>
         private const float MouthHeight = 0.22f;
@@ -71,6 +74,81 @@ namespace TubeSort.Game
         /// </summary>
         private const float FillHeadroom = 0.2f;
 
+        /// <summary>
+        /// Cam tüpün üst kenarı yakanın ARKASINA bu kadar uzar: yaka tüpün üstüne
+        /// oturur, tüp ağzı/kenarı yakanın altından sırıtmaz, arada fon boşluğu
+        /// kalmaz. Sıvı matematiği etkilenmez — uzantı yalnız cam quad'ına yazılır,
+        /// sıvı kendi kısa gövde ölçüsüyle kırpılır.
+        /// </summary>
+        private const float MouthExtension = Width * 0.15f;
+
+        /// <summary>Elipslerin ortak basıklık oranı (ry/rx ≈ 1/5) — delik ve tıpa
+        /// üst yüz elipsi aynı perspektifi paylaşır. (Tıpa DİP elipsi bilinçli
+        /// olarak daha tok: 0.35, aşağı dışbükey kapanış için.)</summary>
+        private const float EllipseRatio = 0.20f;
+
+        // ── Bej yaka (collar) — DÜZ, geniş washer (yatık ince elips) + koyu delik. ──
+        /// <summary>Yaka elipsinin x yarıçapı — tüp genişliğinin ~1.5 katı toplam en.</summary>
+        public const float CollarRx = Width * 0.75f;
+        /// <summary>Silüet elipsinin yarı-yüksekliğine ek pay: ry = yarıKalınlık + bu.
+        /// Silüet TEK DÜZ ELİPS (simit) — kompozit şekiller birleşimde kıvrım
+        /// yaratıyordu, kullanıcı düz yuvarlak istedi.</summary>
+        private const float CollarArcRise = Width * 0.05f;
+        /// <summary>Bandın yarı kalınlığı; delik/seam ölçüleri buradan türetilir.
+        /// Silüet elipsinin yarı-yüksekliği = bu + CollarArcRise.</summary>
+        private const float CollarSideHalf = Width * 0.25f;
+        /// <summary>Koyu eliptik deliğin x yarıçapı. Tıpanın delik hizasındaki
+        /// yarı-genişliğinden (≈0.41×Width) DAR: tıpa takılıyken deliği tamamen
+        /// örter, arkasında koyu değil BEJ okunur. Tüp iç genişliğinden de dar.</summary>
+        private const float CollarHoleRx = Width * 0.375f;
+        /// <summary>Deliğin y yarıçapı (ortak basıklık).</summary>
+        private const float CollarHoleRy = CollarHoleRx * EllipseRatio;
+        /// <summary>Delik merkezinin yaka merkezine göre y'si — delik üst yüzeyde
+        /// tamamen İÇERİDE: arkada ince, önde geniş bej pay; kontura değmez
+        /// (silüet tepesi ARCH+yarıKalınlık=0.26, delik üstü+kenarı 0.182).
+        /// Round-6'da AYRICA ön/arka katman ayrım hattı: ön katman bu hattın
+        /// altını çizer, delik içi pencerede arkadaki tıpa görünür.</summary>
+        private const float CollarHoleCenterY = CollarSideHalf * 0.55f;
+        /// <summary>Yaka merkezinin tüp tepesine göre y'si. Round-5: SABİT merkez
+        /// hattı — kalınlaşma bu hattan simetrik yukarı/aşağı büyür (eski B+kavis
+        /// bağı koparıldı; bağlı kalsaydı yaka yukarı kayıp tıpanın görünen üstünü
+        /// yutardı). Alt kenar tüp tepesinin ~0.06 altına iner: tüp ağzı yakanın
+        /// arkasında, fon boşluğu yok; tıpanın orta bandından biraz daha fazlası
+        /// örtülür (Round-5 madde 3'ün istediği davranış).</summary>
+        private const float CollarCenterY = Width * 0.21f;
+        /// <summary>Konturun kırpılmaması için dörtgene bırakılan pay.</summary>
+        private const float CollarPadding = 0.06f;
+
+        // ── Mantar tıpa (cork) — tepe elipsi + büyük koni + kademe + küçük koni + dışbükey
+        // ön yay taban. Alt genişlikler Cork.shader'da CapRx oranı olarak türetilir. ──
+        /// <summary>Tıpanın en geniş yeri (tepe elipsi x yarıçapı).</summary>
+        private const float CorkCapRx = Width * 0.42f;
+        /// <summary>Tıpanın yarı-yüksekliği (üst yüzden dibe). Bodur: yaka üstünde
+        /// görünen kısım ≈ yakanın kendi kalınlığı; orta bant yaka arkasında; ~%25-30
+        /// tüpün içinde (referans oranı).</summary>
+        private const float CorkHalfHeight = Width * 0.55f;
+        /// <summary>Tıpanın oval dibinin tüp ağzından ne kadar içeri indiği (dünya birimi
+        /// Width oranı) — alt frustum tüpe girer, dibi sıvının önünde görünür.</summary>
+        private const float CorkBottomInset = Width * 0.33f;
+        /// <summary>Kontur/pay.</summary>
+        private const float CorkPadding = 0.06f;
+
+        // Tıpa dikey yerleşim türevleri — CreateCork ile yakanın tıpa penceresi
+        // (_CorkSilYs, bkz. Collar.shader CorkWinSil) aynı sayıları kullanmak
+        // zorunda; tek yerde türetilir.
+        /// <summary>Tepe elipsinin y yarıçapı (ortak basıklık).</summary>
+        private static float CorkCapRy => EllipseRatio * CorkCapRx;
+        /// <summary>Tepe elipsi merkezi (tıpa dörtgen merkezine göre).</summary>
+        private static float CorkYTop => CorkHalfHeight - CorkCapRy;
+        /// <summary>Dip ovali merkezi (y yarıçapı = 0.35 × taban genişliği).</summary>
+        private static float CorkYBase => -CorkHalfHeight + 0.35f * (0.70f * CorkCapRx);
+        /// <summary>Kademe: küçük koninin başladığı y (alt 1/3'ün başı).</summary>
+        private static float CorkYStep => CorkYBase + (CorkYTop - CorkYBase) / 3f;
+        /// <summary>Tıpa dörtgen merkezinin yaka merkezine göre y'si. Kapasiteden
+        /// bağımsız: iki merkez de tüp tepesine göre sabit uzaklıkta.</summary>
+        private static float CorkCenterAboveCollar =>
+            CorkHalfHeight - CorkBottomInset - CollarCenterY;
+
         private static readonly int LayerColorsId = Shader.PropertyToID("_LayerColors");
         private static readonly int LayerTopsId = Shader.PropertyToID("_LayerTops");
         private static readonly int FillLevelId = Shader.PropertyToID("_FillLevel");
@@ -82,7 +160,19 @@ namespace TubeSort.Game
         private static readonly int BottomRadiusId = Shader.PropertyToID("_BottomRadius");
         private static readonly int MouthRadiusId = Shader.PropertyToID("_MouthRadius");
         private static readonly int MouthBlendId = Shader.PropertyToID("_MouthBlend");
+        private static readonly int StreakScaleId = Shader.PropertyToID("_StreakScale");
         private static readonly int TiltAngleId = Shader.PropertyToID("_TiltAngle");
+        private static readonly int CollarQuadId = Shader.PropertyToID("_CollarQuad");
+        private static readonly int TopRadiiId = Shader.PropertyToID("_TopRadii");
+        private static readonly int HoleRadiiId = Shader.PropertyToID("_HoleRadii");
+        private static readonly int SideHalfId = Shader.PropertyToID("_SideHalf");
+        private static readonly int HoleCenterYId = Shader.PropertyToID("_HoleCenterY");
+        private static readonly int FrontOnlyId = Shader.PropertyToID("_FrontOnly");
+        private static readonly int CorkSilRadiiId = Shader.PropertyToID("_CorkSilRadii");
+        private static readonly int CorkSilYsId = Shader.PropertyToID("_CorkSilYs");
+        private static readonly int CorkQuadId = Shader.PropertyToID("_CorkQuad");
+        private static readonly int CapRadiiId = Shader.PropertyToID("_CapRadii");
+        private static readonly int CorkYsId = Shader.PropertyToID("_CorkYs");
 
         private Tube tube;
         private ColorPalette palette;
@@ -90,6 +180,9 @@ namespace TubeSort.Game
 
         private SpriteRenderer glass;
         private SpriteRenderer liquid;
+        private SpriteRenderer collar;
+        private SpriteRenderer cork;
+        private SpriteRenderer collarFront;
         private MaterialPropertyBlock properties;
         private Vector3 restPosition;
         private bool isSelected;
@@ -105,7 +198,8 @@ namespace TubeSort.Game
         public int Index { get; private set; }
 
         public void Initialize(int index, Tube tube, ColorPalette palette, Sprite unitSprite,
-            Material glassMaterial, Material liquidMaterial)
+            Material glassMaterial, Material liquidMaterial, Material collarMaterial,
+            Material corkMaterial)
         {
             Index = index;
             this.tube = tube;
@@ -125,20 +219,25 @@ namespace TubeSort.Game
 
             properties = new MaterialPropertyBlock();
 
-            glass = CreateQuad("Glass", glassMaterial, sortingOrder: 0);
-            liquid = CreateQuad("Liquid", liquidMaterial, sortingOrder: 1);
+            // Cam quad'ı MouthExtension kadar uzun: tepe kenarı yakanın arkasına
+            // saklanır. Sıvı kendi kısa gövdesiyle kırpılır (fill matematiği aynı).
+            glass = CreateQuad("Glass", glassMaterial, sortingOrder: 0, GlassQuadHeight);
+            liquid = CreateQuad("Liquid", liquidMaterial, sortingOrder: 1, QuadHeight);
 
             ApplyShape(glass);
+            CreateCork(corkMaterial);      // order 3: arka yakanın önünde
+            CreateCollar(collarMaterial);  // order 2 (arka) + order 4 (ön overlay)
             CreateClickArea();
             Refresh();
         }
 
         /// <summary>
-        /// Cam ve sıvı aynı boyutta iki dörtgendir. Aynı olmaları şart: ikisi de
-        /// gövdenin yerini kendi uv'sinden hesapladığı için, boyutları farklı
-        /// olsaydı sıvı camın şekline oturmazdı.
+        /// Cam ve sıvı iki ayrı dörtgendir; gövde ölçüsü her birinin kendi property
+        /// block'una yazılır. Cam, yakanın arkasına MouthExtension kadar uzar; sıvı
+        /// kısa gövdeyle kalır — böylece sıvı hiçbir zaman uzantıya taşmaz.
         /// </summary>
-        private SpriteRenderer CreateQuad(string name, Material material, int sortingOrder)
+        private SpriteRenderer CreateQuad(string name, Material material, int sortingOrder,
+            float quadHeight)
         {
             var go = new GameObject(name);
             go.transform.SetParent(transform, false);
@@ -148,19 +247,107 @@ namespace TubeSort.Game
             renderer.sharedMaterial = material;
             renderer.sortingOrder = sortingOrder;
 
-            go.transform.localScale = new Vector3(QuadWidth, QuadHeight, 1f);
+            go.transform.localScale = new Vector3(QuadWidth, quadHeight, 1f);
             // Sprite'ın merkezi ortada; tüpün dibi yerel sıfır noktasında dursun.
-            go.transform.localPosition = new Vector3(0f, QuadHeight * 0.5f, 0f);
+            go.transform.localPosition = new Vector3(0f, quadHeight * 0.5f, 0f);
 
             return renderer;
         }
 
         /// <summary>
-        /// Tüpün ekranda kapladığı toplam genişlik: genişleyen ağız ve yumuşak
-        /// birleşimin taşma payı dahil. Yerleşimi hesaplayan taraf bunu bilmeli,
-        /// yoksa tüpler birbirine girer.
+        /// Kalın bej yakayı iki quad ile kurar: arka/tam yaka (order 2, tıpanın
+        /// ARKASINDA — koyu delik burada) ve ön yüz overlay'i (order 4, tıpanın
+        /// ÖNÜNDE — collar'ın ön kenarı tıpayı sarsın). Böylece tıpa halkadan geçer:
+        /// kapak önde, ortada collar önde, tüp içinde tekrar görünür. Ön overlay yalnız
+        /// mantar varken açılır (bkz. Refresh).
         /// </summary>
-        public static float FullWidth => MouthWidth + 2f * MouthBlend;
+        private void CreateCollar(Material material)
+        {
+            collar = CreateCollarQuad("Collar", material, 2, frontOnly: false);
+            collarFront = CreateCollarQuad("CollarFront", material, 4, frontOnly: true);
+            collarFront.enabled = false;
+        }
+
+        private SpriteRenderer CreateCollarQuad(string name, Material material, int sortingOrder, bool frontOnly)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(transform, false);
+
+            var r = go.AddComponent<SpriteRenderer>();
+            r.sprite = unitSprite;
+            r.sharedMaterial = material;
+            r.sortingOrder = sortingOrder;
+            go.transform.localScale = new Vector3(CollarQuadWidth, CollarQuadHeight, 1f);
+            go.transform.localPosition = new Vector3(0f, BodyHeight + CollarCenterY, 0f);
+
+            r.GetPropertyBlock(properties);
+            properties.SetVector(CollarQuadId, new Vector4(CollarQuadWidth, CollarQuadHeight, 0f, 0f));
+            properties.SetVector(TopRadiiId, new Vector4(CollarRx, CollarArcRise, 0f, 0f));
+            properties.SetVector(HoleRadiiId, new Vector4(CollarHoleRx, CollarHoleRy, 0f, 0f));
+            properties.SetFloat(SideHalfId, CollarSideHalf);
+            properties.SetFloat(HoleCenterYId, CollarHoleCenterY);
+            properties.SetFloat(FrontOnlyId, frontOnly ? 1f : 0f);
+            // Tıpa penceresi: ön katman, parantez çizgisinin altında tıpa
+            // gövdesini örtmesin diye yaka shader'ı tıpanın silüetini bilir
+            // (Collar.shader CorkWinSil). Aynı geometri CreateCork'a da gider;
+            // w bileşeni = tıpa merkezinin yaka merkezine göre y'si.
+            properties.SetVector(CorkSilRadiiId, new Vector4(CorkCapRx, CorkCapRy, 0f, 0f));
+            properties.SetVector(CorkSilYsId,
+                new Vector4(CorkYTop, CorkYStep, CorkYBase, CorkCenterAboveCollar));
+            r.SetPropertyBlock(properties);
+            return r;
+        }
+
+        private static float CollarQuadWidth => 2f * CollarRx + 2f * CollarPadding;
+        private static float CollarQuadHeight => 2f * (CollarSideHalf + CollarArcRise) + 2f * CollarPadding;
+
+        /// <summary>
+        /// Mantar tıpayı kurar (yakanın ÖNÜNDE, sortingOrder 3). Başlangıçta gizli;
+        /// yalnız tüp tamamlanınca görünür (bkz. Refresh). Şekil: kesik koni — üst elips
+        /// yüz (geniş) + daralan yan + oval dar dip. Tüpün ağzından içeri girer.
+        /// </summary>
+        private void CreateCork(Material material)
+        {
+            var go = new GameObject("Cork");
+            go.transform.SetParent(transform, false);
+
+            cork = go.AddComponent<SpriteRenderer>();
+            cork.sprite = unitSprite;
+            cork.sharedMaterial = material;
+            cork.sortingOrder = 3;   // yakanın ÖNÜNDE
+            cork.enabled = false;
+
+            // Spec geometrisi (dörtgen merkezine göre):
+            // tepe elipsi ry ≈ W/5; büyük koni üst 2/3, küçük koni alt 1/3; kademe
+            // alttaki 1/3'ün başında; taban dışbükey ön yay.
+            float W = CorkCapRx;
+            float capRy = CorkCapRy;
+            float halfH = CorkHalfHeight;
+            float yTop = CorkYTop;
+            float yBase = CorkYBase;
+            float yStep = CorkYStep;   // kademe = küçük koninin başı
+
+            float quadW = 2f * W + 2f * CorkPadding;
+            float quadH = 2f * (halfH + CorkPadding);
+            go.transform.localScale = new Vector3(quadW, quadH, 1f);
+            // Konum dipten: oval dip tüp ağzının CorkBottomInset kadar altında biter.
+            // Kademe böylece yaka bandının arkasına düşer (bantça gizlenir).
+            float centerY = BodyHeight - CorkBottomInset + halfH;
+            go.transform.localPosition = new Vector3(0f, centerY, 0f);
+
+            cork.GetPropertyBlock(properties);
+            properties.SetVector(CorkQuadId, new Vector4(quadW, quadH, 0f, 0f));
+            properties.SetVector(CapRadiiId, new Vector4(W, capRy, 0f, 0f));
+            properties.SetVector(CorkYsId, new Vector4(yTop, yStep, yBase, 0f));
+            cork.SetPropertyBlock(properties);
+        }
+
+        /// <summary>
+        /// Tüpün ekranda kapladığı toplam genişlik. Toon tasarımda en geniş parça
+        /// bej yaka olduğu için yerleşim ona göre yapılır; yoksa komşu tüplerin
+        /// yakaları birbirine girer. (Cam/sıvı dörtgeni daha dar: QuadWidth.)
+        /// </summary>
+        public static float FullWidth => 2f * CollarRx;
 
         /// <summary>Verilen kapasitedeki bir tüpün ekranda kaplayacağı yükseklik.</summary>
         public static float HeightFor(int capacity) => capacity * UnitHeight;
@@ -176,25 +363,30 @@ namespace TubeSort.Game
         /// kavis oluştururken şekli bir miktar dışarı taşırdığı için ayrıca
         /// harmanlama payı kadar boşluk bırakılır; yoksa kavis kenardan kırpılır.
         /// </summary>
-        private static float QuadWidth => FullWidth;
+        private static float QuadWidth => MouthWidth + 2f * MouthBlend;
 
-        /// <summary>
-        /// Ağız gövdenin üstüne biner, üstüne eklenmez: tüpün boyu gövdenin boyudur.
-        /// </summary>
+        /// <summary>Sıvı dörtgeninin boyu: gövdenin boyu (fill matematiği buna göre).</summary>
         private float QuadHeight => BodyHeight;
 
-        /// <summary>Şekil ölçülerini shader'a bildirir. Cam için bir kez yeter; boyutu değişmez.</summary>
+        /// <summary>Cam dörtgeninin boyu: gövde + yaka arkasına saklanan uzantı.</summary>
+        private float GlassQuadHeight => BodyHeight + MouthExtension;
+
+        /// <summary>Cam şekil ölçülerini shader'a bildirir. Bir kez yeter; boyutu değişmez.
+        /// Cam gövdesi MouthExtension kadar uzun yazılır (uzantı yakanın arkasında).</summary>
         private void ApplyShape(SpriteRenderer renderer)
         {
             renderer.GetPropertyBlock(properties);
-            WriteShape();
+            WriteShape(BodyHeight + MouthExtension, GlassQuadHeight);
+            // Şeritler sıvıyla aynı dünya konumunda kalsın: cam UV'si bu oranla
+            // sıvı-gövde uzayına çevrilir (Glass.shader'daki refY).
+            properties.SetFloat(StreakScaleId, (BodyHeight + MouthExtension) / BodyHeight);
             renderer.SetPropertyBlock(properties);
         }
 
-        private void WriteShape()
+        private void WriteShape(float bodyHeight, float quadHeight)
         {
-            properties.SetVector(QuadSizeId, new Vector4(QuadWidth, QuadHeight, 0f, 0f));
-            properties.SetVector(BodySizeId, new Vector4(Width, BodyHeight, 0f, 0f));
+            properties.SetVector(QuadSizeId, new Vector4(QuadWidth, quadHeight, 0f, 0f));
+            properties.SetVector(BodySizeId, new Vector4(Width, bodyHeight, 0f, 0f));
             properties.SetVector(MouthSizeId, new Vector4(MouthWidth, MouthHeight, 0f, 0f));
             properties.SetFloat(TopRadiusId, TopRadius);
             properties.SetFloat(BottomRadiusId, BottomRadius);
@@ -238,7 +430,7 @@ namespace TubeSort.Game
             }
 
             liquid.GetPropertyBlock(properties);
-            WriteShape();
+            WriteShape(BodyHeight, QuadHeight); // sıvı kısa gövdeyle kırpılır
             properties.SetVectorArray(LayerColorsId, layerColors);
             properties.SetFloatArray(LayerTopsId, layerTops);
             currentFill = tube.Count / (float)tube.Capacity * FillSpan;
@@ -246,6 +438,12 @@ namespace TubeSort.Game
             properties.SetInt(LayerCountId, layerCount);
             properties.SetFloat(TiltAngleId, tiltAngle);
             liquid.SetPropertyBlock(properties);
+
+            // Mantar yalnız tamamlanmış tüpte (dolu + tek renk) görünür. Tube.IsComplete
+            // boş tüp için de true döner; boşta mantar istemiyoruz, o yüzden !IsEmpty.
+            // Collar'ın ön overlay'i de yalnız mantar varken çizilir.
+            cork.enabled = tube.IsComplete && !tube.IsEmpty;
+            collarFront.enabled = cork.enabled;
         }
 
         /// <summary>Tube'un güncel verisine göre doluluk seviyesinin olması gereken değer.</summary>
@@ -322,21 +520,15 @@ namespace TubeSort.Game
             return SdTube(p) <= 0f;
         }
 
+        // Düz tüp: shader'daki SdTube ile aynı — yalnızca gövde kutusu, ağız
+        // kaynaşması yok (bkz. TubeShape.hlsl açıklaması).
         private float SdTube(Vector2 p)
         {
             Vector2 quadSize = new Vector2(QuadWidth, QuadHeight);
             Vector2 bodySize = new Vector2(Width, BodyHeight);
-            Vector2 mouthSize = new Vector2(MouthWidth, MouthHeight);
 
             Vector2 bodyCenter = new Vector2(0f, -quadSize.y * 0.5f + bodySize.y * 0.5f);
-            float bodyDist = SdRoundedBox(p - bodyCenter, bodySize * 0.5f,
-                TopRadius, BottomRadius);
-
-            Vector2 mouthCenter = new Vector2(0f, quadSize.y * 0.5f - mouthSize.y * 0.5f);
-            float mouthDist = SdRoundedBox(p - mouthCenter, mouthSize * 0.5f,
-                MouthRadius, MouthRadius);
-
-            return SdSmoothUnion(bodyDist, mouthDist, MouthBlend);
+            return SdRoundedBox(p - bodyCenter, bodySize * 0.5f, TopRadius, BottomRadius);
         }
 
         /// <summary>Yuvarlak köşeli dikdörtgenin SDF'i. Üst ve alt köşe yarıçapları ayrı.</summary>
@@ -351,12 +543,6 @@ namespace TubeSort.Game
             return Mathf.Min(Mathf.Max(q.x, q.y), 0f)
                 + new Vector2(Mathf.Max(q.x, 0f), Mathf.Max(q.y, 0f)).magnitude
                 - r;
-        }
-
-        private static float SdSmoothUnion(float d1, float d2, float k)
-        {
-            float h = Mathf.Clamp01(0.5f + 0.5f * (d2 - d1) / k);
-            return Mathf.Lerp(d2, d1, h) - k * h * (1f - h);
         }
 
         /// <summary>Tüpün dinlenme konumu. Animasyon sırasında hedef hesaplamak için.</summary>
@@ -388,6 +574,9 @@ namespace TubeSort.Game
         {
             glass.sortingOrder = 0 + offset;
             liquid.sortingOrder = 1 + offset;
+            collar.sortingOrder = 2 + offset;
+            cork.sortingOrder = 3 + offset;
+            collarFront.sortingOrder = 4 + offset;
         }
 
         /// <summary>Seçili tüp yukarı kalkar; oyuncu neyi seçtiğini görsün.</summary>

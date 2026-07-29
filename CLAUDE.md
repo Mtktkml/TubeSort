@@ -147,6 +147,51 @@ doğrulamaz. Görsel doğrulama gözle yapılır.
 7. Cila + meta (undo, +1 tüp, kapak animasyonu, ses)
 8. Build
 
+### Kaldığımız yer (29 Tem 2026 — toon tasarım TAMAM, sırada: feature/asset-tube)
+
+**Toon tasarım entegrasyonu:** ekip çizgi-film stili tüp+tıpa tasarımı gönderdi
+(referanslar kullanıcının Masaüstü'nde: `tube2.png`, `tube (2).png`, `mm.png`,
+`ağız kısmı.png`). Tasarım asset olarak değil **runtime'da shader ile** üretiliyor.
+~7 iterasyon turu (kullanıcı + ekip spec'leriyle) tamamlandı:
+
+- **Glass/Liquid/TubeShape:** düz toon tüp (mouth-expansion kalktı), kalın tek tip
+  kontur, iç açık çizgi, iki mavimsi-beyaz şerit (cam+sıvı hizalı, `_StreakScale`),
+  `MouthExtension` (cam tepesi yakanın arkasına uzar, sıvı matematiği değişmez).
+- **Collar.shader (yeni):** bej yaka — TEK düz elips silüet (simit; alt yarı %20
+  basık "yumurta"), üstte içeride kalan koyu delik, deliğin ALTINDA ön bandın üst
+  1/3 diliminden geçen aşağı-bombeli PARANTEZ çizgisi (kontur renginde, gövdesi
+  sabit kalın, uçlara sivrilir; kendi `fwidth`'i), yatay krem gradyan. **İki
+  katman sandviç:** arka (order 2) + ön (order 4) tıpayı (order 3) sarar; ön
+  katmanın şeffaf penceresi = delik içi + parantez ALTINDAKİ tıpa gövdesi (alt
+  sınır tıpa dip ovali gibi dışbükey yay; en altta kontur + bej şerit tıpanın
+  önünde). Tıpa silüeti `CorkWinSil` olarak Collar'a kopya — Cork ile birlikte
+  güncellenmeli.
+- **Cork.shader (yeni):** mantar tıpa — basık elips üst yüz + büyük koni + kademe +
+  küçük koni + oval dışbükey dip; prosedürel gözenekler **eleme** ile (çizgiye/
+  kontura değecek gözenek hiç çizilmez); üst yüz koyu dolgulu basık, yan açık
+  dolgulu yuvarlak. Yalnız `Tube.IsComplete` tüpte görünür. (Kademe hizasındaki
+  "temas gölgesi" bandı kaldırıldı — pencereden görününce çizgi gibi duruyordu.)
+- **Mobil sağlamlık:** tüm `fwidth` çağrıları discard'lardan önce; ön katman kesimi
+  discard değil alfa ile (OpKill türev bozulması riski).
+- Kalınlık/konum sabitleri `TubeView.cs`'de yorumlu; doğrulamalar ultracode
+  workflow'larıyla yapıldı (3 tur, derleme+geometri+spec mercekleri).
+
+**Tamam (29 Tem 2026, gözle onaylandı, master'a birleşti):** parantez seam +
+açılan renkler (cam 0.82,0.94,0.99; yaka 0.99,0.96,0.82 → 0.91,0.85,0.70) +
+tıpa yaka penceresi (katman sırası referans `tube (2).png`: tıpa → delik → bej →
+parantez → tıpa → ince bej + kontur → tüpte tıpa). Kalan cila adayları (asset
+işi sonrasına): tıpa pop animasyonu, `SdTube`'un no-op mouth parametre zincirinin
+sadeleştirilmesi.
+
+**Sırada — feature/asset-tube:** AYNI tasarım ekipten gelecek sprite
+asset'leriyle yeniden kurulacak (deney; shader sürümü yedek olarak master'da
+kalır, asset sürümü onaylanırsa temizlenir). Butonlar BAŞKA ekibin işi — kapsam
+yalnız tüp (cam+yaka+tıpa). Dikkat: tüp gövdesi kapasiteyle uzuyor
+(`HeightFor`) — tube.png düz ölçeklenemez, 9-slice (dip sabit, gövde uzar) ya
+da kapasite başına varyant gerekir; ekiple konuşulacak. Eski deneme branch'i
+`feature/asset-redesign` (buton sprite'ları + deneme tüp asset'i + AssetTest
+sahnesi) 29 Tem'de silindi; commit `1ec9f9f` reflog'da.
+
 ### Kaldığımız yer (23 Tem 2026)
 
 **Hedef (mentör kararı): 300 önceden üretilmiş-seçilmiş level.** Leveller
@@ -192,8 +237,9 @@ Yol haritası — A, B, C tamam, sıra D'de:
      ve dar tahtalar 3-12× az çözümle doğru şekilde daha zor sıralanıyor.
      Yan bulgu: eşit hacimde sığ+çok-renk, derin+az-renkten daha dar
      (kapasitenin hacim ötesi etkisi — D'de mentöre).
-- [~] **D. Level üretimi + Unity tarafı.** *(27 Tem 2026'da mentör + kullanıcı
-  kararlarıyla revize edildi; `feature/tutorial-levels` branch'inde sürüyor.)*
+- [x] **D. Level üretimi + Unity tarafı.** *(27 Tem 2026'da mentör + kullanıcı
+  kararlarıyla revize edildi; Faz 1A + 1B + formül revizyonu master'a birleşti —
+  bkz. commit'ler `ba1e519`, `0cfac29`, `e11e871`, `b17251a`.)*
   Pilotun açtığı işlerin güncel durumu:
   - **Ters-üretim: İPTAL.** Gereksiz görüldü; mevcut rastgele generate-and-test
     onaylandı. Karar: kap≤4'te boş=1 mümkün, **kap≥5'te her zaman 2 boş**
@@ -210,13 +256,24 @@ Yol haritası — A, B, C tamam, sıra D'de:
   - **Skora göre sıralama:** ranked tier'lar (12 mevcut + köprü) skora göre
     artan; öğreticiler başa sabit. `pilot_levels.json`'a yazılır.
   - **Ağırlık/eğri: oyuncu testiyle.** Mentör soyut karar vermeyecek; insanlar
-    oynayacak, feedback `WEIGHTS`'i (0.55T/0.20A/0.15L/0.10C) ayarlayacak. JSON'a
-    skor DEĞİL **ham metrik** (enKısa, çözümSayısı) yazılır — ağırlık değişince
-    yeniden sıralanır.
-  - **Şema + Unity:** `pilot_levels.json` şeması genişledi: `label`, `shortest`,
-    `solutionCount`. C# tarafı (`LevelLibrary` DTO'ya `label`, `BoardView`
-    "LEVEL 1.1" başlığı, `LevelLibraryTests` 30 tahta) — sürüyor. Ekran (13+
-    tüp sığıyor mu) ve `ColorPalette` (renkler ayırt edilebilir mi) kontrolü.
+    oynayacak, feedback `WEIGHTS`'i ayarlayacak. JSON'a skor DEĞİL **ham metrik**
+    (enKısa, çözümSayısı) yazılır — ağırlık değişince yeniden sıralanır.
+    **Güncel WEIGHTS (`e11e871`, mentör):** eski 0.55T/0.20A/0.15L/0.10C →
+    **L0.45 / C0.25 / A0.15 / T0.15**. Boyut baskın olsun diye enKısa (L)
+    öne alındı; tüp/renk artışında monotonluk sağlandı, 12→13'teki büyük düşüş
+    gitti. Öğretici 2 `(4,2,1)` → `(4,2,2)`: 2 boş tüple çıkmaz-güvenli yapıldı
+    (2.1/2.2 tuzaklıydı). `pilot_levels.json` + `pilot_ladder.md` seed 42 ile
+    yeniden üretildi.
+  - **Şema + Unity — TAMAM:** `pilot_levels.json` şeması genişledi (`label`,
+    `shortest`, `solutionCount`); C# tarafı bitti — `LevelLibrary` DTO'ya
+    `label`, `BoardView` "LEVEL x.y" başlığı (TMP), `LevelLibraryTests` 30 tahta.
+    **Faz 1A (`ba1e519`):** level akışı — oto-geçiş (çözülünce 0.7s sonra sonraki),
+    skip/önceki navigasyonu, restart (yüklemedeki `pristineBoard` kopyasından),
+    +tüp (`Board.AddTube` + görünüm yeniden kurma), `ButtonView` (koddan çizili
+    placeholder butonlar). **Faz 1B (`0cfac29`):** çıkmaz tespiti — her hamlede
+    `Solver.IsSolvable`, çıkmazda "Çıkmaz!" banner + undo/restart/+tüp yanıp söner;
+    TMP (LiberationSans SDF) eklendi. Ekran (13+ tüp sığıyor mu) ve `ColorPalette`
+    (renkler ayırt edilebilir mi) göz kontrolü hâlâ açık.
   - **Mevcut leveller korunmuyor** (kullanıcı): üretim serbestçe yeniden
     koşuluyor, RNG kayması sorun değil.
   - **300 hedefi:** önce 30 tahta insan testine gidecek; ağırlık kalibre olunca
@@ -231,11 +288,15 @@ Notlar:
   3-23 deneme sığıyor. Gerekirse solver'a "yalnız varlık" hızlı modu
   eklenebilir — mentörle konuşulacak.
 
-Durum (23 Tem sonu): master'da her şey birleşik — solver + sayım, undo
-özelliği (`feature/undo` merge edildi), dökme donması düzeltmesi
-(`TiltedEdgeLevel`, `fix/pour-freeze` merge edildi). Çalışma
-`feature/level-metrics` branch'inde sürüyor; cihazda (APK) doğrulandı,
-telefonda fps gözlemi "Bilinen eksikler"de.
+Durum (29 Tem sonu): master'da her şey birleşik — solver + sayım, undo
+özelliği (`feature/undo`), dökme donması düzeltmesi (`TiltedEdgeLevel`,
+`fix/pour-freeze`), **D adımının tamamı** (level akışı + navigasyon +
+çıkmaz tespiti + formül revizyonu, `b17251a`) ve **toon tasarım
+entegrasyonu** (`feature/design-integration` birleşti). `feature/level-metrics`
+ve `feature/asset-redesign` (butonlar başka ekibe geçti; son hâli `1ec9f9f`)
+silindi. Çalışma **`feature/asset-tube`** branch'inde: toon tasarımın
+asset'lerle yeniden yapımı. Cihazda (APK) doğrulandı, telefonda fps gözlemi
+"Bilinen eksikler"de.
 
 ### Bilinen eksikler
 
@@ -245,8 +306,9 @@ telefonda fps gözlemi "Bilinen eksikler"de.
   yapılır, oyun sırasında çağrılırsa görünümler yıkılıp yeniden kurulur.
   Level üretici ve level geçişi bu kapıyı kullanacak.)
 - Sahne hâlâ `SampleScene` adında; içindeki `BoardView` nesnesi `GameObject`.
-- Asset yok ve neredeyse gerekmiyor. Ses, ikon ve yazı tipi cila adımında
-  (Kenney.nl, freesound.org, Google Fonts).
+- Görsel asset'e geçiş `feature/asset-tube`'da deneniyor (ekip tasarımları);
+  yazı tipi TMP LiberationSans ile geldi (Faz 1B). Ses ve ikon cila adımında
+  (Kenney.nl, freesound.org).
 - **Telefonda akıcılık (23 Tem 2026, cihaz testi):** animasyonlar cihazda
   editördekinden az akıcı. Muhtemel sebepler, olasılık sırasıyla:
   (1) `Application.targetFrameRate` ayarlanmadı — Unity mobilde varsayılan
@@ -256,10 +318,14 @@ telefonda fps gözlemi "Bilinen eksikler"de.
 
 ### Bilinen hatalar
 
-- **Deadlock tespiti — karar verildi, uygulanıyor:**
+- **Deadlock tespiti — ÇÖZÜLDÜ (`0cfac29`, Faz 1B):**
   `Board.HasAnyValidMove` yalnızca "yapılabilecek hamle var mı" sorusunu
-  soruyor. Hamle var ama oyun kazanılamaz (gerçek çıkmaz) durumunu
-  yakalamıyor. `feature/deadlock-detection` branch'inde çalışılıyor.
+  soruyordu; hamle var ama oyun kazanılamaz (gerçek çıkmaz) durumunu
+  yakalamıyordu. Artık her hamleden sonra `Solver.IsSolvable` (ilk çözümde
+  duran ucuz varlık kontrolü) koşuyor; çözülemez duruma düşülünce ekranda
+  "Çıkmaz!" banner'ı çıkıyor ve undo/restart/+tüp butonları yanıp sönerek
+  yönlendiriyor. Aşağıdaki kararlar bu çözümün gerekçesi (referans için
+  korunuyor):
 
   **Karar — mimari: generate-and-test.** Deadlock oyun sırasında
   yakalanmaz; level üretiminden **sonra** solver ile "bu tahta çözülebilir
