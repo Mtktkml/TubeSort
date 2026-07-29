@@ -1,5 +1,11 @@
 # TubeSort
 
+> **ARŞİV BRANCH'İ (29 Tem 2026):** Görsel katmanın (cam + bej yaka + mantar
+> tıpa) runtime'da **shader ile çizilen** son hâli burada saklanır. Güncel
+> geliştirme **master**'da: görsel katman ekip asset'lerine (sprite) geçti,
+> mentör tercihi o yön. Bu branch yalnız referans/geri dönüş içindir; üzerine
+> geliştirme yapılmaz. Aşağıdaki doküman o günün fotoğrafıdır.
+
 Water Sort (sıvı sıralama) bulmaca oyunu. Unity 6000.3.9f1, 2D URP, mobil hedefli.
 
 Ball Sort'un görsel varyantı **değil**: sıvı grup halinde akar, kısmi dökme vardır
