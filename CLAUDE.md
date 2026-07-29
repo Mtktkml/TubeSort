@@ -216,10 +216,10 @@ haritası (29 Tem; sırayla, her madde gözle onay + commit):
   (dikişsiz). Görsel yüzey fiziksel modele demirlenir (`AnchorLiquidToLip`,
   `_SurfaceLift`) — kolon sıvıya yapışık. Ayrıca: dökme hedef ağzının 0.2
   üstünden (yaka teması bulgusu), tıpa dökme bitince düşme+esneme
-  animasyonuyla takılır, undo kademeli akar (ışınlanma yok). Bilinen küçük
-  pürüz: dökmenin son fazlarında sıvı-kolon bağlantısında kısa kopmalar
-  olabiliyor (ağza sabit kilit denendi, "hiç olmadı" diye geri alındı) —
-  cila adayı.
+  animasyonuyla takılır, undo kademeli akar (ışınlanma yok). Dökmenin son
+  fazlarındaki kısa sıvı-kolon kopmaları fiziksel demirlemeyle azaltıldı
+  ve mevcut hâli kabul edildi (ağza sabit kilit denendi, "hiç olmadı"
+  diye geri alındı — bir daha denenmesin).
 - [x] **4. Damla efekti + canlılık:** sürekli dalga kalktı, boşta yüzey
   durgun. Dökme SIRASINDA değme noktasından iki yana damlacık sıçraması
   (8 damlacık, faz/menzil/boy çeşitli, dünya birimi); dökme BİTİNCE damla
@@ -232,9 +232,11 @@ haritası (29 Tem; sırayla, her madde gözle onay + commit):
 **Yol haritası TAMAM (29 Tem 2026).** Sıradaki işler cila adaylarından
 seçilecek.
 
-Cila adayları (harita dışı): sıvı-cam dip kavisi ince hizası, tıpa pop
-animasyonu, `SdTube` no-op mouth zinciri sadeleştirme, ses/ikon; ekipten
-istenirse "tıpa önü" yaka parçasının ayrı PNG'si.
+Cila adayları (harita dışı): `SdTube` no-op mouth zinciri sadeleştirme,
+ses/ikon, sahne/nesne adları + `CreateTestBoard` temizliği. Telefon
+performans turu (targetFrameRate + hamle-başı `IsSolvable` maliyeti)
+"Bilinen eksikler"de. Görsel ince ayarlar (dip kavisi, dökme sonu
+kopmalar, tıpa animasyonu) kullanıcı onayıyla kapandı (29 Tem).
 
 ### Kaldığımız yer (23 Tem 2026)
 
