@@ -7,8 +7,10 @@
 //   _FrontOnly=0 (order 2, ARKA): tam silüet + koyu delik + seam. Boş tüpte
 //     görünen budur; tıpalıyken tıpanın arkasında kalır.
 //   _FrontOnly=1 (order 4, ÖN): yalnız delik MERKEZİNİN altındaki ön bant;
-//     delik içi ŞEFFAF pencere (arkadaki tıpa görünür, tabanı deliğin ön
-//     kenarına oturur), delik ön yayı ince koyu çizgi.
+//     delik içi şeffaf; tıpa gövdesi yalnız PARANTEZ ÇİZGİSİNİN ALTINDAKİ
+//     şeffaf pencereden görünür (delik-parantez arası bej tıpayı örter),
+//     silüet alt kenarında kontur + çok ince bej şerit tıpanın ÖNÜNDE kalır
+//     (referans tube (2)).
 // Seam: ön yüz çizgisi — deliğin ALTINDA, ön bandın (delik altı → alt
 // kontur) üst 1/3 diliminin ortasından geçen aşağı-bombeli PARANTEZ:
 // kontur renginde, gövdesi sabit kalınlıkta, uçları sivrilerek biter
@@ -54,6 +56,8 @@ Shader "TubeSort/Collar"
             float _SideHalf;      // bandın YARI KALINLIĞI (stroke yarıçapı)
             float _HoleCenterY;   // delik merkezi y — ön/arka katman ayrım hattı
             float _FrontOnly;     // 1: ön katman (tıpanın önünde)
+            float4 _CorkSilRadii; // tıpa tepe elipsi (rx, ry) — pencere silüeti
+            float4 _CorkSilYs;    // (yTop, yStep, yBase, tıpa merkezi − yaka merkezi)
 
             struct Attributes { float4 positionOS : POSITION; float2 uv : TEXCOORD0; };
             struct Varyings { float4 positionCS : SV_POSITION; float2 uv : TEXCOORD0; };
@@ -72,6 +76,40 @@ Shader "TubeSort/Collar"
                 float k1 = length(p / ab);
                 float k2 = length(p / (ab * ab));
                 return k1 * (k1 - 1.0) / max(k2, 1e-4);
+            }
+
+            // ── Tıpa penceresi silüeti — Cork.shader'daki SdTrapezoid/CorkSil'in
+            // KOPYASI (0.89/0.80/0.70 genişlik oranları ve 0.02 köşe payı —
+            // Cork _CornerRadius varsayılanı — dahil). Shader'lar arası kod
+            // paylaşılamadığından tekrar kaçınılmaz; TIPA ŞEKLİ DEĞİŞİRSE İKİSİ
+            // BİRLİKTE GÜNCELLENMELİ. Ön katman bu silüetin içini parantez
+            // çizgisinin altında şeffaf bırakır ki tıpa oradan görünsün.
+            float SdTrapezoid(float2 p, float r1, float r2, float he)
+            {
+                float2 k1 = float2(r2, he);
+                float2 k2 = float2(r2 - r1, 2.0 * he);
+                p.x = abs(p.x);
+                float2 ca = float2(p.x - min(p.x, (p.y < 0.0) ? r1 : r2), abs(p.y) - he);
+                float2 cb = p - k1 + k2 * clamp(dot(k1 - p, k2) / dot(k2, k2), 0.0, 1.0);
+                float s = (cb.x < 0.0 && ca.y < 0.0) ? -1.0 : 1.0;
+                return s * sqrt(min(dot(ca, ca), dot(cb, cb)));
+            }
+
+            float CorkWinSil(float2 q)
+            {
+                float yTop = _CorkSilYs.x, yStep = _CorkSilYs.y, yBase = _CorkSilYs.z;
+                float W = _CorkSilRadii.x;
+                float wStepTop = 0.89 * W;   // büyük koni ALT (kademe üstü)
+                float wStepBot = 0.80 * W;   // küçük koni ÜST (içeri basamak)
+                float wBase    = 0.70 * W;   // taban
+
+                float dCap = SdEllipse(q - float2(0.0, yTop), _CorkSilRadii.xy);
+                float dUpper = SdTrapezoid(q - float2(0.0, (yTop + yStep) * 0.5),
+                    wStepTop, W, (yTop - yStep) * 0.5);
+                float dLower = SdTrapezoid(q - float2(0.0, (yStep + yBase) * 0.5),
+                    wBase, wStepBot, (yStep - yBase) * 0.5);
+                float dBase = SdEllipse(q - float2(0.0, yBase), float2(wBase, wBase * 0.35));
+                return min(min(dCap, dUpper), min(dLower, dBase)) - 0.02;
             }
 
 
@@ -118,6 +156,19 @@ Shader "TubeSort/Collar"
                 float dSeam = SdEllipse(p - seamCtr, seamR);
                 float es = fwidth(dSeam);
 
+                // Tıpa penceresi mesafesi de discard öncesi (fwidth kuralı).
+                // Tıpa koordinatına geçiş: tıpa merkezi, yaka merkezinin
+                // _CorkSilYs.w kadar üstünde.
+                float dCork = CorkWinSil(float2(p.x, p.y - _CorkSilYs.w));
+                float ew = fwidth(dCork);
+
+                // Pencerenin alt sınır ovali (bkz. ön katman koşul 3): tıpanın
+                // dip ovaliyle aynı basıklıkta (0.35), tıpadan geniş (1.25×)
+                // elips — yalnız alt yayı sınır olur. fwidth discard öncesi.
+                float2 ovalR = float2(1.25, 0.4375) * _CorkSilRadii.x;
+                float dOval = SdEllipse(p - float2(0.0, 0.042), ovalR);
+                float eo = fwidth(dOval);
+
                 float inside = 1.0 - smoothstep(-e, e, dSil);
                 if (inside <= 0.001)
                     discard;
@@ -140,6 +191,31 @@ Shader "TubeSort/Collar"
                     // Delik içi ŞEFFAF pencere: arkadaki tıpa görünür; tıpanın
                     // görünen tabanı deliğin ön kenarına oturur.
                     alpha *= smoothstep(-eh, eh, dHole);
+                    // Tıpa gövdesi penceresi (referans tube (2)): tıpa YALNIZ
+                    // parantez çizgisinin ALTINDA görünür — delik ile parantez
+                    // arasında bej tıpayı örter (deliğin üstünde tıpa zaten
+                    // arka katmanın önünde). Pencere üç koşulun kesişimi:
+                    //   1) tıpa silüetinin içi — kenardan 0.01 içeride biter:
+                    //      bej-tıpa geçişi tıpanın koyu konturuna düşer, arada
+                    //      fon sızmaz;
+                    //   2) parantezin ALTI — sınır, strok yarı-kalınlığının
+                    //      (0.012) hemen İÇİNDE (0.010): tıpa çizgiye DEĞER,
+                    //      arada bej sızmaz (kullanıcı isteği; çizginin yenen
+                    //      ~0.002'lik alt kenarı fark edilmez);
+                    //   3) tıpanın görünen ALT SINIRI aşağı DIŞBÜKEY oval yay
+                    //      (dOval, discard öncesi hesap) — düz kesim yerine
+                    //      tıpanın kendi dip ovali gibi biter (kullanıcı
+                    //      isteği). Merkez y (0.042) öyle ki alt yay kademe
+                    //      konturunun üstünden (x≈±0.27..0.34'te y≈-0.10)
+                    //      ~0.03 payla geçer — 0.017'lik ilk deneme payı dar
+                    //      bırakmıştı, AA + kademe üstü gölgeyle çizgi
+                    //      sırıtıyordu. Merkezde yay -0.105'e iner; altta
+                    //      kontur + ~0.06 bej şerit yine tıpanın önündedir.
+                    // Tıpasız tüpte bu katman zaten kapalı.
+                    float corkCut = 1.0 - smoothstep(-ew, ew, dCork + 0.01);
+                    corkCut *= smoothstep(0.010 - es, 0.010 + es, dSeam);
+                    corkCut *= 1.0 - smoothstep(-eo, eo, dOval);
+                    alpha *= 1.0 - corkCut;
                     // Deliğin ön yayı: ince koyu temas çizgisi.
                     float frontRim = 1.0 - smoothstep(0.012 - eh, 0.012 + eh, abs(dHole));
                     col = lerp(col, _OutlineColor.rgb, frontRim * 0.6);

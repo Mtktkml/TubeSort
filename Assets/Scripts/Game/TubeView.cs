@@ -133,6 +133,22 @@ namespace TubeSort.Game
         /// <summary>Kontur/pay.</summary>
         private const float CorkPadding = 0.06f;
 
+        // Tıpa dikey yerleşim türevleri — CreateCork ile yakanın tıpa penceresi
+        // (_CorkSilYs, bkz. Collar.shader CorkWinSil) aynı sayıları kullanmak
+        // zorunda; tek yerde türetilir.
+        /// <summary>Tepe elipsinin y yarıçapı (ortak basıklık).</summary>
+        private static float CorkCapRy => EllipseRatio * CorkCapRx;
+        /// <summary>Tepe elipsi merkezi (tıpa dörtgen merkezine göre).</summary>
+        private static float CorkYTop => CorkHalfHeight - CorkCapRy;
+        /// <summary>Dip ovali merkezi (y yarıçapı = 0.35 × taban genişliği).</summary>
+        private static float CorkYBase => -CorkHalfHeight + 0.35f * (0.70f * CorkCapRx);
+        /// <summary>Kademe: küçük koninin başladığı y (alt 1/3'ün başı).</summary>
+        private static float CorkYStep => CorkYBase + (CorkYTop - CorkYBase) / 3f;
+        /// <summary>Tıpa dörtgen merkezinin yaka merkezine göre y'si. Kapasiteden
+        /// bağımsız: iki merkez de tüp tepesine göre sabit uzaklıkta.</summary>
+        private static float CorkCenterAboveCollar =>
+            CorkHalfHeight - CorkBottomInset - CollarCenterY;
+
         private static readonly int LayerColorsId = Shader.PropertyToID("_LayerColors");
         private static readonly int LayerTopsId = Shader.PropertyToID("_LayerTops");
         private static readonly int FillLevelId = Shader.PropertyToID("_FillLevel");
@@ -152,6 +168,8 @@ namespace TubeSort.Game
         private static readonly int SideHalfId = Shader.PropertyToID("_SideHalf");
         private static readonly int HoleCenterYId = Shader.PropertyToID("_HoleCenterY");
         private static readonly int FrontOnlyId = Shader.PropertyToID("_FrontOnly");
+        private static readonly int CorkSilRadiiId = Shader.PropertyToID("_CorkSilRadii");
+        private static readonly int CorkSilYsId = Shader.PropertyToID("_CorkSilYs");
         private static readonly int CorkQuadId = Shader.PropertyToID("_CorkQuad");
         private static readonly int CapRadiiId = Shader.PropertyToID("_CapRadii");
         private static readonly int CorkYsId = Shader.PropertyToID("_CorkYs");
@@ -269,6 +287,13 @@ namespace TubeSort.Game
             properties.SetFloat(SideHalfId, CollarSideHalf);
             properties.SetFloat(HoleCenterYId, CollarHoleCenterY);
             properties.SetFloat(FrontOnlyId, frontOnly ? 1f : 0f);
+            // Tıpa penceresi: ön katman, parantez çizgisinin altında tıpa
+            // gövdesini örtmesin diye yaka shader'ı tıpanın silüetini bilir
+            // (Collar.shader CorkWinSil). Aynı geometri CreateCork'a da gider;
+            // w bileşeni = tıpa merkezinin yaka merkezine göre y'si.
+            properties.SetVector(CorkSilRadiiId, new Vector4(CorkCapRx, CorkCapRy, 0f, 0f));
+            properties.SetVector(CorkSilYsId,
+                new Vector4(CorkYTop, CorkYStep, CorkYBase, CorkCenterAboveCollar));
             r.SetPropertyBlock(properties);
             return r;
         }
@@ -296,12 +321,11 @@ namespace TubeSort.Game
             // tepe elipsi ry ≈ W/5; büyük koni üst 2/3, küçük koni alt 1/3; kademe
             // alttaki 1/3'ün başında; taban dışbükey ön yay.
             float W = CorkCapRx;
-            float capRy = EllipseRatio * W;
-            float baseRy = 0.35f * (0.70f * W);
+            float capRy = CorkCapRy;
             float halfH = CorkHalfHeight;
-            float yTop = halfH - capRy;
-            float yBase = -halfH + baseRy;
-            float yStep = yBase + (yTop - yBase) / 3f;   // kademe = küçük koninin başı
+            float yTop = CorkYTop;
+            float yBase = CorkYBase;
+            float yStep = CorkYStep;   // kademe = küçük koninin başı
 
             float quadW = 2f * W + 2f * CorkPadding;
             float quadH = 2f * (halfH + CorkPadding);
@@ -314,7 +338,7 @@ namespace TubeSort.Game
             cork.GetPropertyBlock(properties);
             properties.SetVector(CorkQuadId, new Vector4(quadW, quadH, 0f, 0f));
             properties.SetVector(CapRadiiId, new Vector4(W, capRy, 0f, 0f));
-            properties.SetVector(CorkYsId, new Vector4(yTop, yStep, yBase, yStep));
+            properties.SetVector(CorkYsId, new Vector4(yTop, yStep, yBase, 0f));
             cork.SetPropertyBlock(properties);
         }
 

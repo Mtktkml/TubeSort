@@ -17,7 +17,6 @@ Shader "TubeSort/Cork"
         _OutlineWidth ("Kontur kalınlığı", Float) = 0.025
         _EdgeShade ("Kenar koyulaşması", Float) = 0.09
         _CornerRadius ("Köşe yuvarlaklığı", Float) = 0.02
-        _ContactShade ("Temas gölgesi", Range(0,1)) = 0.30
         // Gözenekler:
         _PoreFill ("Yan gözenek içi (açık turuncu-tan)", Color) = (0.86, 0.60, 0.34, 1)
         _PoreTopFill ("Üst yüz gözenek içi (koyu kahve)", Color) = (0.38, 0.20, 0.08, 1)
@@ -51,7 +50,6 @@ Shader "TubeSort/Cork"
                 float _OutlineWidth;
                 float _EdgeShade;
                 float _CornerRadius;
-                float _ContactShade;
                 float4 _PoreFill;
                 float4 _PoreTopFill;
                 float4 _PoreEdge;
@@ -64,7 +62,7 @@ Shader "TubeSort/Cork"
             // Per-quad (MaterialPropertyBlock):
             float4 _CorkQuad;    // dörtgen dünya boyutu
             float4 _CapRadii;    // tepe elipsi (rx=W en geniş, ry≈W/5)
-            float4 _CorkYs;      // (yTop, yStep=kademe, yBase, temas y)
+            float4 _CorkYs;      // (yTop, yStep=kademe, yBase, kullanılmıyor)
 
             struct Attributes { float4 positionOS : POSITION; float2 uv : TEXCOORD0; };
             struct Varyings { float4 positionCS : SV_POSITION; float2 uv : TEXCOORD0; };
@@ -206,11 +204,9 @@ Shader "TubeSort/Cork"
                     * smoothstep(0.05, -0.06, p.y - yTop) * (1.0 - inCap);
                 col = lerp(col, _OutlineColor.rgb, rim);
 
-                // Temas gölgesi: deliğe giriş (kademe) hizasında yumuşak koyu bant.
-                float contact = smoothstep(0.06, 0.0, abs(p.y - _CorkYs.w)) * (1.0 - inCap);
-                col *= lerp(1.0, 1.0 - _ContactShade, contact);
-
-                // Tek tip koyu kontur.
+                // Tek tip koyu kontur. (Kademe hizasındaki "temas gölgesi" bandı
+                // kaldırıldı: tıpa yaka penceresinden görünür olunca ortasında
+                // yatay çizgi gibi duruyordu — kullanıcı isteği.)
                 float outline = 1.0 - smoothstep(_OutlineWidth - e, _OutlineWidth + e, abs(dSil));
                 col = lerp(col, _OutlineColor.rgb, outline);
 
