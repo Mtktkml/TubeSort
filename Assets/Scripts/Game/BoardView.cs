@@ -1040,6 +1040,7 @@ namespace TubeSort.Game
             Color streamColor = palette.Get(result.Color);
             bool pourStarted = false;
             float pourElapsed = 0f;
+            float splashStrength = 0f;   // hedefteki sıçrama (yumuşak aç/kapa)
             float fromStart = fromView.CurrentFill;
             float currentAngle = 0f;
             float angleVelocity = 0f;
@@ -1121,6 +1122,7 @@ namespace TubeSort.Game
 
                 // Akış görseli: kayma tamamlanınca göster.
                 // Kayma sırasında stream gösterilmez — tüp henüz pourPos'ta değil.
+                bool streamingNow = false;
                 if (pourStarted && moveElapsed >= slideDuration)
                 {
                     Vector3 sourcePoint = CalculateSourceMouth(fromView, currentAngle);
@@ -1132,11 +1134,20 @@ namespace TubeSort.Game
                     sourcePoint.y = Mathf.Max(sourcePoint.y, liquidEdge.y);
                     Vector3 destMouth = CalculateDestMouth(toView);
                     Vector3 destSurface = CalculateDestSurface(toView, toView.CurrentFill);
-                    if (sourcePoint.y > destSurface.y)
+                    streamingNow = sourcePoint.y > destSurface.y;
+                    if (streamingNow)
                         streamView.Show(streamColor, sourcePoint, destMouth, destSurface);
                     else
                         streamView.Hide();
                 }
+
+                // Sıçrama: akış hedef yüzeye aktığı sürece değme noktasından
+                // iki yana damlacıklar; güç yumuşak açılır/kapanır. (Halkalar
+                // dökme SIRASINDA değil, bitince patlama olarak oynar —
+                // kullanıcı isteği.)
+                splashStrength = Mathf.MoveTowards(
+                    splashStrength, streamingNow ? 1f : 0f, dt * 6f);
+                toView.SetSplashStrength(splashStrength);
 
                 if (pourStarted && pourElapsed >= pourDuration)
                     break;
@@ -1148,6 +1159,10 @@ namespace TubeSort.Game
             fromView.SetFillLevel(fromTarget);
             toView.SetFillLevel(toTarget);
             streamView.Hide();
+            toView.SetSplashStrength(0f);   // sıçrama durur
+            // Sıvı yüzeye oturdu: damla halkası patlaması şimdi oynar
+            // (kullanıcı isteği: efekt dökme bitince hissedilmeli).
+            toView.PlayRippleBurst();
             // Dökme bitti: tüp tamamlandıysa tıpa ŞİMDİ, takılma animasyonuyla;
             // akış sandviçi kapanır (tıpalıysa dilimler tıpa üzerinden açık kalır).
             toView.SetCorkSuppressed(false);

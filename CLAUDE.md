@@ -56,7 +56,7 @@ Renkler `int`; `Color` bir Unity tipi olduğu için Core'a giremez. Çeviri
 
 Statik parçalar (cam tüp, bej yaka, mantar tıpa) ekipten gelen PNG
 sprite'lardır; dinamik olanlar (sıvı, dökme akışı) shader'la çizilir —
-seviye/renk/dalga çalışma anında değiştiği için asset'le yapılamazlar.
+seviye/renk/halka çalışma anında değiştiği için asset'le yapılamazlar.
 `Resources` altındalar çünkü her şey koddan kurulur: sahnede/prefab'da
 referans yok, `Resources` dışında build'e girmezlerdi.
 
@@ -74,7 +74,8 @@ Katman sırası (sortingOrder): cam 0 < sıvı 1 < arka yaka 2 < tıpa 3 <
   tüpte görünür.
 - `TubeShape.hlsl` — sıvının şekil matematiği (SDF); CPU tıklama
   doğrulaması (`TubeView.SdTube`) aynı formülleri C#'ta uygular.
-- `Liquid.shader` — sıvı: katmanlar, doluluk, yüzey dalgası, eğim.
+- `Liquid.shader` — sıvı: katmanlar, doluluk, 2.5D yüzey diski + damla
+  halkaları (yalnız dökme sırasında; boşta yüzey durgun), eğim.
 - `Stream.shader` — dökme akışı. Kuadratik Bezier eğrisini SDF ile çizer,
   kaynakta geniş hedefte daralır, akış yönünde parlaklık dalgası kayar.
 
@@ -94,12 +95,12 @@ döngüyle işleniyor, Shader Graph'ta dizi/döngü yok.
 
 | Tüple ölçeklenir (oran) | Ölçeklenmez (dünya birimi) |
 |---|---|
-| Doluluk seviyesi | Dalga yüksekliği |
-| Katman sınırları | Yüzey yumuşaklığı, `FillHeadroom` |
-| | `MouthExtension`, 9-slice dip kavisi |
+| Doluluk seviyesi | Yüzey yumuşaklığı, `FillHeadroom` |
+| Katman sınırları | `MouthExtension`, 9-slice dip kavisi |
+| Damla halkaları (disk-normalize) | Akış kolonu genişliği |
 
-Dalga bir zamanlar gövde oranındaydı; 12 birimlik tüpte 4 birimliğin üç katı
-oluyordu.
+Ders: kaldırılan eski yüzey dalgası bir zamanlar gövde oranındaydı; 12
+birimlik tüpte 4 birimliğin üç katı oluyordu.
 
 **Renk uzayı:** proje Linear. `SetVectorArray` renk dönüşümü yapmaz (`SetColor`
 yapar). Shader'a giden renkler `TubeView.ToShaderColor` ile çevrilmeli, yoksa
@@ -219,8 +220,17 @@ haritası (29 Tem; sırayla, her madde gözle onay + commit):
   pürüz: dökmenin son fazlarında sıvı-kolon bağlantısında kısa kopmalar
   olabiliyor (ağza sabit kilit denendi, "hiç olmadı" diye geri alındı) —
   cila adayı.
-- [ ] **4. Damla efekti:** sürekli dalga kalkar; akış yüzeye değdiği sürece
-  değme noktasından yayılan eş merkezli elips halkalar; boşta yüzey durgun.
+- [x] **4. Damla efekti + canlılık:** sürekli dalga kalktı, boşta yüzey
+  durgun. Dökme SIRASINDA değme noktasından iki yana damlacık sıçraması
+  (8 damlacık, faz/menzil/boy çeşitli, dünya birimi); dökme BİTİNCE damla
+  halkası patlaması (~1.1 sn zarf, tek geniş halka, nazik yüzey kabarması
+  `_RippleHeight` 0.008 + soluk bantlar — keskin/kalabalık sürümler göze
+  battı, kullanıcı turlarıyla yumuşatıldı). Level başında ve tüp
+  kalkış/inişinde sönümlü çalkantı (`PlaySlosh`; omega 9, level 1.6 sn,
+  seçim 0.9 sn — boşluğa tıklayıp iptal de inişi tetikler).
+
+**Yol haritası TAMAM (29 Tem 2026).** Sıradaki işler cila adaylarından
+seçilecek.
 
 Cila adayları (harita dışı): sıvı-cam dip kavisi ince hizası, tıpa pop
 animasyonu, `SdTube` no-op mouth zinciri sadeleştirme, ses/ikon; ekipten
@@ -428,7 +438,7 @@ Basit görsel (adım 2) sonrasını anlamak için aşağıdan yukarı:
 2. `Assets/Scripts/Core/Board.cs` — hamle kuralları (tazeleme)
 3. `Assets/Scripts/Core/PourResult.cs` — hamle raporu (tazeleme)
 4. **`Assets/Resources/TubeShape.hlsl`** — sıvının şekil matematiği (SDF)
-5. **`Assets/Resources/Liquid.shader`** — sıvı, katmanlar, dalga
+5. **`Assets/Resources/Liquid.shader`** — sıvı, katmanlar, 2.5D yüzey + halkalar
 6. **`Assets/Resources/Sprites/`** — cam/yaka/tıpa görselleri (import
    ayarları önemli: PPU, pivot, 9-slice border)
 7. **`Assets/Scripts/Game/ColorPalette.cs`** — int renk → ekran rengi

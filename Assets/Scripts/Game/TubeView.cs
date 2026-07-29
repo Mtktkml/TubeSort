@@ -5,11 +5,11 @@ using UnityEngine;
 namespace TubeSort.Game
 {
     /// <summary>
-    /// Tek bir tüpü ekranda çizer. Tüp tek parçadır: dibi yarım daire, ağzına
-    /// doğru yatayda hafifçe genişler. Şekli, katmanları ve yüzey dalgasını
-    /// shader'lar hesaplar.
+    /// Tek bir tüpü ekranda çizer: cam/yaka/tıpa ekip görselleri
+    /// (SpriteRenderer katmanları), sıvı ve 2.5D yüzeyi (damla halkaları
+    /// dahil) shader.
     ///
-    /// Bu sınıfın işi çekirdekteki Tube'u shader'ın anlayacağı dile çevirmek:
+    /// Bu sınıfın işi çekirdekteki Tube'u görünümün diline çevirmek:
     /// "dipten yukarı [kırmızı, sarı, sarı]" -> sınırlar [0.25, 0.75] ve renkler.
     /// </summary>
     public class TubeView : MonoBehaviour
@@ -165,6 +165,9 @@ namespace TubeSort.Game
         private static readonly int MouthBlendId = Shader.PropertyToID("_MouthBlend");
         private static readonly int TiltAngleId = Shader.PropertyToID("_TiltAngle");
         private static readonly int SurfaceLiftId = Shader.PropertyToID("_SurfaceLift");
+        private static readonly int RippleStrengthId = Shader.PropertyToID("_RippleStrength");
+        private static readonly int SplashStrengthId = Shader.PropertyToID("_SplashStrength");
+        private static readonly int SwaySlopeId = Shader.PropertyToID("_SwaySlope");
 
         private Tube tube;
         private ColorPalette palette;
@@ -182,6 +185,11 @@ namespace TubeSort.Game
         private float currentFill;
         private float tiltAngle;
         private float surfaceLift;
+        private float rippleStrength;
+        private float splashStrength;
+        private float swaySlope;
+        private Coroutine rippleRoutine;
+        private Coroutine sloshRoutine;
         private Vector3 corkRestPosition;
         private bool corkSuppressed;
         private bool mouthOverlayVisible;
@@ -231,6 +239,11 @@ namespace TubeSort.Game
             CreateClickArea();
             Refresh();
             viewReady = true;
+
+            // Level başı çalkantısı: görünüm kurulur kurulmaz sıvı sallanır,
+            // sönümlenip durulur (boş tüpte sıvı yok, etki görünmez).
+            // Süre kullanıcı turlarıyla ayarlandı: 3.5 → 2 → 1.6.
+            PlaySlosh(0.15f, 1.6f);
         }
 
         /// <summary>
@@ -560,6 +573,9 @@ namespace TubeSort.Game
             properties.SetInt(LayerCountId, layerCount);
             properties.SetFloat(TiltAngleId, tiltAngle);
             properties.SetFloat(SurfaceLiftId, surfaceLift);
+            properties.SetFloat(RippleStrengthId, rippleStrength);
+            properties.SetFloat(SplashStrengthId, splashStrength);
+            properties.SetFloat(SwaySlopeId, swaySlope);
             liquid.SetPropertyBlock(properties);
 
             RefreshCork();
@@ -632,6 +648,113 @@ namespace TubeSort.Game
             surfaceLift = normalizedLift;
             liquid.GetPropertyBlock(properties);
             properties.SetFloat(SurfaceLiftId, surfaceLift);
+            liquid.SetPropertyBlock(properties);
+        }
+
+        /// <summary>Damla halkalarının anlık gücü (0-1); patlama zarfını
+        /// PlayRippleBurst sürer.</summary>
+        private void SetRippleStrength(float strength)
+        {
+            rippleStrength = strength;
+            liquid.GetPropertyBlock(properties);
+            properties.SetFloat(RippleStrengthId, rippleStrength);
+            liquid.SetPropertyBlock(properties);
+        }
+
+        /// <summary>
+        /// Sıçrama gücü (0-1): akış bu tüpün yüzeyine aktığı sürece BoardView
+        /// 1'e sürer, akış kesilince 0'a — değme noktasından iki yana damlacık.
+        /// </summary>
+        public void SetSplashStrength(float strength)
+        {
+            splashStrength = strength;
+            liquid.GetPropertyBlock(properties);
+            properties.SetFloat(SplashStrengthId, splashStrength);
+            liquid.SetPropertyBlock(properties);
+        }
+
+        /// <summary>
+        /// Dökme bittiğinde damla halkası patlaması: halkalar hızla belirir,
+        /// dışa yayılırken ~1 sn'de sönümlenir (kullanıcı isteği: efekt dökme
+        /// sırasında değil, sıvı yüzeye oturduğunda hissedilmeli).
+        /// </summary>
+        public void PlayRippleBurst()
+        {
+            if (rippleRoutine != null)
+                StopCoroutine(rippleRoutine);
+            rippleRoutine = StartCoroutine(RippleBurst());
+        }
+
+        private IEnumerator RippleBurst()
+        {
+            const float attack = 0.06f;
+            const float decay = 1.1f;
+
+            float elapsed = 0f;
+            while (elapsed < attack)
+            {
+                elapsed += Time.deltaTime;
+                SetRippleStrength(Mathf.Clamp01(elapsed / attack));
+                yield return null;
+            }
+
+            elapsed = 0f;
+            while (elapsed < decay)
+            {
+                elapsed += Time.deltaTime;
+                SetRippleStrength(1f - Mathf.SmoothStep(0f, 1f,
+                    Mathf.Clamp01(elapsed / decay)));
+                yield return null;
+            }
+
+            SetRippleStrength(0f);
+            rippleRoutine = null;
+        }
+
+        /// <summary>
+        /// Sıvıyı çalkalar (sönümlü salınım): level başında ve tüp
+        /// seçildiğinde çağrılır. Süren bir çalkantı varsa yenisi onu keser.
+        /// </summary>
+        public void PlaySlosh(float amplitude, float duration)
+        {
+            if (sloshRoutine != null)
+                StopCoroutine(sloshRoutine);
+            sloshRoutine = StartCoroutine(Slosh(amplitude, duration));
+        }
+
+        /// <summary>
+        /// Çalkantı gövdesi. Faz tüp sırasına bağlı: level başında tüpler
+        /// birlikte ama birebir aynı anda sallanmaz, organik durur. Sönüm
+        /// süreye bağlanır: verilen süre sonunda genlik ~%4'e iner.
+        /// </summary>
+        private IEnumerator Slosh(float amplitude, float duration)
+        {
+            // Hızlı salınım + süreye bağlı sönüm: kısa çalkantıda bile 2-3 yön
+            // değişimi olur — tek salınım "çalkalanma" hissi vermiyordu
+            // (kullanıcı bulgusu). Sönüm sonu ~%7 genlik: kuyruk hafif oynar.
+            const float omega = 9f;      // salınım hızı (rad/sn)
+            float damping = 2.6f / duration;
+
+            float phase = Index * 0.9f;
+            float elapsed = 0f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float slope = amplitude * Mathf.Sin(omega * elapsed + phase)
+                    * Mathf.Exp(-damping * elapsed);
+                SetSwaySlope(slope);
+                yield return null;
+            }
+
+            SetSwaySlope(0f);
+            sloshRoutine = null;
+        }
+
+        private void SetSwaySlope(float slope)
+        {
+            swaySlope = slope;
+            liquid.GetPropertyBlock(properties);
+            properties.SetFloat(SwaySlopeId, swaySlope);
             liquid.SetPropertyBlock(properties);
         }
 
@@ -826,11 +949,18 @@ namespace TubeSort.Game
             collarFrontBottom.sortingOrder = 4 + offset;
         }
 
-        /// <summary>Seçili tüp yukarı kalkar; oyuncu neyi seçtiğini görsün.</summary>
+        /// <summary>Seçili tüp yukarı kalkar; oyuncu neyi seçtiğini görsün.
+        /// Hem kalkışın hem inişin sarsıntısı sıvıyı çalkalar (kullanıcı
+        /// isteği: boşluğa tıklayıp seçimi iptal etmek — tüpün inişi — de
+        /// tetikler). Genlik level başındakiyle aynı, süresi daha kısa.</summary>
         public void SetSelected(bool selected)
         {
+            bool changed = isSelected != selected;
             isSelected = selected;
             ApplyPosition();
+
+            if (changed)
+                PlaySlosh(0.15f, 0.9f);
         }
 
         /// <summary>
