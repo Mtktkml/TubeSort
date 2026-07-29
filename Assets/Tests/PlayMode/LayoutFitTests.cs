@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using NUnit.Framework;
+using TubeSort.Core;
 using TubeSort.Game;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -142,6 +143,42 @@ namespace TubeSort.Tests.PlayMode
 
             Assert.Less(landscapeRows, portraitRows,
                 $"Yatay ekranda satır azalmalıydı (dikey {portraitRows}, yatay {landscapeRows})");
+        }
+
+        [UnityTest]
+        public IEnumerator BoardStaysBelowLevelTitle_WithTallBoard()
+        {
+            // Uzun ve kalabalık tahta (12 tüp, kapasite 6): eski yerleşim tüm
+            // ekrana ortalayıp sığdırdığı için tahta LEVEL başlığının üstüne
+            // biniyordu (kullanıcı bulgusu). Tahtaya ayrılan alan başlığın
+            // altında biter — sınırlar başlık hizasını geçmemeli.
+            cameraObject = new GameObject("Main Camera") { tag = "MainCamera" };
+            camera = cameraObject.AddComponent<Camera>();
+            camera.orthographic = true;
+            camera.orthographicSize = 8f;
+            camera.aspect = Aspect;
+            cameraObject.transform.position = new Vector3(0f, 0f, -10f);
+
+            var tubes = new List<Tube>();
+            for (int i = 0; i < 10; i++)
+                tubes.Add(new Tube(6, 0, 1, 2, 3, 4, 5));
+            tubes.Add(new Tube(6));
+            tubes.Add(new Tube(6));
+
+            boardObject = new GameObject("BoardView");
+            var view = boardObject.AddComponent<BoardView>();
+            view.LoadBoard(new Board(tubes));
+
+            yield return new WaitForFixedUpdate();
+            yield return null;
+
+            Bounds bounds = MeasureRenderedBoard();
+            // 0.38 = BoardView.TitleFraction (bilinçli kopya: test, üretim
+            // sabiti kayarsa kırmızıya dönsün).
+            float titleY = camera.transform.position.y
+                + camera.orthographicSize * 2f * 0.38f;
+            Assert.LessOrEqual(bounds.max.y, titleY - 0.2f,
+                "Tahta LEVEL başlığı hizasına taşmamalı");
         }
 
         [UnityTest]

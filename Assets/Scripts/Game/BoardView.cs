@@ -216,9 +216,12 @@ namespace TubeSort.Game
         /// </summary>
         private void BuildDeadlockBanner()
         {
-            deadlockBannerTop = CreateBannerPart("DeadlockBannerTop", "Çıkmaz!", 4f);
+            // Boyut, başlık-tahta bandına göre seçildi (4/3.2 tüplere taşıyordu,
+            // 2.2/1.6 küçük kaldı): uyarı bandın ortasında, okunur, tüplere
+            // değmeden durur.
+            deadlockBannerTop = CreateBannerPart("DeadlockBannerTop", "Çıkmaz!", 3.2f);
             deadlockBannerBottom = CreateBannerPart(
-                "DeadlockBannerBottom", "Geri al, tüp ekle ya da yeniden başla", 3.2f);
+                "DeadlockBannerBottom", "Geri al, tüp ekle ya da yeniden başla", 2.3f);
         }
 
         private TextMeshPro CreateBannerPart(string name, string text, float fontSize)
@@ -293,15 +296,20 @@ namespace TubeSort.Game
             PlaceButton(prevButton, rightX - gap, topY);
 
             // Level başlığı: üst-orta, buton sırasından biraz boşluklu.
+            float titleY = cam.y + view.y * TitleFraction;
             if (levelTitle != null)
-                levelTitle.transform.position = new Vector3(cam.x, cam.y + view.y * 0.35f, 0f);
+                levelTitle.transform.position = new Vector3(cam.x, titleY, 0f);
 
-            // Çıkmaz uyarısı: başlığın (0.35) hemen altında iki satır — üstte
-            // "Çıkmaz!", hemen altında talimat; ikisi de yatayda ortada.
+            // Çıkmaz uyarısı: başlık ile tahta tavanı arasındaki bandın ORTASINA
+            // yerleşmiş iki satır (kullanıcı isteği). Ofsetler dünya biriminde:
+            // TitleClearance da dünya biriminde olduğundan tahta tavanı her
+            // zoom'da uyarının altından geçer — uyarı tüplerin üstüne binmez.
             if (deadlockBannerTop != null)
-                deadlockBannerTop.transform.position = new Vector3(cam.x, cam.y + view.y * 0.30f, 0f);
+                deadlockBannerTop.transform.position =
+                    new Vector3(cam.x, titleY - 0.45f, 0f);
             if (deadlockBannerBottom != null)
-                deadlockBannerBottom.transform.position = new Vector3(cam.x, cam.y + view.y * 0.255f, 0f);
+                deadlockBannerBottom.transform.position =
+                    new Vector3(cam.x, titleY - 0.78f, 0f);
         }
 
         private static void PlaceButton(MonoBehaviour button, float x, float y)
@@ -628,6 +636,12 @@ namespace TubeSort.Game
             // Ölçek kameraya değil tahtaya uygulanır; kamerayı oynatsaydık
             // ileride gelecek arayüz de onunla birlikte kayardı.
             transform.localScale = Vector3.one * Mathf.Min(1f, FitScale(boardSize));
+
+            // Tahta, kendine ayrılan bandın ortasına oturur — ekran merkezine
+            // değil: üstte HUD bandı (butonlar + LEVEL başlığı) tahtaya kapalı.
+            Vector3 cam = mainCamera.transform.position;
+            transform.position = new Vector3(cam.x, cam.y + BoardAreaCenterY, 0f);
+
             lastFittedView = CameraView;
 
             // Buton görüş alanına bağlı: yerleşim her tazelendiğinde o da tazelenir.
@@ -722,18 +736,44 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// Bu tahtanın ekrana sığması için gereken ölçek. 1'den büyükse tahta
-        /// zaten sığıyor ve etrafında o kadar boşluk kalıyor demektir.
+        /// Bu tahtanın kendine ayrılan alana sığması için gereken ölçek.
+        /// 1'den büyükse tahta zaten sığıyor ve etrafında boşluk kalıyor.
         /// </summary>
         private float FitScale(Vector2 boardSize)
         {
             if (boardSize.x <= 0f || boardSize.y <= 0f) return 1f;
 
-            Vector2 view = CameraView;
+            Vector2 area = BoardAreaSize;
             float available = 1f - screenMargin;
 
-            return Mathf.Min(view.x * available / boardSize.x, view.y * available / boardSize.y);
+            return Mathf.Min(area.x * available / boardSize.x, area.y * available / boardSize.y);
         }
+
+        /// <summary>Başlığın dikey hizası (görüş yüksekliği oranı, kamera
+        /// merkezine göre). Hem PositionButtons hem tahta tavanı bunu kullanır
+        /// — 0.35'ti, banner'a yer açmak için yukarı alındı.</summary>
+        private const float TitleFraction = 0.38f;
+
+        /// <summary>LEVEL başlığının altında bırakılması gereken pay: başlık
+        /// metninin yarı boyu + altındaki boşluk + iki çıkmaz uyarı satırı
+        /// (0.45 ve 0.78 ofsetli) + nefes. Tahta tavanı bunların hepsinin
+        /// altından geçer.</summary>
+        private const float TitleClearance = 0.95f;
+
+        /// <summary>Tahta tavanı, kamera merkezine göre: başlık hizasının
+        /// payla altı. Tüpler NE OLURSA OLSUN bu çizgiyi geçemez — uzun tüplü
+        /// levellerde tahta LEVEL yazısının üstüne biniyordu (kullanıcı
+        /// bulgusu).</summary>
+        private float BoardCeiling => CameraView.y * TitleFraction - TitleClearance;
+
+        /// <summary>Tahtaya ayrılan alan: yatayda tüm görüş, dikeyde ekran
+        /// altından tavana kadar. FitScale bu alana sığdırır.</summary>
+        private Vector2 BoardAreaSize =>
+            new Vector2(CameraView.x, BoardCeiling + CameraView.y * 0.5f);
+
+        /// <summary>Ayrılan alanın dikey ortası (kamera merkezine göre) —
+        /// tahta buraya ortalanır, ekran merkezine değil.</summary>
+        private float BoardAreaCenterY => (BoardCeiling - CameraView.y * 0.5f) * 0.5f;
 
         /// <summary>Kameranın dünya birimindeki görüş alanı: yerleşimin tek girdisi.</summary>
         private Vector2 CameraView
