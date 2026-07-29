@@ -7,7 +7,7 @@ Shader "TubeSort/Glass"
     {
         // Toon stil: soluk açık mavi gövde, kalın siyah outline, outline'ın
         // içinde açık bir kenar çizgisi (cam et-kalınlığı), sol tarafta beyaz şeritler.
-        _BodyColor ("Gövde rengi", Color) = (0.73, 0.89, 0.96, 0.9)
+        _BodyColor ("Gövde rengi", Color) = (0.82, 0.94, 0.99, 0.9)
         _RimColor ("Outline rengi", Color) = (0.11, 0.09, 0.10, 1.0)
         _RimWidth ("Outline kalınlığı", Float) = 0.025
         _InnerColor ("İç kenar çizgisi", Color) = (0.93, 0.97, 1.0, 0.9)

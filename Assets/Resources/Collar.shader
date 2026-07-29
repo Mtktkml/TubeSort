@@ -8,17 +8,17 @@
 //     görünen budur; tıpalıyken tıpanın arkasında kalır.
 //   _FrontOnly=1 (order 4, ÖN): yalnız delik MERKEZİNİN altındaki ön bant;
 //     delik içi ŞEFFAF pencere (arkadaki tıpa görünür, tabanı deliğin ön
-//     kenarına oturur), delik ön yayı ince koyu çizgi, seam bandın üstünde
-//     KESİNTİSİZ (tıpa seam hattında bandın arkasında).
-// Seam: yüzeye boyanmış tek ince çizgi; uçları konturdan ~%4-5 genişlik payıyla
-// önce biter, iki yanda bej boşluk kalır. Yatay krem gradyan: sağ açık/sarımsı.
+//     kenarına oturur), delik ön yayı ince koyu çizgi.
+// Seam: ön yüz çizgisi — deliğin ALTINDA, ön bandın (delik altı → alt
+// kontur) üst 1/3 diliminin ortasından geçen aşağı-bombeli PARANTEZ:
+// kontur renginde, gövdesi sabit kalınlıkta, uçları sivrilerek biter
+// (referans tube2). Yatay krem gradyan: sağ açık/sarımsı.
 Shader "TubeSort/Collar"
 {
     Properties
     {
-        _CollarLight ("Krem açık (sağ)", Color) = (0.97, 0.93, 0.74, 1)
-        _CollarDark ("Krem koyu (sol)", Color) = (0.85, 0.78, 0.60, 1)
-        _SeamColor ("Seam çizgisi", Color) = (0.62, 0.53, 0.36, 1)
+        _CollarLight ("Krem açık (sağ)", Color) = (0.99, 0.96, 0.82, 1)
+        _CollarDark ("Krem koyu (sol)", Color) = (0.91, 0.85, 0.70, 1)
         _HoleColor ("Delik (koyu)", Color) = (0.20, 0.11, 0.07, 1)
         _OutlineColor ("Kontur", Color) = (0.11, 0.09, 0.10, 1)
         _OutlineWidth ("Kontur kalınlığı", Float) = 0.025
@@ -42,7 +42,6 @@ Shader "TubeSort/Collar"
             CBUFFER_START(UnityPerMaterial)
                 float4 _CollarLight;
                 float4 _CollarDark;
-                float4 _SeamColor;
                 float4 _HoleColor;
                 float4 _OutlineColor;
                 float _OutlineWidth;
@@ -102,6 +101,23 @@ Shader "TubeSort/Collar"
                 float dHole = SdEllipse(pHole, _HoleRadii.xy);
                 float eh = fwidth(dHole);
 
+                // Seam omurgası + KENDİ AA'sı da discard öncesi. KONUM kullanıcı
+                // tarifinden türetilir: ön bant = delik alt kenarı (yayı 0.012
+                // dahil) ile alt kontur iç kenarı arası; çizgi bu bandın üst
+                // 1/3 diliminin ORTASINDAN geçer (bant/6 kadar delik altına).
+                // Omurga: basık yardımcı elipsin ALT yayı — üst yayı silüet
+                // tepesinin (ryTop) dışında kaldığından kendiliğinden görünmez.
+                // AA için dSil'in e'si YETMEZ: 3.2:1 basıklıkta Quilez gradyanı
+                // uçlara doğru 1'den sapıyor, yanlış ölçekli AA uçları eritip
+                // çizgiyi ortada "bıyık" gibi bırakıyordu.
+                float frontTop = _HoleCenterY - _HoleRadii.y - 0.012;
+                float frontBot = _OutlineWidth - ryBot;
+                float seamY = frontTop - (frontTop - frontBot) / 6.0;
+                float2 seamR = float2(0.88 * Rx, 0.825 * halfT);
+                float2 seamCtr = float2(0.0, seamY + seamR.y);
+                float dSeam = SdEllipse(p - seamCtr, seamR);
+                float es = fwidth(dSeam);
+
                 float inside = 1.0 - smoothstep(-e, e, dSil);
                 if (inside <= 0.001)
                     discard;
@@ -140,19 +156,21 @@ Shader "TubeSort/Collar"
                     col = lerp(col, _OutlineColor.rgb, holeRim * 0.5);
                 }
 
-                // Çizgi (seam) — sıfırdan: bej üst bölgede, deliğin ALTINDAN geçen
-                // ince yay. Uçlar yukarıda (~delik hizası), orta hafifçe aşağı
-                // bombeli (referans tube2). Uçlar kenarlardan uzakta (~±0.42,
-                // kontur 0.6'da) tek X-maskesiyle yumuşak söner. Y-maskesi YOK —
-                // önceki kalıntı/çentikleri maske AA'sı üretiyordu; bu kurguda
-                // elipsin üst yayı silüetin dışında kaldığı için kendiliğinden
-                // görünmez, maskeye gerek kalmaz.
-                float2 seamCtr = float2(0.0, 0.95 * halfT);
-                float2 seamR = float2(0.83 * Rx, 0.82 * halfT);
-                float dSeam = SdEllipse(p - seamCtr, seamR);
-                float seam = (1.0 - smoothstep(0.006, 0.006 + 2.0 * e, abs(dSeam)))
-                    * smoothstep(0.70 * Rx, 0.63 * Rx, abs(p.x));
-                col = lerp(col, _SeamColor.rgb, seam);
+                // Seam çizimi — PARANTEZ profili. Renk kontur rengiyle AYNI
+                // (kullanıcı isteği: ayrı _SeamColor soluk kalıyordu,
+                // kaldırıldı). Yarı-kalınlık orta ~%65 boyunca SABİT 0.012
+                // (delik kenar çizgisiyle aynı), son ~%35'te sivri uca incelir:
+                // parabolik incelme (önceki deneme) ortayı da inceltip uçları
+                // eritiyor, çizgiyi "bıyık" gibi bırakıyordu. Son maske yalnız
+                // güvenlik: sıfır kalınlığın AA bandı tipX ötesinde hayalet iz
+                // bırakmasın. Görünür yay tamamen ön bantta (y < delik merkezi)
+                // kaldığı için ön/arka katman kesim hattı sürekliliği bozulmaz;
+                // tıpalıyken çizgi tıpanın önünde kalır (ön yüzey boyası).
+                float tipX = 0.76 * Rx;
+                float wSeam = 0.012 * smoothstep(tipX, 0.65 * tipX, abs(p.x));
+                float seam = (1.0 - smoothstep(wSeam - es, wSeam + es, abs(dSeam)))
+                    * smoothstep(tipX, 0.95 * tipX, abs(p.x));
+                col = lerp(col, _OutlineColor.rgb, seam);
 
                 // Tek kesintisiz koyu kontur.
                 float outline = 1.0 - smoothstep(_OutlineWidth - e, _OutlineWidth + e, abs(dSil));
