@@ -627,18 +627,27 @@ namespace TubeSort.Game
             float x = (column - (tubesInThisRow - 1) * 0.5f) * (TubeView.FullWidth + horizontalGap);
 
             // Tüpün konumu dibini gösterir, ortasını değil: sıvı dipten yukarı doluyor.
-            // O yüzden satırın üst kenarından tüp boyu kadar aşağı iniyoruz.
+            // O yüzden satırın üst kenarından — üstte tıpa/yaka taşması için
+            // ayrılan payın (TopOverhang) altından — tüp boyu kadar aşağı iniyoruz.
             float rowHeight = TallestTube + verticalGap;
-            float y = boardHeight * 0.5f - row * rowHeight - TallestTube;
+            float y = boardHeight * 0.5f - TubeView.TopOverhang - row * rowHeight - TallestTube;
 
             return new Vector3(x, y, 0f);
         }
 
-        /// <summary>Verilen ızgaranın kaplayacağı alan. Tüplerin gerçek ölçülerinden hesaplanır.</summary>
+        /// <summary>
+        /// Verilen ızgaranın kaplayacağı alan. Tüplerin gerçek ölçülerinden
+        /// hesaplanır; gövdeye ek olarak üstte tıpa/yaka dörtgenlerinin taşması
+        /// (TopOverhang), yanlarda yaka dörtgeninin payı (SideOverhang) da
+        /// dahildir. Bunlar sayılmayınca dar ekranda tahta üstten/yandan
+        /// taşıyordu (toon yaka+tıpa ile ortaya çıktı, LayoutFitTests yakaladı).
+        /// </summary>
         private Vector2 MeasureBoard(int columns, int rows)
         {
-            float width = columns * TubeView.FullWidth + (columns - 1) * horizontalGap;
-            float height = rows * TallestTube + (rows - 1) * verticalGap;
+            float width = columns * TubeView.FullWidth + (columns - 1) * horizontalGap
+                + 2f * TubeView.SideOverhang;
+            float height = rows * TallestTube + (rows - 1) * verticalGap
+                + TubeView.TopOverhang;
 
             return new Vector2(width, height);
         }
