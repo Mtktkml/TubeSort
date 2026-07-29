@@ -3,75 +3,125 @@ using UnityEngine;
 namespace TubeSort.Game
 {
     /// <summary>
-    /// Dökme sırasında kaynak tüpün ağzından hedef tüpe akan sıvıyı çizer.
-    /// Tek bir SpriteRenderer quad'ı üzerinde Bezier eğrisi shader'ı çalışır.
+    /// Dökme sırasında kaynağın yaka ağzından hedef sıvı yüzeyine DİK inen
+    /// dikdörtgen akış kolonunu çizer (tek SpriteRenderer quad'ı + Stream.shader).
     /// BoardView tarafından bir kez oluşturulur, her dökmede Show/Hide ile açılıp kapanır.
     /// </summary>
     public class StreamView : MonoBehaviour
     {
         private static readonly int ColorId = Shader.PropertyToID("_Color");
-        private static readonly int P0Id = Shader.PropertyToID("_P0");
-        private static readonly int P1Id = Shader.PropertyToID("_P1");
-        private static readonly int P2Id = Shader.PropertyToID("_P2");
         private static readonly int QuadSizeId = Shader.PropertyToID("_QuadSize");
+        private static readonly int StreamHalfId = Shader.PropertyToID("_StreamHalf");
+        private static readonly int ColumnHalfId = Shader.PropertyToID("_ColumnHalf");
+        private static readonly int CapTopId = Shader.PropertyToID("_CapTop");
+        private static readonly int CapBottomId = Shader.PropertyToID("_CapBottom");
+        private static readonly int CenterYId = Shader.PropertyToID("_CenterY");
 
-        private SpriteRenderer quad;
+        // Akış İKİ parça: kaynak tarafı her şeyin önünde, hedef tarafı hedefin
+        // yaka sandviçinin içinde (tıpa katmanı) — tek quad iki tüpün farklı
+        // katman ihtiyacını aynı anda karşılayamıyordu (kullanıcı bulgusu:
+        // akış hedef yakasının üstünden geçiyordu).
+        private SpriteRenderer quadTop;      // ağızdan hedef deliğe
+        private SpriteRenderer quadBottom;   // hedef delikten sıvı yüzeyine
         private MaterialPropertyBlock properties;
 
-        /// <summary>Akışın kalınlığı ve salınımı için dışarı taşma payı.</summary>
-        private const float Padding = 0.25f;
+        /// <summary>Kolonun dünya-birim genişliği. Sabit: akış yerçekimiyle
+        /// düşer, genişliği tüple/miktarla ölçeklenmez.</summary>
+        private const float StreamWidth = 0.14f;
+
+        /// <summary>Kolonun alt ucunun hedef yüzeyin altına dalma payı: yuvarlak
+        /// uç yüzey çizgisinin altında kalır, akış yüzeye "girer" okunur.</summary>
+        private const float SurfacePlunge = 0.07f;
+
+        /// <summary>Üst kolonun ağzın içine doğru uzama payı: tepe ucu deliğin
+        /// karanlığına gömülür, kaynaktaki sıvıyla bağlantı kopuk görünmez.</summary>
+        private const float TopOverlap = 0.08f;
+
+        /// <summary>İki parçanın birleşim yerinde birbirinin üstüne binme payı:
+        /// köşeli uçlar aynı renk/faz ile örtüşür, dikiş görünmez.</summary>
+        private const float JoinOverlap = 0.04f;
+
+        /// <summary>Yumuşak kenar kırpılmasın diye dörtgene bırakılan pay.</summary>
+        private const float Padding = 0.06f;
 
         public void Initialize(Sprite unitSprite, Material streamMaterial)
         {
             properties = new MaterialPropertyBlock();
 
-            var go = new GameObject("Stream");
+            // Üst parça: kaynak tüpün TÜM parçalarının önünde (dökme sırasında
+            // kaynak +10 offset alır: yaka 12, tıpa 13, ön dilimler 14). Tepesi
+            // deliğin karanlığına gömülü başlar, bej yakanın önünden akar —
+            // "deliğin içinden çıkıyor" okunur.
+            quadTop = CreateQuad(unitSprite, streamMaterial, "StreamTop", 15);
+
+            // Alt parça: hedefin yaka sandviçinde TIPA katmanı (order 3, arka
+            // yaka 2 ile ön dilimler 4 arası). Dökme sırasında hedefin ön
+            // dilimleri açılır (TubeView.SetMouthOverlay): kolon delikten girer,
+            // bej bandın arkasında kaybolur, tüpte yeniden görünür.
+            quadBottom = CreateQuad(unitSprite, streamMaterial, "StreamBottom", 3);
+        }
+
+        private SpriteRenderer CreateQuad(Sprite unitSprite, Material material,
+            string name, int sortingOrder)
+        {
+            var go = new GameObject(name);
             go.transform.SetParent(transform, false);
 
-            quad = go.AddComponent<SpriteRenderer>();
-            quad.sprite = unitSprite;
-            quad.sharedMaterial = streamMaterial;
-            // Hedef tüpün (0-1) üstünde, kaynak tüpün (10-11) altında.
-            quad.sortingOrder = 5;
-            quad.enabled = false;
+            var r = go.AddComponent<SpriteRenderer>();
+            r.sprite = unitSprite;
+            r.sharedMaterial = material;
+            r.sortingOrder = sortingOrder;
+            r.enabled = false;
+            return r;
         }
 
         /// <summary>
-        /// Akışı görünür yapar. Kaynak ve hedef ağız konumları board-local uzaydadır.
+        /// Akışı görünür yapar. Kolon, HEDEF deliğin merkez x'inde dik düşer
+        /// (pourPos ağız ucunu tam bu hizaya oturtur): üst parça kaynağın yaka
+        /// ağzından hedef deliğe, alt parça delikten sıvı yüzeyine. Noktalar
+        /// board-local uzaydadır.
         /// </summary>
-        public void Show(Color liquidColor, Vector3 sourceMouthLocal, Vector3 destMouthLocal)
+        public void Show(Color liquidColor, Vector3 sourceMouthLocal,
+            Vector3 destMouthLocal, Vector3 destSurfaceLocal)
         {
-            // Bezier kontrol noktaları board-local uzayda.
-            Vector2 p0 = sourceMouthLocal;
-            Vector2 p2 = destMouthLocal;
-            // Sıvı önce aşağı düşer, sonra hedefe kıvrılır.
-            Vector2 p1 = new Vector2(p0.x, Mathf.Lerp(p0.y, p2.y, 0.35f));
+            Vector4 color = ToShaderColor(liquidColor);
+            float x = destMouthLocal.x;
+            float cap = StreamWidth * 0.5f;
 
-            // Quad boyutu: üç noktanın AABB'si + padding.
-            float minX = Mathf.Min(p0.x, Mathf.Min(p1.x, p2.x)) - Padding;
-            float maxX = Mathf.Max(p0.x, Mathf.Max(p1.x, p2.x)) + Padding;
-            float minY = Mathf.Min(p0.y, Mathf.Min(p1.y, p2.y)) - Padding;
-            float maxY = Mathf.Max(p0.y, Mathf.Max(p1.y, p2.y)) + Padding;
+            // Birleşim uçları KÖŞELİ ve JoinOverlap kadar üst üste biner:
+            // kapsül uçlar dikişte boğum yapıp kolonu "yeniden başlıyor"
+            // gösteriyordu (kullanıcı bulgusu). Serbest uçlar yuvarlak kalır.
+            PlaceColumn(quadTop, color, x,
+                sourceMouthLocal.y + TopOverlap, destMouthLocal.y - JoinOverlap,
+                capTop: cap, capBottom: 0f);
+            PlaceColumn(quadBottom, color, x,
+                destMouthLocal.y + JoinOverlap, destSurfaceLocal.y - SurfacePlunge,
+                capTop: 0f, capBottom: cap);
+        }
 
-            float quadW = maxX - minX;
-            float quadH = maxY - minY;
-            Vector2 center = new Vector2((minX + maxX) * 0.5f, (minY + maxY) * 0.5f);
+        /// <summary>Verilen quad'ı [bottomY, topY] dikey kolonu olarak yerleştirir.</summary>
+        private void PlaceColumn(SpriteRenderer quad, Vector4 color, float x,
+            float topY, float bottomY, float capTop, float capBottom)
+        {
+            // Uçlar çok yaklaşsa bile kolon en az kapsül kadar kalsın.
+            float columnHalf = Mathf.Max((topY - bottomY) * 0.5f, StreamWidth * 0.5f);
+            float centerY = (topY + bottomY) * 0.5f;
 
-            // Quad'ı konumlandır ve boyutlandır.
-            quad.transform.localPosition = new Vector3(center.x, center.y, 0f);
+            float quadW = StreamWidth + 2f * Padding;
+            float quadH = columnHalf * 2f + 2f * Padding;
+
+            quad.transform.localPosition = new Vector3(x, centerY, 0f);
             quad.transform.localScale = new Vector3(quadW, quadH, 1f);
 
-            // Bezier noktalarını quad merkezine göre ayarla.
-            Vector2 rel0 = p0 - center;
-            Vector2 rel1 = p1 - center;
-            Vector2 rel2 = p2 - center;
-
             quad.GetPropertyBlock(properties);
-            properties.SetVector(ColorId, ToShaderColor(liquidColor));
-            properties.SetVector(P0Id, new Vector4(rel0.x, rel0.y, 0f, 0f));
-            properties.SetVector(P1Id, new Vector4(rel1.x, rel1.y, 0f, 0f));
-            properties.SetVector(P2Id, new Vector4(rel2.x, rel2.y, 0f, 0f));
+            properties.SetVector(ColorId, color);
             properties.SetVector(QuadSizeId, new Vector4(quadW, quadH, 0f, 0f));
+            properties.SetFloat(StreamHalfId, StreamWidth * 0.5f);
+            properties.SetFloat(ColumnHalfId, columnHalf);
+            properties.SetFloat(CapTopId, capTop);
+            properties.SetFloat(CapBottomId, capBottom);
+            // Bant fazı board-uzayında: iki parçada bantlar örtüşür.
+            properties.SetFloat(CenterYId, centerY);
             quad.SetPropertyBlock(properties);
 
             quad.enabled = true;
@@ -79,7 +129,8 @@ namespace TubeSort.Game
 
         public void Hide()
         {
-            quad.enabled = false;
+            quadTop.enabled = false;
+            quadBottom.enabled = false;
         }
 
         /// <summary>

@@ -408,9 +408,11 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// Son hamleyi geri alır ve iki tüpün görselini anında günceller.
-        /// Animasyon sürerken ve geçmiş boşken çağrı yok sayılır.
-        /// Kademeli değil anlık: geri alma bir düzeltmedir, tören değil.
+        /// Son hamleyi geri alır. Animasyon sürerken ve geçmiş boşken çağrı
+        /// yok sayılır. Tıpa (varsa) anında kalkar ama sıvı ışınlanmaz:
+        /// seviyeler dökmedeki gibi kademeli akar (sektör standardı,
+        /// kullanıcı bulgusu). Kayma/eğilme/akış görseli yok — geri alma
+        /// bir hamle değil düzeltmedir.
         /// </summary>
         public void UndoLastMove()
         {
@@ -419,8 +421,43 @@ namespace TubeSort.Game
 
             ClearSelection();
             HideDeadlock();   // önceki durum zaten çözülebilirdi: uyarı kalksın
-            tubeViews[undone.FromIndex].Refresh();
-            tubeViews[undone.ToIndex].Refresh();
+            StartCoroutine(AnimateUndo(undone));
+        }
+
+        /// <summary>
+        /// Geri almanın görseli: geri dönen sıvı eski tüpünde kademeli yükselir,
+        /// alınan tüpte kademeli alçalır (ikisi paralel). Katman hileleri
+        /// dökmedekiyle aynı: yükselen tüpte yeni katman önce görünür, seviye
+        /// eski yerinden çıkar; alçalan tüpte üstten alınan birimlerin altı
+        /// değişmediği için Refresh sonrası alçalma doğru renklerle akar.
+        /// </summary>
+        private IEnumerator AnimateUndo(PourResult undone)
+        {
+            const float fillDuration = 0.3f;
+
+            isAnimating = true;
+
+            TubeView fromView = tubeViews[undone.FromIndex]; // sıvı buraya geri döner
+            TubeView toView = tubeViews[undone.ToIndex];     // sıvı buradan alınır
+
+            float fromStart = fromView.CurrentFill;
+            fromView.Refresh();
+            fromView.SetFillLevel(fromStart);
+
+            // Refresh, tıpalı tüpte tıpayı anında kaldırır: veri geri alındı,
+            // tüp artık tamamlanmış değil.
+            float toStart = toView.CurrentFill;
+            toView.Refresh();
+            toView.SetFillLevel(toStart);
+
+            Coroutine rise = StartCoroutine(
+                fromView.AnimateFill(fromView.TargetFillLevel, fillDuration));
+            Coroutine fall = StartCoroutine(
+                toView.AnimateFill(toView.TargetFillLevel, fillDuration));
+            yield return rise;
+            yield return fall;
+
+            isAnimating = false;
         }
 
         /// <summary>
@@ -951,7 +988,7 @@ namespace TubeSort.Game
         /// </summary>
         private IEnumerator AnimatePour(PourResult result)
         {
-            const float slideDuration = 0.2f;
+            const float slideDuration = 0.24f;
             const float pourDuration = 0.4f;
 
             // SmoothDamp tepki süresi. Kritik sönümleme: aşım yok, hızlı yakınsama.
@@ -971,8 +1008,13 @@ namespace TubeSort.Game
             float toTarget = toView.TargetFillLevel;
 
             // Hedef tüp: katmanları şimdi güncelle (yeni renk görünsün),
-            // ama seviyeyi eski yerine geri al (oradan yükselecek).
+            // ama seviyeyi eski yerine geri al (oradan yükselecek). Tıpa bu
+            // Refresh'te ERKEN gelmesin: veri dökme başında değiştiği için tüp
+            // "tamamlanmış" sayılır ama görsel dökme daha sürüyor — tıpa dökme
+            // bitince takılma animasyonuyla gelir (kullanıcı bulgusu).
             float toStart = toView.CurrentFill;
+            toView.SetCorkSuppressed(true);
+            toView.SetMouthOverlay(true);   // akış sandviçi: ön dilimler açılır
             toView.Refresh();
             toView.SetFillLevel(toStart);
 
@@ -1074,15 +1116,24 @@ namespace TubeSort.Game
 
                 // Pozisyon: kayma + tilt offset birlikte uygulanır.
                 ApplyTiltWithPivot(fromView, currentAngle, currentBase, pivotHeight);
+                // Görsel yüzey fiziksel modele demirlenir: kolon sıvıdan kopmasın.
+                AnchorLiquidToLip(fromView, currentAngle);
 
                 // Akış görseli: kayma tamamlanınca göster.
                 // Kayma sırasında stream gösterilmez — tüp henüz pourPos'ta değil.
                 if (pourStarted && moveElapsed >= slideDuration)
                 {
                     Vector3 sourcePoint = CalculateSourceMouth(fromView, currentAngle);
+                    // Kolon tüpte kalan sıvıya YAPIŞIK kalsın: üst uç, döken
+                    // kenardaki sıvı yüzeyine kadar uzar — aradaki bölge yaka/
+                    // delik üstünden köprülenir (kopma bulgusu, dökme sonuna
+                    // doğru belirginleşiyordu).
+                    Vector3 liquidEdge = CalculateStreamSource(fromView, currentAngle);
+                    sourcePoint.y = Mathf.Max(sourcePoint.y, liquidEdge.y);
+                    Vector3 destMouth = CalculateDestMouth(toView);
                     Vector3 destSurface = CalculateDestSurface(toView, toView.CurrentFill);
                     if (sourcePoint.y > destSurface.y)
-                        streamView.Show(streamColor, sourcePoint, destSurface);
+                        streamView.Show(streamColor, sourcePoint, destMouth, destSurface);
                     else
                         streamView.Hide();
                 }
@@ -1097,6 +1148,10 @@ namespace TubeSort.Game
             fromView.SetFillLevel(fromTarget);
             toView.SetFillLevel(toTarget);
             streamView.Hide();
+            // Dökme bitti: tüp tamamlandıysa tıpa ŞİMDİ, takılma animasyonuyla;
+            // akış sandviçi kapanır (tıpalıysa dilimler tıpa üzerinden açık kalır).
+            toView.SetCorkSuppressed(false);
+            toView.SetMouthOverlay(false);
 
             // --- Faz 4+5: Doğrulma ve geri dönüş eş zamanlı ---
             // Giderken kayma+eğilme eş zamanlıydı; dönüşte de doğrulma+kayma
@@ -1116,11 +1171,14 @@ namespace TubeSort.Game
                 float angle = Mathf.Lerp(returnStartAngle, 0f, t);
                 Vector3 returnBase = Vector3.Lerp(pourPos, startPos, t);
                 ApplyTiltWithPivot(fromView, angle, returnBase, pivotHeight);
+                // Demirleme açıyla birlikte kendiliğinden söner (açı 0 → fark 0).
+                AnchorLiquidToLip(fromView, angle);
 
                 yield return null;
             }
 
             ApplyTiltWithPivot(fromView, 0f, startPos, pivotHeight);
+            fromView.SetSurfaceLift(0f);
 
             fromView.SetSortingOffset(0);
             isAnimating = false;
@@ -1135,22 +1193,29 @@ namespace TubeSort.Game
             float signedAngle, float pivotHeight)
         {
             Vector3 dest = to.RestPosition;
-            float bodyHeight = from.Height;
 
-            // --- X: eğildikten sonra ağız hedefin üstüne düşsün ---
-            // Pivot sabit kalır; ağız (BH - pH) uzaklıkta döner.
-            // Kaynak tüpü biraz geriye çekerek tüplerin iç içe girmesini önle.
-            // signedAngle'dan yönü çıkar: negatif açı → sağa eğilir → kaynak soldan gelir.
-            float side = signedAngle < 0f ? -1f : 1f;
-            float pullBack = side * TubeView.FullWidth * 0.3f;
-            float mouthReach = (bodyHeight - pivotHeight) * Mathf.Sin(signedAngle);
-            float xTarget = dest.x + mouthReach + pullBack;
+            // --- X: döken ağız ucu (deliğin hedefe bakan kenarı) tam hedefin
+            // MERKEZİNİN üstüne gelsin: akış kolonu dikey düştüğü için ancak
+            // böyle hem kaynağın deliğinden çıkar hem hedef deliğin ortasına
+            // iner. ApplyTiltWithPivot modeli: nokta = taban + pivotTelafisi +
+            // R(açı)·yerel — buradan taban çözülür. (Eski yaklaşık mouthReach +
+            // pullBack cam ağzını kabaca hizalıyordu; kolonla ağız arasında
+            // yatay kayma bırakıyordu.)
+            float lipSide = -Mathf.Sign(signedAngle);
+            Vector3 spout = from.CollarMouthLip(lipSide);
+            float cos = Mathf.Cos(signedAngle);
+            float sin = Mathf.Sin(signedAngle);
+            float spoutOffsetX = pivotHeight * sin + (cos * spout.x - sin * spout.y);
+            float xTarget = dest.x - spoutOffsetX;
 
             // --- Y: kaynak tüpün dibi hedefin ağzının üstünde kalsın ---
             // Böylece kayma sırasında (henüz eğilmeden) gövdeler çakışmaz.
-            // Eğilince ağız hedefin üstüne doğru iner.
+            // Eğilince ağız hedefin üstüne doğru iner. Eski pay -0.25 çıplak
+            // cam dönemindendi: yaka/tıpa tüpten taştığı için en dik açıda
+            // (~100°) kaynak yaka hedefe DEĞİYORDU (kullanıcı bulgusu) —
+            // dökme artık hedef ağzının 0.2 üstünden yapılır.
             float destMouthY = dest.y + TallestTube;
-            float yTarget = destMouthY - 0.25f;
+            float yTarget = destMouthY + 0.2f;
 
             return new Vector3(xTarget, yTarget, 0f);
         }
@@ -1217,19 +1282,47 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// Eğik kaynak tüpün döken ağız ucunun board-local konumu.
-        /// TransformPoint tilt ve pivot telafisini otomatik hesaplar.
+        /// Görsel yüzeyi fiziksel modele demirler. Shader eğik yüzeyi düzlem
+        /// kaydırmasıyla çizer ve dik açılarda dudaktaki sıvıyı gerçek (hacim
+        /// korunumlu) TiltedEdgeLevel modelinden ALÇAK gösterir — dökme kapısı
+        /// "sıvı dudakta" derken görsel geride kalıyor, akış kolonu sıvıdan
+        /// kopuk görünüyordu (kullanıcı bulgusu). Fark her kare kaldırma olarak
+        /// shader'a yazılır; açı sıfıra dönünce fark da kendiliğinden sıfırlanır.
+        /// TiltedEdgeLevel 90°+ açıda sonsuz döner: kaldırma tüp tepesinin
+        /// hemen üstüyle sınırlanır (görsel zaten ağızda kırpılıyor).
+        /// (Denenen ve geri alınan: kenarı ağza SABİT kilitlemek — kullanıcı
+        /// beğenmedi, "hiç olmadı".)
+        /// </summary>
+        private static void AnchorLiquidToLip(TubeView fromView, float signedAngle)
+        {
+            float tiltSlope = Mathf.Sin(signedAngle)
+                / Mathf.Max(Mathf.Abs(Mathf.Cos(signedAngle)), 0.2f);
+            float shearEdge = fromView.CurrentFill
+                + Mathf.Abs(0.5f * tiltSlope * (TubeView.Width / fromView.Height));
+            float physicalEdge = Mathf.Min(1.05f, TiltedEdgeLevel(
+                fromView.CurrentFill, signedAngle, fromView.Height));
+            fromView.SetSurfaceLift(Mathf.Max(0f, physicalEdge - shearEdge));
+        }
+
+        /// <summary>
+        /// Kaynağın döken ağız ucu (deliğin hedefe bakan kenarı), board-local.
+        /// TransformPoint tüpün eğimini ve pivot telafisini otomatik hesaba katar.
         /// </summary>
         private Vector3 CalculateSourceMouth(TubeView fromView, float signedAngle)
         {
             // Döken taraf: tüp sağa eğiliyorsa (negatif açı) sağ kenar döker.
             float lipSide = -Mathf.Sign(signedAngle);
-            Vector3 lipLocal = new Vector3(
-                TubeView.MouthWidth * 0.5f * lipSide, fromView.Height, 0f);
+            Vector3 mouthWorld = fromView.transform.TransformPoint(
+                fromView.CollarMouthLip(lipSide));
+            return transform.InverseTransformPoint(mouthWorld);
+        }
 
-            // TransformPoint: tüpün eğimi ve pozisyon telafisini hesaba katar.
-            Vector3 lipWorld = fromView.transform.TransformPoint(lipLocal);
-            return transform.InverseTransformPoint(lipWorld);
+        /// <summary>Hedefin yaka deliğinin merkezi, board-local: akış kolonunun
+        /// hedefte indiği nokta ve üst/alt parçaların birleşme hizası.</summary>
+        private Vector3 CalculateDestMouth(TubeView toView)
+        {
+            Vector3 mouthWorld = toView.transform.TransformPoint(toView.CollarMouth);
+            return transform.InverseTransformPoint(mouthWorld);
         }
 
         /// <summary>
@@ -1242,14 +1335,17 @@ namespace TubeSort.Game
             float lipSide = -Mathf.Sign(signedAngle);
 
             // Eğik sıvı yüzeyinin döken kenardaki yüksekliği (normalize, 0-1).
-            // HasLiquidReachedMouth'daki formülün aynısı: maxOffset döken taraftaki
-            // yükselmeyi verir. tiltSlope zaten signedAngle'dan işaretli geldiği
-            // için lipSide ile çarpmak işareti iki kez çevirir — bunun yerine
-            // mutlak değer alıp ekliyoruz (döken taraf her zaman yüksek taraftır).
+            // Shader'ın düzlem kaydırması ile fiziksel modelin (TiltedEdgeLevel)
+            // BÜYÜĞÜ: AnchorLiquidToLip görseli fiziksel modele kaldırdığı için
+            // ekranda görünen kenar ikisinin maksimumudur — kolonun çapası da
+            // aynı gerçeğe bakmalı ki sıvıya yapışık kalsın.
             float tiltSlope = Mathf.Sin(signedAngle)
                 / Mathf.Max(Mathf.Abs(Mathf.Cos(signedAngle)), 0.2f);
-            float maxOffset = Mathf.Abs(0.5f * tiltSlope * (TubeView.Width / fromView.Height));
-            float surfaceNorm = fromView.CurrentFill + maxOffset;
+            float shearEdge = fromView.CurrentFill
+                + Mathf.Abs(0.5f * tiltSlope * (TubeView.Width / fromView.Height));
+            float physicalEdge = Mathf.Min(1.05f, TiltedEdgeLevel(
+                fromView.CurrentFill, signedAngle, fromView.Height));
+            float surfaceNorm = Mathf.Max(shearEdge, physicalEdge);
 
             // Tüp tepesini (1.0) aşamaz, tabandan (0) inemez.
             surfaceNorm = Mathf.Clamp(surfaceNorm, 0f, 1f);
@@ -1277,14 +1373,20 @@ namespace TubeSort.Game
                 // Sıvı azaldıkça eğim artar — sıvı her zaman ağza ulaşır.
                 float angle = -CalculatePourAngle(fromView) * direction;
                 ApplyTiltWithPivot(fromView, angle, pourPos, pivotHeight);
+                AnchorLiquidToLip(fromView, angle);
 
                 Vector3 sourceMouth = CalculateSourceMouth(fromView, angle);
+                // Kolonun tepesi döken kenardaki sıvı yüzeyine yapışık kalır
+                // (bkz. ana döngüdeki not).
+                Vector3 liquidEdge = CalculateStreamSource(fromView, angle);
+                sourceMouth.y = Mathf.Max(sourceMouth.y, liquidEdge.y);
+                Vector3 destMouth = CalculateDestMouth(toView);
                 Vector3 destSurface = CalculateDestSurface(toView, toView.CurrentFill);
 
                 // Kaynak ağız hedef yüzeyinin üstündeyse akış göster,
-                // altına düştüyse gizle (ters Bezier olur).
+                // altına düştüyse gizle (kolon ters dönerdi).
                 if (sourceMouth.y > destSurface.y)
-                    streamView.Show(color, sourceMouth, destSurface);
+                    streamView.Show(color, sourceMouth, destMouth, destSurface);
                 else
                     streamView.Hide();
 

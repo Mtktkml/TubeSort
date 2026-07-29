@@ -206,9 +206,19 @@ haritası (29 Tem; sırayla, her madde gözle onay + commit):
 - [x] **2.5 (ara madde): tıpalı tüp girişi + seçim iptali** — tıpalı
   (complete) tüp seçilemez ve dökme kaynağı olamaz (Core kuralı +
   görünüm); boş alana ya da tıpalı tüpe tıklamak mevcut seçimi iptal eder.
-- [ ] **3. Dikdörtgen akış + kaynak yaka ağzı:** Bezier yerine ağızdan dik
-  inen kolon; kaynak noktası YAKA AĞZI olur (şu an akış yakanın içinden
-  çıkıyor — kullanıcı bulgusu).
+- [x] **3. Dikdörtgen akış + kaynak yaka ağzı:** Bezier gitti; akış İKİ
+  parçalı dik kolon — üst parça (order 15) kaynağın deliğinin hedefe bakan
+  kenarından, alt parça (order 3, tıpa katmanı) hedef deliğin merkezinden
+  yüzeye, hedefin ön yaka dilimleri dökme sırasında açılıp tıpa sandviçiyle
+  sarar. Ağız ucu her kare hedefin tam üstüne konumlanır (pivot modelinden
+  tam çözüm); birleşim uçları köşeli + bindirmeli, bant fazı board-uzayında
+  (dikişsiz). Görsel yüzey fiziksel modele demirlenir (`AnchorLiquidToLip`,
+  `_SurfaceLift`) — kolon sıvıya yapışık. Ayrıca: dökme hedef ağzının 0.2
+  üstünden (yaka teması bulgusu), tıpa dökme bitince düşme+esneme
+  animasyonuyla takılır, undo kademeli akar (ışınlanma yok). Bilinen küçük
+  pürüz: dökmenin son fazlarında sıvı-kolon bağlantısında kısa kopmalar
+  olabiliyor (ağza sabit kilit denendi, "hiç olmadı" diye geri alındı) —
+  cila adayı.
 - [ ] **4. Damla efekti:** sürekli dalga kalkar; akış yüzeye değdiği sürece
   değme noktasından yayılan eş merkezli elips halkalar; boşta yüzey durgun.
 

@@ -1,18 +1,19 @@
-// Kaynak tüpün ağzından hedef tüpe akan sıvıyı tek dörtgene çizer.
-//
-// Kuadratik Bezier eğrisi 10 doğru parçasıyla yaklaşık hesaplanır.
-// Her piksel için eğriye en yakın mesafe bulunur; bu mesafe kalınlıktan
-// küçükse piksel akışın içindedir. Kalınlık eğri boyunca daralır
-// (yerçekimi etkisi), parlaklık dalgası akış yönünde kayar.
+// Dökme akışı: kaynağın yaka ağzından hedef sıvı yüzeyine DİK inen
+// dikdörtgen kolon. (Eski kuadratik Bezier eğrisi kavisli akıtıyordu;
+// referans oyunlardaki gibi yerçekimiyle düz düşen kolon istendi.)
+// Uçlar kolon yarı genişliği kadar yuvarlak (kapsül): üst uç ağızdan
+// çıkan damla gibi, alt uç yüzeye dalar. Akış hissi aşağı kayan
+// parlaklık bantlarından gelir.
 Shader "TubeSort/Stream"
 {
     Properties
     {
-        _WidthStart ("Kaynak kalınlığı", Float) = 0.06
-        _WidthEnd ("Hedef kalınlığı", Float) = 0.03
-        _FlowSpeed ("Akış hızı", Float) = 8
-        _FlowFreq ("Akış dalga sıklığı", Float) = 25
-        _FlowStrength ("Akış dalga gücü", Range(0, 0.3)) = 0.1
+        _FlowFrequency ("Bant sıklığı (dünya birimi başına)", Float) = 14
+        _FlowSpeed ("Bant hızı", Float) = 7
+        _FlowStrength ("Bant belirginliği", Range(0, 1)) = 0.14
+        _EdgeSoftness ("Kenar yumuşaklığı (dünya birimi)", Float) = 0.012
+        _SideShading ("Kenar gölgesi", Range(0, 1)) = 0.3
+        _GleamStrength ("Işıltı şeridi", Range(0, 1)) = 0.18
     }
 
     SubShader
@@ -35,23 +36,26 @@ Shader "TubeSort/Stream"
             #pragma fragment Fragment
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
-
-            #define SEGMENTS 10
+            #include "TubeShape.hlsl"
 
             CBUFFER_START(UnityPerMaterial)
-                float _WidthStart;
-                float _WidthEnd;
+                float _FlowFrequency;
                 float _FlowSpeed;
-                float _FlowFreq;
                 float _FlowStrength;
+                float _EdgeSoftness;
+                float _SideShading;
+                float _GleamStrength;
             CBUFFER_END
 
-            // Her akış için farklı; MaterialPropertyBlock ile gönderilir.
+            // Her dökmede değişen değerler; MaterialPropertyBlock ile gelir.
             float4 _Color;
-            float4 _P0;    // Bezier başlangıç (kaynak ağız), xy kullanılır
-            float4 _P1;    // Bezier kontrol noktası, xy kullanılır
-            float4 _P2;    // Bezier bitiş (hedef ağız), xy kullanılır
             float4 _QuadSize;
+            float _StreamHalf;   // kolonun yarı genişliği (dünya birimi)
+            float _ColumnHalf;   // kolonun yarı boyu (dünya birimi)
+            float _CapTop;       // üst uç köşe yarıçapı (0 = köşeli: birleşim ucu)
+            float _CapBottom;    // alt uç köşe yarıçapı
+            float _CenterY;      // quad merkezinin board y'si — bant fazı parçalar
+                                 // arası sürekli kalsın (dikişte kırılmasın)
 
             struct Attributes
             {
@@ -65,13 +69,6 @@ Shader "TubeSort/Stream"
                 float2 uv : TEXCOORD0;
             };
 
-            // Kuadratik Bezier: B(t) = (1-t)^2 * P0 + 2(1-t)t * P1 + t^2 * P2
-            float2 EvalBezier(float t, float2 p0, float2 p1, float2 p2)
-            {
-                float u = 1.0 - t;
-                return u * u * p0 + 2.0 * u * t * p1 + t * t * p2;
-            }
-
             Varyings Vertex(Attributes input)
             {
                 Varyings output;
@@ -82,55 +79,41 @@ Shader "TubeSort/Stream"
 
             half4 Fragment(Varyings input) : SV_Target
             {
-                // UV'yi quad merkezinden dünya birimine çevir.
-                float2 p = (input.uv - 0.5) * _QuadSize.xy;
+                float2 p = QuadPoint(input.uv, _QuadSize.xy);
 
-                float2 bezP0 = _P0.xy;
-                float2 bezP1 = _P1.xy;
-                float2 bezP2 = _P2.xy;
-
-                // Eğri üzerindeki en yakın noktayı bul.
-                float minDist = 1e9;
-                float closestT = 0;
-
-                for (int i = 0; i < SEGMENTS; i++)
-                {
-                    float t0 = (float)i / SEGMENTS;
-                    float t1 = (float)(i + 1) / SEGMENTS;
-                    float2 a = EvalBezier(t0, bezP0, bezP1, bezP2);
-                    float2 b = EvalBezier(t1, bezP0, bezP1, bezP2);
-
-                    // Doğru parçası a-b üzerindeki en yakın nokta.
-                    float2 ab = b - a;
-                    float tSeg = saturate(dot(p - a, ab) / dot(ab, ab));
-                    float2 closest = a + ab * tSeg;
-                    float dist = length(p - closest);
-                    float tGlobal = lerp(t0, t1, tSeg);
-
-                    if (dist < minDist)
-                    {
-                        minDist = dist;
-                        closestT = tGlobal;
-                    }
-                }
-
-                // Kalınlık eğri boyunca daralır: kaynakta geniş, hedefte ince.
-                float radius = lerp(_WidthStart, _WidthEnd, closestT);
-
-                // SDF kenar yumuşatması.
-                float edge = fwidth(minDist);
-                float alpha = 1.0 - smoothstep(radius - edge, radius + edge, minDist);
-
-                if (alpha <= 0.001)
+                // Dikey kutu; uç yuvarlaklıkları parça başına: serbest uçlar
+                // kapsül gibi yuvarlak, iki parçanın birleştiği uçlar KÖŞELİ —
+                // yuvarlak uçlar birleşim yerinde boğum yapıp kolonu "yeniden
+                // başlıyor" gösteriyordu (kullanıcı bulgusu). Yarıçap sırası
+                // TubeShape.SdRoundedBox: (sağ üst, sağ alt, sol üst, sol alt).
+                // fwidth discard'dan ÖNCE (mobil türev kuralı).
+                float d = SdRoundedBox(p, float2(_StreamHalf, _ColumnHalf),
+                    float4(_CapTop, _CapBottom, _CapTop, _CapBottom));
+                float e = max(fwidth(d), _EdgeSoftness);
+                float inside = 1.0 - smoothstep(-e, e, d);
+                if (inside <= 0.001)
                     discard;
 
-                // Akış animasyonu: eğri boyunca kayan parlaklık dalgası.
-                float flow = sin(closestT * _FlowFreq - _Time.y * _FlowSpeed)
-                    * _FlowStrength + 1.0;
-
                 float4 color = _Color;
-                color.rgb *= flow;
-                color.a *= alpha;
+
+                // Silindir yanılsaması: kenara doğru koyulaşma.
+                float nx = saturate(abs(p.x) / max(_StreamHalf, 1e-4));
+                color.rgb *= 1.0 - nx * nx * _SideShading;
+
+                // Akış hissi: aşağı kayan yumuşak parlaklık bantları. Faz quad
+                // yerel değil BOARD uzayında (_CenterY): iki parça üst üste
+                // bindiğinde bantlar birebir örtüşür, dikiş görünmez.
+                float band = sin((p.y + _CenterY) * _FlowFrequency + _Time.y * _FlowSpeed);
+                color.rgb *= 1.0 + band * _FlowStrength * 0.5;
+
+                // Merkezin az solunda ince ışıltı şeridi (sıvı/cam şeritleriyle
+                // aynı dil: parlama hep sol-orta tarafta).
+                float gleam = 1.0 - smoothstep(0.0, _StreamHalf * 0.5,
+                    abs(p.x + _StreamHalf * 0.35));
+                color.rgb = lerp(color.rgb, float3(1.0, 1.0, 1.0),
+                    gleam * _GleamStrength);
+
+                color.a *= inside;
                 return (half4)color;
             }
             ENDHLSL

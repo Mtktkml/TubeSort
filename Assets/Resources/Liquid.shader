@@ -79,6 +79,11 @@ Shader "TubeSort/Liquid"
             float _MouthRadius;
             float _MouthBlend;
             float _TiltAngle;
+            // Eğik yüzeyin dudak demirlemesi (normalize, gövde oranı): düzlem
+            // kaydırması dik açılarda dudaktaki sıvıyı gerçek (hacim korunumlu)
+            // modelden alçak gösterir; BoardView farkı her kare buraya yazar,
+            // yüzey o kadar kaldırılır — akış kolonu sıvıdan kopmaz.
+            float _SurfaceLift;
 
             struct Attributes
             {
@@ -144,8 +149,9 @@ Shader "TubeSort/Liquid"
                     * (_BodySize.x / _BodySize.y);
 
                 // Sıvının yüzeyi düz bir çizgi değil, yavaşça salınan bir dalga.
+                // _SurfaceLift: dökme sırasında dudak demirlemesi (yukarıda).
                 float wave = sin(uv.x * _WaveFrequency + _Time.y * _WaveSpeed) * waveAmplitude;
-                float surface = _FillLevel + tiltOffset + wave;
+                float surface = _FillLevel + tiltOffset + wave + _SurfaceLift;
 
                 // ── 2.5D: hafif üstten bakış. Yüzey, üstten görünen ELİPS bir
                 // disk; katman sınırları da diskin ÖN yayı gibi aşağı kavisli.
@@ -176,7 +182,7 @@ Shader "TubeSort/Liquid"
                 float drainProgress = (1.0 - saturate(_FillLevel / 0.2)) * tiltAmount;
                 if (drainProgress > 0.001)
                 {
-                    float maxSurface = _FillLevel
+                    float maxSurface = _FillLevel + _SurfaceLift
                         + abs(0.5 * tiltSlope * (_BodySize.x / _BodySize.y));
                     float survivalScore = saturate(surface / max(maxSurface, 0.001));
                     float drainClip = smoothstep(drainProgress - 0.05,

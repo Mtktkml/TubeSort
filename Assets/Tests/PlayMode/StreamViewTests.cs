@@ -58,42 +58,56 @@ namespace TubeSort.Tests.PlayMode
             yield return null;
         }
 
-        private SpriteRenderer FindStreamRenderer()
+        /// <summary>Akış artık iki parça: üst (kaynak önünde) + alt (hedef
+        /// sandviçinde). İsimle bulunur; sortingOrder güvenilmez.</summary>
+        private SpriteRenderer FindStreamRenderer(string name)
         {
             var renderers = streamObject.GetComponentsInChildren<SpriteRenderer>(true);
             foreach (var r in renderers)
             {
-                if (r.gameObject.name == "Stream")
+                if (r.gameObject.name == name)
                     return r;
             }
 
-            Assert.Fail("Stream renderer bulunamadı");
+            Assert.Fail($"{name} renderer bulunamadı");
             return null;
         }
 
-        [UnityTest]
-        public IEnumerator Show_EnablesRenderer()
+        /// <summary>Show'un yeni imzası: kaynak ağız, hedef delik, hedef yüzey.</summary>
+        private void ShowSample(Color color)
         {
-            yield return BuildStreamView();
-
-            var renderer = FindStreamRenderer();
-            Assert.IsFalse(renderer.enabled, "Başlangıçta kapalı olmalı");
-
-            streamView.Show(Color.red, new Vector3(0f, 3f, 0f), new Vector3(1f, 0f, 0f));
-
-            Assert.IsTrue(renderer.enabled, "Show sonrası açık olmalı");
+            streamView.Show(color,
+                new Vector3(1f, 3f, 0f), new Vector3(1f, 1f, 0f), new Vector3(1f, 0f, 0f));
         }
 
         [UnityTest]
-        public IEnumerator Hide_DisablesRenderer()
+        public IEnumerator Show_EnablesRenderers()
         {
             yield return BuildStreamView();
 
-            streamView.Show(Color.red, new Vector3(0f, 3f, 0f), new Vector3(1f, 0f, 0f));
+            var top = FindStreamRenderer("StreamTop");
+            var bottom = FindStreamRenderer("StreamBottom");
+            Assert.IsFalse(top.enabled, "Başlangıçta üst parça kapalı olmalı");
+            Assert.IsFalse(bottom.enabled, "Başlangıçta alt parça kapalı olmalı");
+
+            ShowSample(Color.red);
+
+            Assert.IsTrue(top.enabled, "Show sonrası üst parça açık olmalı");
+            Assert.IsTrue(bottom.enabled, "Show sonrası alt parça açık olmalı");
+        }
+
+        [UnityTest]
+        public IEnumerator Hide_DisablesRenderers()
+        {
+            yield return BuildStreamView();
+
+            ShowSample(Color.red);
             streamView.Hide();
 
-            var renderer = FindStreamRenderer();
-            Assert.IsFalse(renderer.enabled, "Hide sonrası kapalı olmalı");
+            Assert.IsFalse(FindStreamRenderer("StreamTop").enabled,
+                "Hide sonrası üst parça kapalı olmalı");
+            Assert.IsFalse(FindStreamRenderer("StreamBottom").enabled,
+                "Hide sonrası alt parça kapalı olmalı");
         }
 
         [UnityTest]
@@ -101,9 +115,9 @@ namespace TubeSort.Tests.PlayMode
         {
             yield return BuildStreamView();
 
-            streamView.Show(Color.blue, new Vector3(0f, 3f, 0f), new Vector3(1f, 0f, 0f));
+            ShowSample(Color.blue);
 
-            var renderer = FindStreamRenderer();
+            var renderer = FindStreamRenderer("StreamTop");
             var props = new MaterialPropertyBlock();
             renderer.GetPropertyBlock(props);
             Vector4 sentColor = props.GetVector(ColorId);

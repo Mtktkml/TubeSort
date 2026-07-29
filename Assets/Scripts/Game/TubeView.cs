@@ -105,8 +105,12 @@ namespace TubeSort.Game
         /// 9-slice alt border 88 px import'ta tanımlı — dip kavisi sabit kalır,
         /// düz gövde kapasiteye göre uzar).</summary>
         public const string TubeSpritePath = "Sprites/tube";
-        /// <summary>Yaka görselinin dünya yüksekliği (113 px / 244 PPU).</summary>
-        private const float CollarSpriteHeight = 113f / 244f;
+        /// <summary>Yaka görselinin PPU'su ve satır sayısı — piksel sabitlerini
+        /// dünya birimine çevirmek için.</summary>
+        private const float CollarPpu = 244f;
+        private const float CollarSpriteRows = 113f;
+        /// <summary>Yaka görselinin dünya yüksekliği.</summary>
+        private const float CollarSpriteHeight = CollarSpriteRows / CollarPpu;
         /// <summary>Tıpa görselinin dünya yüksekliği (201 px / 229 PPU) —
         /// FillHeadroom türetimi statik kalsın diye sabit; görsel/PPU değişirse
         /// birlikte güncellenir (CreateCork konumu çalışma anında sprite'tan okur).</summary>
@@ -160,6 +164,7 @@ namespace TubeSort.Game
         private static readonly int MouthRadiusId = Shader.PropertyToID("_MouthRadius");
         private static readonly int MouthBlendId = Shader.PropertyToID("_MouthBlend");
         private static readonly int TiltAngleId = Shader.PropertyToID("_TiltAngle");
+        private static readonly int SurfaceLiftId = Shader.PropertyToID("_SurfaceLift");
 
         private Tube tube;
         private ColorPalette palette;
@@ -176,6 +181,14 @@ namespace TubeSort.Game
         private bool isSelected;
         private float currentFill;
         private float tiltAngle;
+        private float surfaceLift;
+        private Vector3 corkRestPosition;
+        private bool corkSuppressed;
+        private bool mouthOverlayVisible;
+        private Coroutine corkRoutine;
+        /// <summary>İlk Refresh (kurulum) tamamlandı mı? Kurulumda tıpa
+        /// animasyonsuz oturur; oyun sırasında belirince animasyon oynar.</summary>
+        private bool viewReady;
 
         // Shader'a gönderilecek diziler. Her yenilemede yeniden ayırmamak için
         // bir kez oluşturulup tekrar tekrar doldurulur.
@@ -217,6 +230,7 @@ namespace TubeSort.Game
             CreateCork(corkSprite);
             CreateClickArea();
             Refresh();
+            viewReady = true;
         }
 
         /// <summary>
@@ -418,8 +432,8 @@ namespace TubeSort.Game
 
             float collarTop = BodyHeight + CollarCenterY + CollarSpriteHeight * 0.5f;
             float corkTop = collarTop + CorkTopAboveCollarTop;
-            go.transform.localPosition =
-                new Vector3(0f, corkTop - sprite.bounds.extents.y, 0f);
+            corkRestPosition = new Vector3(0f, corkTop - sprite.bounds.extents.y, 0f);
+            go.transform.localPosition = corkRestPosition;
         }
 
         /// <summary>
@@ -545,14 +559,117 @@ namespace TubeSort.Game
             properties.SetFloat(FillLevelId, currentFill);
             properties.SetInt(LayerCountId, layerCount);
             properties.SetFloat(TiltAngleId, tiltAngle);
+            properties.SetFloat(SurfaceLiftId, surfaceLift);
             liquid.SetPropertyBlock(properties);
 
-            // Mantar yalnız tamamlanmış tüpte (dolu + tek renk) görünür. Tube.IsComplete
-            // boş tüp için de true döner; boşta mantar istemiyoruz, o yüzden !IsEmpty.
-            // Collar'ın ön overlay'i de yalnız mantar varken çizilir.
-            cork.enabled = tube.IsComplete && !tube.IsEmpty;
-            collarFrontTop.enabled = cork.enabled;
-            collarFrontBottom.enabled = cork.enabled;
+            RefreshCork();
+        }
+
+        /// <summary>
+        /// Dökme animasyonu boyunca tıpanın erken belirmesini engeller: veri
+        /// dökme başında değiştiği için tıpa, akış daha akarken "tak" diye
+        /// geliyordu. false'a dönerken tüp tamamlandıysa tıpa takılma
+        /// animasyonuyla gelir.
+        /// </summary>
+        public void SetCorkSuppressed(bool suppressed)
+        {
+            corkSuppressed = suppressed;
+            RefreshCork();
+        }
+
+        /// <summary>
+        /// Tıpa görünürlüğü: tamamlanmış (dolu + tek renk) ve bastırılmamış
+        /// tüpte açık. Tube.IsComplete boş tüpte de true döner; boşta tıpa
+        /// istemiyoruz (!IsEmpty). Ön yaka dilimleri yalnız tıpayla birlikte
+        /// çizilir. Oyun sırasında AÇILIRKEN takılma animasyonu oynar;
+        /// kapanış ve kurulumdaki ilk çizim anlıktır.
+        /// </summary>
+        private void RefreshCork()
+        {
+            bool shouldCork = tube.IsComplete && !tube.IsEmpty && !corkSuppressed;
+
+            // Ön dilimler tıpayla YA DA ağız sandviçi isteğiyle açılır: dökme
+            // sırasında akışın hedef parçası tıpa katmanında (order 3) çizilir,
+            // dilimler onu tıpa gibi sarar — delikten girer, bej bandın
+            // arkasından geçer, tüpte yeniden görünür.
+            bool fronts = shouldCork || mouthOverlayVisible;
+            collarFrontTop.enabled = fronts;
+            collarFrontBottom.enabled = fronts;
+
+            if (shouldCork == cork.enabled)
+                return;
+
+            if (corkRoutine != null)
+            {
+                StopCoroutine(corkRoutine);
+                corkRoutine = null;
+            }
+
+            cork.enabled = shouldCork;
+            cork.transform.localPosition = corkRestPosition;
+            cork.transform.localScale = Vector3.one;
+
+            if (shouldCork && viewReady)
+                corkRoutine = StartCoroutine(AnimateCorkIn());
+        }
+
+        /// <summary>Dökme sırasında hedefin ön yaka dilimlerini tıpasız da açar
+        /// (akış sandviçi — bkz. RefreshCork). Dökme bitince kapatılır.</summary>
+        public void SetMouthOverlay(bool visible)
+        {
+            mouthOverlayVisible = visible;
+            RefreshCork();
+        }
+
+        /// <summary>
+        /// Eğik yüzeyin dudak demirlemesi (normalize, gövde oranı): BoardView,
+        /// fiziksel modelle (TiltedEdgeLevel) shader'ın düzlem kaydırması
+        /// arasındaki farkı her kare buraya yazar; yüzey o kadar kaldırılır,
+        /// akış kolonu tüpte kalan sıvıdan kopmaz. Dökme dışında 0.
+        /// </summary>
+        public void SetSurfaceLift(float normalizedLift)
+        {
+            surfaceLift = normalizedLift;
+            liquid.GetPropertyBlock(properties);
+            properties.SetFloat(SurfaceLiftId, surfaceLift);
+            liquid.SetPropertyBlock(properties);
+        }
+
+        /// <summary>
+        /// Tıpanın takılma animasyonu: yukarıdan hızlanarak düşer (ease-in,
+        /// yerçekimi hissi), oturunca kısa bir ezilme-esneme yapar. Süreler
+        /// kısa tutulur: tıpa "tak" diye oturmalı, süzülmemeli.
+        /// </summary>
+        private IEnumerator AnimateCorkIn()
+        {
+            const float dropHeight = 0.5f;
+            const float dropDuration = 0.16f;
+            const float settleDuration = 0.12f;
+
+            float elapsed = 0f;
+            while (elapsed < dropDuration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / dropDuration);
+                cork.transform.localPosition =
+                    corkRestPosition + Vector3.up * (dropHeight * (1f - t * t));
+                yield return null;
+            }
+            cork.transform.localPosition = corkRestPosition;
+
+            // Oturma esnemesi: hafif yassılıp geri toparlar (merkez pivotlu
+            // ölçek — %8'lik esneme, abartısız).
+            elapsed = 0f;
+            while (elapsed < settleDuration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / settleDuration);
+                float squash = Mathf.Sin(t * Mathf.PI) * 0.08f;
+                cork.transform.localScale = new Vector3(1f + squash, 1f - squash, 1f);
+                yield return null;
+            }
+            cork.transform.localScale = Vector3.one;
+            corkRoutine = null;
         }
 
         /// <summary>Tube'un güncel verisine göre doluluk seviyesinin olması gereken değer.</summary>
@@ -659,6 +776,26 @@ namespace TubeSort.Game
 
         /// <summary>Tüpün gövde yüksekliği. Dökme pozisyonu hesaplamak için.</summary>
         public float Height => BodyHeight;
+
+        /// <summary>
+        /// Yaka ağzındaki kahverengi deliğin MERKEZİ, tüp-yerel konum. Hedef
+        /// tüpte akış kolonunun indiği nokta (delik merkezi; kullanıcı isteği).
+        /// </summary>
+        public Vector3 CollarMouth => new Vector3(
+            0f,
+            BodyHeight + CollarCenterY + (CollarSpriteRows * 0.5f - CollarHoleCy) / CollarPpu,
+            0f);
+
+        /// <summary>
+        /// Deliğin döken kenarı (hedefe en yakın nokta), tüp-yerel konum.
+        /// KAYNAK tüpte akış buradan başlar: merkezden başlayınca kolon deliğin
+        /// ortasından fışkırıyor görünüyordu (kullanıcı bulgusu) — sıvı deliğin
+        /// hedefe bakan dudağından taşmalı. side = ±1, döken taraf.
+        /// </summary>
+        public Vector3 CollarMouthLip(float side) => new Vector3(
+            CollarHoleRx / CollarPpu * side,
+            BodyHeight + CollarCenterY + (CollarSpriteRows * 0.5f - CollarHoleCy) / CollarPpu,
+            0f);
 
         /// <summary>
         /// Tüpü verilen açıda eğer (radyan). Transform döner ve aynı açı
