@@ -84,10 +84,14 @@ namespace TubeSort.Tests.PlayMode
 
             view.UndoLastMove();
 
+            // Tahta verisi ANINDA döner (undo senkron)...
             Assert.AreEqual(2, view.Board[0].Count, "Kaynak tüp eski haline dönmeli");
             Assert.IsTrue(view.Board[1].IsEmpty, "Hedef tüp boşalmalı");
 
-            // Görsel de tahtayla aynı hizada olmalı: Refresh seviyeyi anında kurar.
+            // ...görsel ise KADEMELİ akar (ışınlanma yok — sektör standardı);
+            // animasyon bitince tahtayla aynı hizaya oturmalı.
+            Assert.IsTrue(view.IsAnimating, "Geri alma görseli kademeli olmalı");
+            yield return WaitForAnimation();
             Assert.AreEqual(FindTube(0).TargetFillLevel, FindTube(0).CurrentFill, 0.001f,
                 "Kaynak tüpün görseli tahtayla eşleşmeli");
             Assert.AreEqual(FindTube(1).TargetFillLevel, FindTube(1).CurrentFill, 0.001f,

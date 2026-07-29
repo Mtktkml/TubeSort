@@ -9,15 +9,30 @@ Shader "TubeSort/Liquid"
 {
     Properties
     {
-        // Dalga ve yüzey ölçüleri dünya birimindedir, tüpün oranı değil:
-        // dalga fiziksel bir şeydir, tüp uzadı diye büyümemeli.
-        _WaveAmplitude ("Dalga yüksekliği (dünya birimi)", Float) = 0.024
-        _WaveFrequency ("Dalga sıklığı", Float) = 16
-        _WaveSpeed ("Dalga hızı", Float) = 2.5
         _EdgeSoftness ("Yüzey yumuşaklığı (dünya birimi)", Float) = 0.012
         _SideShading ("Kenar gölgesi", Range(0, 1)) = 0.35
         _Glossiness ("Şerit parlaklığı", Range(0, 1)) = 0.5
         _WallThickness ("Cam et kalınlığı", Float) = 0.05
+        // 2.5D: hafif üstten bakış. Varsayılan, yaka perspektifiyle uyumlu:
+        // sıvı yarı genişliği (0.375) × görsellerin elips oranı (0.2) ≈ 0.075.
+        _SurfaceEllipse ("2.5D yüzey derinliği (dünya birimi)", Float) = 0.075
+        _SurfaceLight ("Yüzey diski açık ton karışımı", Range(0, 1)) = 0.3
+        // Damla halkaları: dökme BİTİNCE değme noktasından dışa yayılan eş
+        // merkezli elips halkalar (su birikintisine damla düşmüş gibi) — patlama
+        // zarfını TubeView.PlayRippleBurst sürer. Dökme SIRASINDA ise değme
+        // noktasından iki yana damlacık sıçraması oynar (_SplashStrength).
+        // Boşta yüzey DURGUN: sürekli dalga bilinçli olarak kaldırıldı.
+        // Sıklık 3.5 → 2 → 1.2 (kullanıcı turlarıyla): tek geniş halka +
+        // kenarda sönen kuyruk — daha kalabalığı kıpır kıpır/testere duruyordu.
+        _RippleFrequency ("Halka sıklığı (yarıçap başına)", Float) = 1.2
+        _RippleSpeed ("Halka yayılma hızı", Float) = 2.2
+        // 0.8 → 0.35 → 0.22: renk payı iyice kısıldı, geçişler yumuşak —
+        // asıl iş nazik yüzey kabarmasında.
+        _RippleAmplitude ("Halka belirginliği", Range(0, 1)) = 0.22
+        // Halkalar renkten ibaret değil: yüzey halka fazıyla inip çıkar
+        // (çukur/tümsek). Dünya birimi — tüple ölçeklenmez.
+        // 0.028 → 0.014 → 0.008 (kullanıcı turları).
+        _RippleHeight ("Halka yüksekliği (dünya birimi)", Float) = 0.008
     }
 
     SubShader
@@ -50,13 +65,16 @@ Shader "TubeSort/Liquid"
             #define MAX_LAYERS 8
 
             CBUFFER_START(UnityPerMaterial)
-                float _WaveAmplitude;
-                float _WaveFrequency;
-                float _WaveSpeed;
                 float _EdgeSoftness;
                 float _SideShading;
                 float _Glossiness;
                 float _WallThickness;
+                float _SurfaceEllipse;
+                float _SurfaceLight;
+                float _RippleFrequency;
+                float _RippleSpeed;
+                float _RippleAmplitude;
+                float _RippleHeight;
             CBUFFER_END
 
             // Bu değerler her tüp için farklı; MaterialPropertyBlock ile
@@ -73,6 +91,20 @@ Shader "TubeSort/Liquid"
             float _MouthRadius;
             float _MouthBlend;
             float _TiltAngle;
+            // Eğik yüzeyin dudak demirlemesi (normalize, gövde oranı): düzlem
+            // kaydırması dik açılarda dudaktaki sıvıyı gerçek (hacim korunumlu)
+            // modelden alçak gösterir; BoardView farkı her kare buraya yazar,
+            // yüzey o kadar kaldırılır — akış kolonu sıvıdan kopmaz.
+            float _SurfaceLift;
+            // Damla halkalarının anlık gücü (0-1): dökme bitince TubeView'ın
+            // patlama zarfı (PlayRippleBurst) sürer — boşta durgun.
+            float _RippleStrength;
+            // Sıçrama gücü (0-1): akış bu tüpün yüzeyine aktığı sürece
+            // BoardView 1'e sürer, akış kesilince 0'a.
+            float _SplashStrength;
+            // Level başı çalkantı eğimi (normalize): TubeView sönümleyerek
+            // sürer; yüzey ve katmanlar birlikte sallanır.
+            float _SwaySlope;
 
             struct Attributes
             {
@@ -121,10 +153,9 @@ Shader "TubeSort/Liquid"
                 // dörtgenin uv'siyle çalışsaydık doluluk ve katman sınırları kayardı.
                 float2 uv = BodyUV(p, _QuadSize.xy, _BodySize.xy);
 
-                // Dalga ve yumuşaklık dünya biriminde tanımlıdır; burada gövdenin
-                // oranına çevriliyorlar. Doğrudan uv'de kullanılsalardı uzun tüpte
-                // dalga da uzardı: 12 birimlik tüpte 4 birimliğin üç katı.
-                float waveAmplitude = _WaveAmplitude / _BodySize.y;
+                // Yumuşaklık dünya biriminde tanımlıdır; burada gövdenin oranına
+                // çevrilir. Doğrudan uv'de kullanılsaydı uzun tüpte kenar da
+                // yumuşardı (eski dalga bu yüzden dünya birimindeydi).
                 float edgeSoftness = _EdgeSoftness / _BodySize.y;
 
                 // Tüp döndüğünde sıvı yüzeyi dünya uzayında yatay kalmalı.
@@ -137,14 +168,79 @@ Shader "TubeSort/Liquid"
                 float tiltOffset = (0.5 - uv.x) * tiltSlope
                     * (_BodySize.x / _BodySize.y);
 
-                // Sıvının yüzeyi düz bir çizgi değil, yavaşça salınan bir dalga.
-                float wave = sin(uv.x * _WaveFrequency + _Time.y * _WaveSpeed) * waveAmplitude;
-                float surface = _FillLevel + tiltOffset + wave;
+                // Level başı çalkantısı: eğimle aynı biçimde yüzeyi (ve tiltOffset
+                // üzerinden katman sınırlarını) sallar; TubeView sönümleyerek
+                // sıfıra indirir.
+                tiltOffset += (0.5 - uv.x) * _SwaySlope * (_BodySize.x / _BodySize.y);
 
-                // Yüzeyin altındaysak 1, üstündeysek 0. Aradaki dar bant
-                // kenarın testere gibi görünmesini engeller.
-                float inside = smoothstep(surface, surface - edgeSoftness, uv.y);
-                if (inside <= 0.001)
+                // Yüzey boşta DURGUN: sürekli dalga kaldırıldı (kullanıcı
+                // isteği; hareket dökme sırasındaki damla halkalarından gelir).
+                // _SurfaceLift: dökme sırasında dudak demirlemesi (yukarıda).
+                float surface = _FillLevel + tiltOffset + _SurfaceLift;
+
+                // ── 2.5D: hafif üstten bakış. Yüzey, üstten görünen ELİPS bir
+                // disk; katman sınırları da diskin ÖN yayı gibi aşağı kavisli.
+                // nx: sıvı genişliğinde -1..1; arc: elips yay profili (kenarda
+                // 0, ortada 1). Efekt eğik (döken) tüpte de KORUNUR (kullanıcı
+                // isteği): bant eğimli yüzey çizgisini izlediği için disk yana
+                // yatmış mercek olarak okunur.
+                float halfWidthUV = (_BodySize.x * 0.5 - _WallThickness) / _BodySize.x;
+                float nx = clamp((uv.x - 0.5) / halfWidthUV, -1.0, 1.0);
+                float arc = sqrt(saturate(1.0 - nx * nx));
+                float ellipseDepth = _SurfaceEllipse / _BodySize.y;
+
+                // Halka patlaması yüzeyi fiziksel olarak da dalgalandırır:
+                // radyal fazla inip çıkan nazik çukur/tümsekler. Radyal koordinat
+                // yumuşatılmış (sqrt(nx²+ε)): çıplak |nx| merkezde köşe yapıp
+                // zikzak görünüyordu (kullanıcı bulgusu). surface'a eklendiği
+                // için disk, katmanlar ve kenar birlikte dalgalanır.
+                float rippleR = sqrt(nx * nx + 0.02);
+                surface += sin((rippleR * _RippleFrequency
+                    - _Time.y * _RippleSpeed) * 6.2832)
+                    * _RippleStrength * (1.0 - 0.6 * rippleR)
+                    * (_RippleHeight / _BodySize.y);
+
+                // Sıvının üst kenarı diskin ARKA yayı (yüzey çizgisinin
+                // ellipseDepth·arc kadar üstü); disk bölgesi aşağıda açık
+                // tonla boyanır. Yüzeyin altındaysak 1, üstündeysek 0; dar
+                // bant kenarın testere gibi görünmesini engeller.
+                float surfaceTop = surface + ellipseDepth * arc;
+                float inside = smoothstep(surfaceTop, surfaceTop - edgeSoftness, uv.y);
+
+                // Sıçrama: dökme sırasında değme noktasından (disk merkezi) iki
+                // yana fırlayıp geri düşen damlacıklar — yüzeyin ÜSTÜNE çizilir,
+                // discard bu yüzden sıçramayı da bekler. Koordinatlar dünya
+                // biriminde: damlacık boyu/yayı tüple ölçeklenmez.
+                float splash = 0.0;
+                if (_SplashStrength > 0.001)
+                {
+                    float liquidHalfW = _BodySize.x * 0.5 - _WallThickness;
+                    float wx = nx * liquidHalfW;
+                    float wy = (uv.y - surface) * _BodySize.y;
+                    for (int s = 0; s < 8; s++)
+                    {
+                        float dir = (s < 4) ? -1.0 : 1.0;
+                        float k = (float)(s % 4);
+                        // Faz, menzil ve boy damlacık başına değişir: tek tip
+                        // 4 damla mekanik duruyordu, kalabalık ve düzensiz
+                        // olunca gerçek sıçrama gibi okunur.
+                        float phase = k * 0.27 + dir * 0.13;
+                        float reach = 0.20 + 0.05 * k;
+                        float rise = 0.42 + 0.07 * ((k + 1.0) % 3.0);
+                        // d: 0..1 uçuş döngüsü; yanlara açılırken parabolik
+                        // yükselip düşer, uçuş sonunda söner.
+                        float d = frac(_Time.y * (1.5 + 0.25 * k) + phase);
+                        float2 c = float2(dir * d * reach,
+                            0.03 + rise * d * (1.0 - d));
+                        float r = (0.036 - 0.004 * k) * (1.0 - 0.45 * d);
+                        float drop = 1.0 - smoothstep(r * 0.55, r,
+                            length(float2(wx, wy) - c));
+                        splash = max(splash, drop * (1.0 - d * d));
+                    }
+                    splash *= _SplashStrength;
+                }
+
+                if (inside <= 0.001 && splash <= 0.001)
                     discard;
 
                 // Son ~1 birim sıvıda, ağız tarafına doğru çekilme.
@@ -156,13 +252,13 @@ Shader "TubeSort/Liquid"
                 float drainProgress = (1.0 - saturate(_FillLevel / 0.2)) * tiltAmount;
                 if (drainProgress > 0.001)
                 {
-                    float maxSurface = _FillLevel
+                    float maxSurface = _FillLevel + _SurfaceLift
                         + abs(0.5 * tiltSlope * (_BodySize.x / _BodySize.y));
                     float survivalScore = saturate(surface / max(maxSurface, 0.001));
                     float drainClip = smoothstep(drainProgress - 0.05,
                                                  drainProgress + 0.05, survivalScore);
                     inside *= drainClip;
-                    if (inside <= 0.001)
+                    if (inside <= 0.001 && splash <= 0.001)
                         discard;
                 }
 
@@ -173,7 +269,10 @@ Shader "TubeSort/Liquid"
                 int layerIndex = 0;
                 for (int k = 0; k < MAX_LAYERS; k++)
                 {
-                    if (k < _LayerCount && uv.y >= _LayerTops[k] + tiltOffset)
+                    // Sınır, 2.5D diskin ön yayı gibi ortada ellipseDepth kadar
+                    // aşağı kavisli (üstten bakışta kesitin ön kenarı alçak görünür).
+                    if (k < _LayerCount && uv.y >= _LayerTops[k] + tiltOffset
+                        - ellipseDepth * arc)
                         layerIndex = k + 1;
                 }
                 layerIndex = clamp(layerIndex, 0, _LayerCount - 1);
@@ -196,7 +295,42 @@ Shader "TubeSort/Liquid"
                 // Mavimsi beyaz — görseldeki şerit tonuyla aynı aile.
                 color.rgb = lerp(color.rgb, float3(0.94, 0.97, 1.0), streak * _Glossiness);
 
-                color.a *= inside * insideGlass;
+                // 2.5D yüzey diski: yüzey çizgisinin ±ellipseDepth·arc bandı,
+                // üstten görünen elips — en üst katmanın açık tonu. Gölge ve
+                // şeritten SONRA basılır ki disk temiz, düz bir yüzey okunsun.
+                // Kenarlarda arc sıfıra indiği için disk cama sivrilerek kapanır.
+                float discEdge = ellipseDepth * arc - abs(uv.y - surface);
+                float inDisc = smoothstep(0.0, edgeSoftness, discEdge);
+                float3 surfaceTone = lerp(_LayerColors[_LayerCount - 1].rgb,
+                    float3(1.0, 1.0, 1.0), _SurfaceLight);
+                float3 discColor = surfaceTone;
+
+                // Damla halkaları: akış kolonu tüpün merkezine indiği için
+                // değme noktası disk merkezi. rho: diskin elips-normalize
+                // yarıçapı (merkez 0, kenar 1). Halkalar dışa doğru kayar.
+                // Sinüs keskinleştirilir (smoothstep): yumuşak haliyle halkalar
+                // fark edilmiyordu (kullanıcı bulgusu) — net açık/koyu bantlar.
+                float dy = (uv.y - surface) / max(ellipseDepth, 1e-4);
+                float rho = sqrt(saturate(nx * nx + dy * dy));
+                float ringWave = 0.5 + 0.5 * sin((rho * _RippleFrequency
+                    - _Time.y * _RippleSpeed) * 6.2832);
+                // Yumuşak geçiş: keskin bantlar (0.30-0.70 smoothstep) göze
+                // batıyordu — geniş aralık nazik bir ışık oyunu bırakır.
+                float rings = smoothstep(0.15, 0.85, ringWave);
+                float ringMask = _RippleStrength * _RippleAmplitude
+                    * (1.0 - 0.6 * rho);
+                discColor = lerp(discColor, float3(1.0, 1.0, 1.0),
+                    rings * ringMask);
+                discColor = lerp(discColor, _LayerColors[_LayerCount - 1].rgb,
+                    (1.0 - rings) * ringMask * 0.5);
+
+                color.rgb = lerp(color.rgb, discColor, inDisc);
+
+                // Damlacıklar yüzey tonunda: sıvının üstünde kaldıkları yerde
+                // (inside≈0) renk katman döngüsünden gelir, açık tona çekilir.
+                color.rgb = lerp(color.rgb, surfaceTone, saturate(splash - inside));
+
+                color.a *= max(inside, splash) * insideGlass;
                 return (half4)color;
             }
             ENDHLSL

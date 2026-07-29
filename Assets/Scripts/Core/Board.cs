@@ -58,6 +58,11 @@ namespace TubeSort.Core
             Tube to = tubes[toIndex];
 
             if (from.IsEmpty) return 0;
+            // Tamamlanmış (tıpalı) tüp kilitlidir: içinden dökülemez. Solver'ın
+            // "tamamlanmış tüpten dökme yok" budamasıyla aynı kural; böylece
+            // oyun içi hamleler, HasAnyValidMove ve arama uzayı tutarlı kalır.
+            // (Boş tüp de IsComplete sayılır ama bir üst satır onu zaten eledi.)
+            if (from.IsComplete) return 0;
             if (to.IsFull) return 0;
 
             // Hedef doluysa, üstündeki renk kaynağınkiyle aynı olmalı.
