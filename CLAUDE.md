@@ -199,8 +199,13 @@ haritası (29 Tem; sırayla, her madde gözle onay + commit):
   `FillHeadroom`; pay = tıpa sarkması 0.312 + görünür boşluk 0.12). Birim
   sıvı boyu artık tam `UnitHeight` (kapasiteler arası tutarlı). Tıpalıyken
   üst katman tamamen görünür.
-- [ ] **2. 2.5D sıvı:** üst yüzey elips (sıvının açık tonu), katman sınırları
-  aynı basıklıkta kavisli; basıklık yaka perspektifiyle uyumlu.
+- [x] **2. 2.5D sıvı:** üst yüzey elips disk (üst katmanın açık tonu, kenarda
+  cama sivrilerek kapanır), katman sınırları ön yay gibi aşağı kavisli;
+  derinlik görsel perspektifinden (0.375 × 0.2 ≈ 0.075). Efekt dökme
+  sırasında da KORUNUR (kullanıcı isteği) — bant eğimli yüzeyi izler.
+- [x] **2.5 (ara madde): tıpalı tüp girişi + seçim iptali** — tıpalı
+  (complete) tüp seçilemez ve dökme kaynağı olamaz (Core kuralı +
+  görünüm); boş alana ya da tıpalı tüpe tıklamak mevcut seçimi iptal eder.
 - [ ] **3. Dikdörtgen akış + kaynak yaka ağzı:** Bezier yerine ağızdan dik
   inen kolon; kaynak noktası YAKA AĞZI olur (şu an akış yakanın içinden
   çıkıyor — kullanıcı bulgusu).

@@ -28,6 +28,34 @@ namespace TubeSort.Tests
         }
 
         [Test]
+        public void PourableAmount_IsZero_WhenSourceIsComplete()
+        {
+            // Tamamlanmış (tıpalı) tüp kilitlidir: boş tüp bile olsa dökemez.
+            var board = new Board(new[]
+            {
+                new Tube(4, Red, Red, Red, Red),
+                new Tube(4)
+            });
+
+            Assert.AreEqual(0, board.PourableAmount(0, 1));
+            Assert.IsFalse(board.Pour(0, 1).Success);
+        }
+
+        [Test]
+        public void HasAnyValidMove_IgnoresCompleteTubes()
+        {
+            // Tek "hamle adayı" tıpalı tüpten boşa dökmek: kilitli olduğu için
+            // hamle sayılmaz. (Solver'ın budamasıyla tutarlı davranış.)
+            var board = new Board(new[]
+            {
+                new Tube(4, Red, Red, Red, Red),
+                new Tube(4)
+            });
+
+            Assert.IsFalse(board.HasAnyValidMove);
+        }
+
+        [Test]
         public void Pour_TransfersWholeSegmentInOneMove()
         {
             var board = new Board(new[]

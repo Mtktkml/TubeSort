@@ -780,7 +780,12 @@ namespace TubeSort.Game
         {
             Vector3 worldPoint = mainCamera.ScreenToWorldPoint(screenPosition);
             Collider2D hit = Physics2D.OverlapPoint(worldPoint);
-            if (hit == null) return;
+            if (hit == null)
+            {
+                // Boşluğa tıklamak vazgeçmektir: mevcut seçimi iptal et.
+                ClearSelection();
+                return;
+            }
 
             if (hit.GetComponent<UndoButtonView>() != null)
             {
@@ -803,7 +808,14 @@ namespace TubeSort.Game
 
             var view = hit.GetComponent<TubeView>();
             if (view != null && view.ContainsPoint(worldPoint))
+            {
                 HandleTubeClick(view.Index);
+                return;
+            }
+
+            // Collider'a girip tüpün gerçek şekline (SDF) girmeyen tıklama da
+            // boşluk sayılır: seçim iptal.
+            ClearSelection();
         }
 
         private void HandleActionButton(ButtonView.ButtonKind kind)
@@ -818,10 +830,11 @@ namespace TubeSort.Game
 
         private void HandleTubeClick(int index)
         {
-            // Henüz seçim yok: boş tüpten dökme yapılamayacağı için boş tüp seçtirmiyoruz.
+            // Henüz seçim yok: boş tüpten dökme yapılamaz, tıpalı (complete)
+            // tüp kilitlidir — ikisi de seçtirilmez (yukarı kalkmaz).
             if (selectedIndex == -1)
             {
-                if (board[index].IsEmpty) return;
+                if (!IsSelectable(index)) return;
 
                 selectedIndex = index;
                 tubeViews[index].SetSelected(true);
@@ -840,13 +853,20 @@ namespace TubeSort.Game
 
             // Hamle geçersizdi. Oyuncu muhtemelen yeni bir kaynak seçmek istiyor:
             // seçimi iptal etmek yerine seçimi tıklanan tüpe taşımak daha rahat.
+            // Boş ya da tıpalı tüpe tıklandıysa bu bir vazgeçmedir: seçim sıfır kalır.
             ClearSelection();
-            if (!board[index].IsEmpty)
+            if (IsSelectable(index))
             {
                 selectedIndex = index;
                 tubeViews[index].SetSelected(true);
             }
         }
+
+        /// <summary>Dökme kaynağı olabilecek tüp: boş değil ve tıpalı (complete)
+        /// değil. Tıpalı tüp kilitlidir — Board.PourableAmount da aynı kuralı
+        /// uygular; buradaki kontrol seçim/kaldırma davranışı için.</summary>
+        private bool IsSelectable(int index) =>
+            !board[index].IsEmpty && !board[index].IsComplete;
 
         private void ClearSelection()
         {
@@ -931,7 +951,7 @@ namespace TubeSort.Game
         /// </summary>
         private IEnumerator AnimatePour(PourResult result)
         {
-            const float slideDuration = 0.24f;
+            const float slideDuration = 0.2f;
             const float pourDuration = 0.4f;
 
             // SmoothDamp tepki süresi. Kritik sönümleme: aşım yok, hızlı yakınsama.
