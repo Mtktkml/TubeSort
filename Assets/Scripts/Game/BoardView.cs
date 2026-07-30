@@ -546,7 +546,11 @@ namespace TubeSort.Game
             if (!history.TryUndo(board, out PourResult undone)) return;
 
             ClearSelection();
-            HideDeadlock();   // önceki durum zaten çözülebilirdi: uyarı kalksın
+            // Çıkmaz uyarısını KOŞULLU güncelle (koşulsuz gizleme değil):
+            // eşzamanlı dökmede çıkmaza iki hamle birlikte sokmuş olabilir, tek
+            // geri alma yetmeyebilir. Banner yalnız tahta gerçekten çözülebilir
+            // hâle dönünce kalkar; hâlâ çıkmazsa kalır (undo verisi hemen işlendi).
+            RefreshDeadlockBanner();
             StartCoroutine(AnimateUndo(undone));
         }
 
@@ -1081,11 +1085,20 @@ namespace TubeSort.Game
                 Debug.Log("<color=lime>Tahta çözüldü!</color>");
                 if (pilotPreview && pilotCount > 0)
                     StartCoroutine(AutoAdvanceToNext());
+                return;
             }
-            // Gerçek çıkmaz: hamle olsun olmasın, bu tahtadan artık kazanılamaz.
-            // Varlık kontrolü ucuz (ilk çözümde durur); dökmeler ayrık olduğu için
-            // hamle-başına-bir-kez çalışır.
-            else if (!Solver.IsSolvable(board))
+
+            RefreshDeadlockBanner();
+        }
+
+        /// <summary>Çıkmaz uyarısını tahtanın çözülebilirliğine göre günceller:
+        /// çözülemezse gösterir, çözülebilirse gizler. Hem dökme sonrası
+        /// (ReportBoardState) hem geri alma sonrası çağrılır — bu yüzden banner
+        /// yalnız gerçekten çıkmazdan çıkınca kalkar, her undo'da körü körüne değil.
+        /// Varlık kontrolü ucuz (ilk çözümde durur).</summary>
+        private void RefreshDeadlockBanner()
+        {
+            if (!Solver.IsSolvable(board))
             {
                 Debug.Log("<color=orange>Çıkmaz: bu tahtadan kazanılamaz.</color>");
                 ShowDeadlock();
@@ -1145,12 +1158,12 @@ namespace TubeSort.Game
         /// </summary>
         private IEnumerator AnimatePour(PourResult result, PourJob job)
         {
-            const float slideDuration = 0.24f;
-            const float pourDuration = 0.4f;
+            const float slideDuration = 2f;
+            const float pourDuration = 2f;
 
             // SmoothDamp tepki süresi. Kritik sönümleme: aşım yok, hızlı yakınsama.
             // Hem ilk eğilme hem dökme sırasındaki açı değişimi tek parametre.
-            const float angleSmoothTime = 0.12f;
+            const float angleSmoothTime = 2f;
 
             ClearSelection();
 
@@ -1212,7 +1225,7 @@ namespace TubeSort.Game
             // Emniyet kemeri: hiçbir formül hatası animasyonu bir daha
             // kilitleyemesin. Doğru işleyişte asla tetiklenmez; tetiklenirse
             // hata loglanır ve animasyon son değerlerle zorla tamamlanır.
-            const float watchdogSeconds = 4f;
+            const float watchdogSeconds = 16f;
             float watchdogElapsed = 0f;
 
             while (true)
