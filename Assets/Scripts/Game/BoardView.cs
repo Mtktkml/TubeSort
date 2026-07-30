@@ -29,23 +29,15 @@ namespace TubeSort.Game
         [Range(0f, 0.4f)]
         [SerializeField] private float screenMargin = 0.1f;
 
-        [Header("Level")]
-        [Tooltip("Oynanacak level (Resources/levels.json'dan). 0 = level yok, " +
-                 "elle kurulmuş test tahtası kullanılır.")]
-        [SerializeField] private int levelNumber;
-
-        [Header("Pilot Önizleme (geçici)")]
-        [Tooltip("C aşamasının pilot merdivenini (pilot_levels.json) yükle ve " +
-                 "ok tuşlarıyla (← →) gez. levelNumber ve test tahtasının önüne " +
-                 "geçer, LoadBoard'ın arkasında kalır. D'nin level dosyası " +
-                 "(levels.json) bundan etkilenmez.")]
-        [SerializeField] private bool pilotPreview;
-
-        [Header("Teşhis")]
-        [Tooltip("Çözülemez test tahtasını kur: solver'ın 'ÇÖZÜLEMEZ' kararını " +
-                 "ve oyun içi çıkmazı elle denemek için. Yalnız levelNumber = 0 " +
-                 "iken etkilidir.")]
-        [SerializeField] private bool useUnsolvableBoard;
+        [Header("Animasyon süreleri (sn)")]
+        [Tooltip("Kaynak tüpün hedefe kayma süresi.")]
+        [SerializeField] private float slideDuration = 0.24f;
+        [Tooltip("Sıvının dökülme (seviye değişimi) süresi.")]
+        [SerializeField] private float pourDuration = 0.4f;
+        [Tooltip("Eğim açısı SmoothDamp tepki süresi (kritik sönümleme, aşım yok).")]
+        [SerializeField] private float angleSmoothTime = 0.12f;
+        [Tooltip("Emniyet: dökme bu süre içinde bitmezse hata loglanıp zorla tamamlanır.")]
+        [SerializeField] private float watchdogSeconds = 4f;
 
         private Board board;
         private readonly MoveHistory history = new MoveHistory();
@@ -60,7 +52,13 @@ namespace TubeSort.Game
         private Sprite collarFrontBottomSprite; // sandviç parçaları; doku + sprite bizde,
                                                 // OnDestroy temizler
         private readonly List<TubeView> tubeViews = new List<TubeView>();
-        private StreamView streamView;
+
+        // Akış görselleri havuzu: her aktif dökme kendi akışını kullanır.
+        // Ayrık eşzamanlı dökmeler için gerektikçe büyür, tüpler yeniden
+        // kurulunca yok edilmez (yeniden kullanılır).
+        private readonly List<StreamView> streamPool = new List<StreamView>();
+        private readonly HashSet<StreamView> streamsInUse = new HashSet<StreamView>();
+
         private UndoButtonView undoButton;
         private PilotNextButtonView pilotNextButton;
         private ButtonView prevButton;      // önceki level (nav)
@@ -72,7 +70,96 @@ namespace TubeSort.Game
         private Board pristineBoard;         // mevcut levelin bozulmamış kopyası (restart için)
 
         private int selectedIndex = -1;
-        private bool isAnimating;
+
+        // Süren dökme/geri-alma animasyonları. Bir tüp herhangi bir işin kaynağı
+        // ya da hedefiyse meşguldür ve yeni dökmeye kapalıdır. Ayrık tüp çiftleri
+        // aynı anda dökülebilir.
+        private readonly List<PourJob> activeJobs = new List<PourJob>();
+        private bool AnyAnimating => activeJobs.Count > 0;
+
+        /// <summary>Süren bir dökme/geri-alma animasyonu: kaynak/hedef indeksleri,
+        /// kaynağın çizim-sırası offset'i (eşzamanlı kaynaklar farklı bantta durur)
+        /// ve eğim yönü (+1 hedef sağda, -1 solda; 2. gelen ilkinin tersini alır).</summary>
+        private sealed class PourJob
+        {
+            public int FromIndex;
+            public int ToIndex;
+            public int SortingOffset;
+            public float Direction;
+            // Dökme fazı sürüyor mu? Geri dönüş (kaynak doğrulma) fazında false
+            // olur ama iş hâlâ activeJobs'ta kalır (kaynak meşgul). Hedef
+            // tamamlanmasının "son dökücü" kararı buna bakar.
+            public bool Pouring;
+            // Bu dökmenin hedefe eklediği doluluk miktarı (dünya ölçüsü) ve o an
+            // uygulanmış ilerlemesi (0-1). Hedef doluluğu, aktif dökmelerin
+            // katkılarının TOPLAMIyla artar (max değil) — her kaynak hedefi kendi
+            // payınca yükseltir, biri erken bitse de kalan artışı sürer.
+            public float FillAmount;
+            public float FillProgress;
+        }
+
+        /// <summary>Aktif işlerin kullanmadığı en küçük offset bandını (10, 20, …) verir:
+        /// eşzamanlı eğik kaynaklar birbirinin üstünde tutarlı katmanlansın.</summary>
+        private int AllocateSortingOffset()
+        {
+            for (int band = 1; ; band++)
+            {
+                int offset = band * 10;
+                bool taken = false;
+                foreach (PourJob job in activeJobs)
+                {
+                    if (job.SortingOffset == offset) { taken = true; break; }
+                }
+                if (!taken) return offset;
+            }
+        }
+
+        /// <summary>Verilen tüp o an bir dökme/geri-almanın kaynağı ya da hedefi mi?</summary>
+        private bool IsBusy(int index)
+        {
+            foreach (PourJob job in activeJobs)
+                if (job.FromIndex == index || job.ToIndex == index)
+                    return true;
+            return false;
+        }
+
+        /// <summary>Bu tüpe o an kaç dökme akıyor (0, 1 ya da 2).</summary>
+        private int IncomingCount(int index)
+        {
+            int count = 0;
+            foreach (PourJob job in activeJobs)
+                if (job.ToIndex == index) count++;
+            return count;
+        }
+
+        /// <summary>Bu tüp başka bir dökmenin kaynağı mı (boşalıyor)?</summary>
+        private bool IsDraining(int index)
+        {
+            foreach (PourJob job in activeJobs)
+                if (job.FromIndex == index) return true;
+            return false;
+        }
+
+        /// <summary>Bu hedefe, verilen iş DIŞINDA hâlâ döken başka bir iş var mı?
+        /// Hedef tamamlanması (tıpa/halka) yalnız son dökücü bitince yapılsın diye.</summary>
+        private bool TargetHasOtherPouring(int toIndex, PourJob self)
+        {
+            foreach (PourJob job in activeJobs)
+                if (job != self && job.ToIndex == toIndex && job.Pouring) return true;
+            return false;
+        }
+
+        /// <summary>Dökmenin eğim yönü: hedefe o an bir dökme akıyorsa ilkinin
+        /// TERSİ (biri sağdan, biri soldan); yoksa doğal yön (hedef sağdaysa +1).</summary>
+        private float ComputePourDirection(int fromIndex, int toIndex)
+        {
+            foreach (PourJob job in activeJobs)
+                if (job.ToIndex == toIndex) return -job.Direction;
+
+            float dx = tubeViews[toIndex].RestPosition.x - tubeViews[fromIndex].RestPosition.x;
+            return Mathf.Abs(dx) < 0.01f ? 1f : Mathf.Sign(dx);
+        }
+
         private Camera mainCamera;
 
         /// <summary>pilot_levels.json Resources kaynak adı (uzantısız).</summary>
@@ -127,22 +214,14 @@ namespace TubeSort.Game
             collarFrontTopSprite = TubeView.CreateCollarFrontTopSprite(collarSprite);
             collarFrontBottomSprite = TubeView.CreateCollarFrontBottomSprite(collarSprite);
 
-            // Tahta önceliği: dışarıdan verilen (LoadBoard) > pilot önizleme >
-            // seçili level > son çare pilot merdivenin ilk tahtası (teşhis
-            // anahtarı açıksa çözülemez örnek tahta). Eski elle kurulmuş
-            // CreateTestBoard silindi: level sistemi tek kaynak, testler kendi
-            // tahtalarını LoadBoard ile enjekte eder.
-            if (board == null && pilotPreview)
+            // Tahta önceliği: dışarıdan verilen (LoadBoard) önce; yoksa pilot
+            // merdiveni (pilot_levels.json) yüklenir. Testler kendi tahtalarını
+            // LoadBoard ile enjekte eder.
+            if (board == null)
             {
                 pilotCount = LevelLibrary.LevelCount(PilotResource);
-                board = LoadPilot(pilotIndex);
+                board = LoadPilot(pilotIndex);   // pilotIndex 1'den başlar
             }
-
-            if (board == null && levelNumber > 0)
-                board = LevelLibrary.Load(levelNumber);
-
-            if (board == null)
-                board = useUnsolvableBoard ? CreateUnsolvableTestBoard() : LoadPilot(1);
 
             if (board == null)
             {
@@ -154,15 +233,11 @@ namespace TubeSort.Game
             pristineBoard = board.Clone();   // restart bu kopyayı geri yükler
 
             BuildViews();
-            BuildStreamView();
             BuildUndoButton();
             BuildRestartButton();
             BuildAddTubeButton();
-            if (pilotPreview)
-            {
-                BuildPilotNextButton();
-                BuildPrevButton();
-            }
+            BuildPilotNextButton();
+            BuildPrevButton();
             BuildDeadlockBanner();
             BuildLevelTitle();
             ApplyLayout();
@@ -265,12 +340,10 @@ namespace TubeSort.Game
             levelTitle.text = string.IsNullOrEmpty(label) ? "" : $"LEVEL {label}";
         }
 
-        /// <summary>Mevcut levelin ekran adı: pilot modunda label ("1.1"), yoksa numara.</summary>
+        /// <summary>Mevcut levelin ekran adı: pilot merdiveninin label'ı ("1.1").</summary>
         private string CurrentLabel()
         {
-            if (pilotPreview && pilotCount > 0)
-                return LevelLibrary.LabelOf(PilotResource, pilotIndex);
-            return levelNumber > 0 ? levelNumber.ToString() : "";
+            return pilotCount > 0 ? LevelLibrary.LabelOf(PilotResource, pilotIndex) : "";
         }
 
         /// <summary>
@@ -323,8 +396,9 @@ namespace TubeSort.Game
         /// <summary>Aktif tahta. Testlerin ve dış katmanların durum sorgusu için.</summary>
         public Board Board => board;
 
-        /// <summary>Dökme animasyonu sürüyor mu? Testler bitişini beklemek için kullanır.</summary>
-        public bool IsAnimating => isAnimating;
+        /// <summary>Herhangi bir dökme/geri-alma animasyonu sürüyor mu? Testler
+        /// bitişini beklemek için kullanır.</summary>
+        public bool IsAnimating => AnyAnimating;
 
         /// <summary>
         /// Dışarıdan tahta yükler: level üreticinin ve testlerin giriş kapısı.
@@ -392,6 +466,7 @@ namespace TubeSort.Game
         private void StepPilot(int step)
         {
             if (pilotCount <= 0) return;
+            if (AnyAnimating) return;   // meta aksiyon: animasyon sürerken level değişmez
 
             pilotIndex = ((pilotIndex - 1 + step + pilotCount) % pilotCount) + 1;
             Board next = LoadPilot(pilotIndex);
@@ -408,13 +483,33 @@ namespace TubeSort.Game
         /// </summary>
         public bool TryPour(int fromIndex, int toIndex)
         {
-            if (isAnimating) return false;
+            // Kaynak tamamen serbest olmalı (ne boşalıyor ne dolduruluyor).
+            if (IsBusy(fromIndex)) return false;
+            // Hedef başka bir dökmenin kaynağı olamaz (boşalan tüpe dökülmez).
+            if (IsDraining(toIndex)) return false;
+            // Bir hedef en fazla 2 gelen alır (karşı taraflardan); 3. reddedilir.
+            if (IncomingCount(toIndex) >= 2) return false;
 
+            // Bu dökmenin hedefe ekleyeceği doluluk miktarı: board.Pour öncesi/
+            // sonrası hedef seviyesinin farkı (TubeView tüpü canlı board tüpü,
+            // Push yerinde değiştirir). Diğer dökmelerden bağımsız kendi payı.
+            float fillBefore = tubeViews[toIndex].TargetFillLevel;
             PourResult result = board.Pour(fromIndex, toIndex);
             if (!result.Success) return false;
+            float fillAmount = tubeViews[toIndex].TargetFillLevel - fillBefore;
 
             history.Record(result);
-            StartCoroutine(AnimatePour(result));
+            var job = new PourJob
+            {
+                FromIndex = fromIndex,
+                ToIndex = toIndex,
+                SortingOffset = AllocateSortingOffset(),
+                Direction = ComputePourDirection(fromIndex, toIndex),
+                Pouring = true,
+                FillAmount = fillAmount,
+            };
+            activeJobs.Add(job);
+            StartCoroutine(AnimatePour(result, job));
             return true;
         }
 
@@ -426,11 +521,15 @@ namespace TubeSort.Game
         /// </summary>
         public void UndoLastMove()
         {
-            if (isAnimating) return;
+            if (AnyAnimating) return;
             if (!history.TryUndo(board, out PourResult undone)) return;
 
             ClearSelection();
-            HideDeadlock();   // önceki durum zaten çözülebilirdi: uyarı kalksın
+            // Çıkmaz uyarısını KOŞULLU güncelle (koşulsuz gizleme değil):
+            // eşzamanlı dökmede çıkmaza iki hamle birlikte sokmuş olabilir, tek
+            // geri alma yetmeyebilir. Banner yalnız tahta gerçekten çözülebilir
+            // hâle dönünce kalkar; hâlâ çıkmazsa kalır (undo verisi hemen işlendi).
+            RefreshDeadlockBanner();
             StartCoroutine(AnimateUndo(undone));
         }
 
@@ -445,7 +544,8 @@ namespace TubeSort.Game
         {
             const float fillDuration = 0.3f;
 
-            isAnimating = true;
+            var job = new PourJob { FromIndex = undone.FromIndex, ToIndex = undone.ToIndex };
+            activeJobs.Add(job);
 
             TubeView fromView = tubeViews[undone.FromIndex]; // sıvı buraya geri döner
             TubeView toView = tubeViews[undone.ToIndex];     // sıvı buradan alınır
@@ -467,7 +567,7 @@ namespace TubeSort.Game
             yield return rise;
             yield return fall;
 
-            isAnimating = false;
+            activeJobs.Remove(job);
         }
 
         /// <summary>
@@ -477,7 +577,7 @@ namespace TubeSort.Game
         /// </summary>
         public void RestartLevel()
         {
-            if (isAnimating) return;
+            if (AnyAnimating) return;
             if (pristineBoard == null) return;
 
             LoadBoard(pristineBoard.Clone());
@@ -491,13 +591,19 @@ namespace TubeSort.Game
         /// </summary>
         public void AddEmptyTube()
         {
-            if (isAnimating) return;
+            if (AnyAnimating) return;
             if (board.TubeCount == 0) return;
 
             board.AddTube(board[0].Capacity);
             ClearSelection();
             if (initialized)
+            {
                 RebuildViews();
+                // +tüp genelde çıkmazı çözer (boş tüp = daha çok yer) ama garanti
+                // değil: RebuildViews banner'ı gizledi; yeni tahta hâlâ çıkmazsa
+                // banner geri gelir (undo'daki koşullu temizlemenin aynısı).
+                RefreshDeadlockBanner();
+            }
         }
 
         /// <summary>Mevcut tüp görünümlerini yıkıp tahtayı baştan kurar.</summary>
@@ -505,11 +611,12 @@ namespace TubeSort.Game
         {
             // Yarıda kalan dökme animasyonu yeni tahtaya sızmasın.
             StopAllCoroutines();
-            isAnimating = false;
+            activeJobs.Clear();
             selectedIndex = -1;
             HideDeadlock();   // restart/+tüp/level geçişi çıkmaz uyarısını sıfırlar
-            if (streamView != null)
-                streamView.Hide();
+            foreach (StreamView stream in streamPool)
+                stream.Hide();
+            streamsInUse.Clear();
 
             foreach (TubeView view in tubeViews)
                 Destroy(view.gameObject);
@@ -556,26 +663,6 @@ namespace TubeSort.Game
             Destroy(piece);
         }
 
-        /// <summary>
-        /// Kanıtlanmış çözülemez tahta: rastgele üretilip solver ile tarandı
-        /// (58 durumun tamamı gezildi, çözüm yok). Hamleler var, yani oyuncu
-        /// bir süre oynayıp çıkmaza girebilir — "hamle var ama kazanılamaz"
-        /// durumunun elle test edilebilir örneği.
-        /// </summary>
-        private Board CreateUnsolvableTestBoard()
-        {
-            const int Red = 0, Yellow = 1, Blue = 2, Green = 3;
-
-            return new Board(new[]
-            {
-                new Tube(4, Blue, Blue, Green, Red),
-                new Tube(4, Blue, Red, Green, Yellow),
-                new Tube(4, Green, Red, Green, Yellow),
-                new Tube(4, Blue, Red, Yellow, Yellow),
-                new Tube(4)
-            });
-        }
-
         private void BuildViews()
         {
             for (int i = 0; i < board.TubeCount; i++)
@@ -590,12 +677,33 @@ namespace TubeSort.Game
             }
         }
 
-        private void BuildStreamView()
+        /// <summary>Boşta bir akış görseli verir; yoksa yenisini kurup havuza ekler.</summary>
+        private StreamView AcquireStream()
         {
-            var go = new GameObject("Stream");
+            foreach (StreamView stream in streamPool)
+            {
+                if (!streamsInUse.Contains(stream))
+                {
+                    streamsInUse.Add(stream);
+                    return stream;
+                }
+            }
+
+            var go = new GameObject($"Stream{streamPool.Count}");
             go.transform.SetParent(transform, false);
-            streamView = go.AddComponent<StreamView>();
-            streamView.Initialize(unitSprite, streamMaterial);
+            var created = go.AddComponent<StreamView>();
+            created.Initialize(unitSprite, streamMaterial);
+            streamPool.Add(created);
+            streamsInUse.Add(created);
+            return created;
+        }
+
+        /// <summary>Akış görselini gizleyip havuza geri verir.</summary>
+        private void ReleaseStream(StreamView stream)
+        {
+            if (stream == null) return;
+            stream.Hide();
+            streamsInUse.Remove(stream);
         }
 
         /// <summary>
@@ -777,7 +885,7 @@ namespace TubeSort.Game
         /// </summary>
         private void RefitIfViewChanged()
         {
-            if (isAnimating) return;
+            if (AnyAnimating) return;
             if (CameraView != lastFittedView)
                 ApplyLayout();
         }
@@ -814,9 +922,9 @@ namespace TubeSort.Game
         {
             RefitIfViewChanged();
 
-            // Pilot önizleme: ok tuşlarıyla level gezme. Geçiş yapıldıysa bu kare
-            // tıklama işlenmez (yeni tahta zaten kuruldu).
-            if (pilotPreview && !isAnimating && HandlePilotBrowse())
+            // Ok tuşlarıyla level gezme. Geçiş yapıldıysa bu kare tıklama
+            // işlenmez (yeni tahta zaten kuruldu).
+            if (!AnyAnimating && HandlePilotBrowse())
                 return;
 
             // Pointer, Mouse ve Touchscreen'in ortak atasıdır: masaüstünde fare,
@@ -824,7 +932,9 @@ namespace TubeSort.Game
             Pointer pointer = Pointer.current;
             if (pointer == null) return;
 
-            if (isAnimating) return;
+            // Animasyon sürerken de tıklama işlenir: dökmeye dahil olmayan tüpler
+            // arasında eşzamanlı dökme yapılabilsin. Meşgul tüp/meta kuralları
+            // aşağıda (HandleTubeClick / meta aksiyon guard'ları) uygulanır.
             if (!pointer.press.wasPressedThisFrame) return;
 
             HandleClick(pointer.position.ReadValue());
@@ -834,46 +944,39 @@ namespace TubeSort.Game
         /// Ekran koordinatındaki dokunuşu ilgili hedefe yönlendirir: geri al
         /// butonu ya da tüp. Tüplerde BoxCollider2D hızlı eleme yapar; ardından
         /// SDF ile dokunuşun gerçekten tüp şekli içinde olduğu doğrulanır.
+        ///
+        /// Tek bir OverlapPoint yetmez: dökme sırasında kaynak tüp hedefin
+        /// ÜSTÜNE asılır, collider'ları çakışır. Tüm collider'lara bakıp gerçek
+        /// şekline (SDF) girilen tüpü seçeriz — yoksa hedefe yapılan tıklama,
+        /// asılı kaynağın collider'ına takılıp boşluk sanılır (2. dökme başlamaz).
         /// </summary>
         private void HandleClick(Vector2 screenPosition)
         {
             Vector3 worldPoint = mainCamera.ScreenToWorldPoint(screenPosition);
-            Collider2D hit = Physics2D.OverlapPoint(worldPoint);
-            if (hit == null)
+            Collider2D[] hits = Physics2D.OverlapPointAll(worldPoint);
+
+            // Butonlar tüplerin/akışın üstünde; herhangi bir collider buysa öncelikli.
+            foreach (Collider2D hit in hits)
             {
-                // Boşluğa tıklamak vazgeçmektir: mevcut seçimi iptal et.
-                ClearSelection();
-                return;
+                if (hit.GetComponent<UndoButtonView>() != null) { UndoLastMove(); return; }
+                if (hit.GetComponent<PilotNextButtonView>() != null) { StepPilot(1); return; }
+                var button = hit.GetComponent<ButtonView>();
+                if (button != null) { HandleActionButton(button.Kind); return; }
             }
 
-            if (hit.GetComponent<UndoButtonView>() != null)
+            // Gerçek şekline (SDF) dokunulan tüp: asılı kaynak üstte olsa da
+            // altındaki durağan tüp doğru bulunur.
+            foreach (Collider2D hit in hits)
             {
-                UndoLastMove();
-                return;
+                var view = hit.GetComponent<TubeView>();
+                if (view != null && view.ContainsPoint(worldPoint))
+                {
+                    HandleTubeClick(view.Index);
+                    return;
+                }
             }
 
-            if (hit.GetComponent<PilotNextButtonView>() != null)
-            {
-                StepPilot(1);   // skip: tamamlamadan sonraki level
-                return;
-            }
-
-            var button = hit.GetComponent<ButtonView>();
-            if (button != null)
-            {
-                HandleActionButton(button.Kind);
-                return;
-            }
-
-            var view = hit.GetComponent<TubeView>();
-            if (view != null && view.ContainsPoint(worldPoint))
-            {
-                HandleTubeClick(view.Index);
-                return;
-            }
-
-            // Collider'a girip tüpün gerçek şekline (SDF) girmeyen tıklama da
-            // boşluk sayılır: seçim iptal.
+            // Hiçbir tüpün şekline girmeyen tıklama boşluktur: seçim iptal.
             ClearSelection();
         }
 
@@ -921,11 +1024,12 @@ namespace TubeSort.Game
             }
         }
 
-        /// <summary>Dökme kaynağı olabilecek tüp: boş değil ve tıpalı (complete)
-        /// değil. Tıpalı tüp kilitlidir — Board.PourableAmount da aynı kuralı
-        /// uygular; buradaki kontrol seçim/kaldırma davranışı için.</summary>
+        /// <summary>Dökme kaynağı olabilecek tüp: boş değil, tıpalı (complete)
+        /// değil ve o an bir dökmeye dahil (meşgul) değil. Tıpalı tüp kilitlidir —
+        /// Board.PourableAmount da aynı kuralı uygular; buradaki kontrol
+        /// seçim/kaldırma davranışı için.</summary>
         private bool IsSelectable(int index) =>
-            !board[index].IsEmpty && !board[index].IsComplete;
+            !board[index].IsEmpty && !board[index].IsComplete && !IsBusy(index);
 
         private void ClearSelection()
         {
@@ -944,13 +1048,22 @@ namespace TubeSort.Game
             {
                 HideDeadlock();
                 Debug.Log("<color=lime>Tahta çözüldü!</color>");
-                if (pilotPreview && pilotCount > 0)
+                if (pilotCount > 0)
                     StartCoroutine(AutoAdvanceToNext());
+                return;
             }
-            // Gerçek çıkmaz: hamle olsun olmasın, bu tahtadan artık kazanılamaz.
-            // Varlık kontrolü ucuz (ilk çözümde durur); dökmeler ayrık olduğu için
-            // hamle-başına-bir-kez çalışır.
-            else if (!Solver.IsSolvable(board))
+
+            RefreshDeadlockBanner();
+        }
+
+        /// <summary>Çıkmaz uyarısını tahtanın çözülebilirliğine göre günceller:
+        /// çözülemezse gösterir, çözülebilirse gizler. Hem dökme sonrası
+        /// (ReportBoardState) hem geri alma sonrası çağrılır — bu yüzden banner
+        /// yalnız gerçekten çıkmazdan çıkınca kalkar, her undo'da körü körüne değil.
+        /// Varlık kontrolü ucuz (ilk çözümde durur).</summary>
+        private void RefreshDeadlockBanner()
+        {
+            if (!Solver.IsSolvable(board))
             {
                 Debug.Log("<color=orange>Çıkmaz: bu tahtadan kazanılamaz.</color>");
                 ShowDeadlock();
@@ -1008,24 +1121,23 @@ namespace TubeSort.Game
         /// - Hedef: animasyon öncesi Refresh (yeni renk hemen görünsün).
         /// - Kaynak: dökme sonrası Refresh (dökülen renk seviye düştükçe kaybolsun).
         /// </summary>
-        private IEnumerator AnimatePour(PourResult result)
+        private IEnumerator AnimatePour(PourResult result, PourJob job)
         {
-            const float slideDuration = 0.24f;
-            const float pourDuration = 0.4f;
-
-            // SmoothDamp tepki süresi. Kritik sönümleme: aşım yok, hızlı yakınsama.
-            // Hem ilk eğilme hem dökme sırasındaki açı değişimi tek parametre.
-            const float angleSmoothTime = 0.12f;
-
-            isAnimating = true;
+            // slideDuration/pourDuration/angleSmoothTime Inspector'dan gelir
+            // (sabit değil): görsel izlemek için play mode'da yavaşlatılabilir.
+            // angleSmoothTime = eğim açısı SmoothDamp tepki süresi (kritik sönüm).
             ClearSelection();
 
             TubeView fromView = tubeViews[result.FromIndex];
             TubeView toView = tubeViews[result.ToIndex];
+            StreamView stream = AcquireStream();
+            // Akış üst parçası kaynağın offset bandının önünde (ön dilimler
+            // offset+4'ün üstü); alt parça hedefin sandviçinde (tıpa katmanı 3,
+            // hedef offset almaz). Böylece öndeki kaynağın akışı arkasında kalmaz.
+            stream.SetSortingOrders(job.SortingOffset + 5, 3);
 
             // Board hamleyi zaten uyguladı; tube verileri yeni durumu yansıtıyor.
             float fromTarget = fromView.TargetFillLevel;
-            float toTarget = toView.TargetFillLevel;
 
             // Hedef tüp: katmanları şimdi güncelle (yeni renk görünsün),
             // ama seviyeyi eski yerine geri al (oradan yükselecek). Tıpa bu
@@ -1038,13 +1150,12 @@ namespace TubeSort.Game
             toView.Refresh();
             toView.SetFillLevel(toStart);
 
-            // Kaynak tüpü üstte çiz.
-            fromView.SetSortingOffset(10);
+            // Kaynak tüpü üstte çiz (eşzamanlı kaynaklar farklı bantta).
+            fromView.SetSortingOffset(job.SortingOffset);
 
-            // Eğilme yönü: hedefe doğru eğil.
-            // Aynı sütundaysa (dx ≈ 0) sağa doğru eğil.
-            float dx = toView.RestPosition.x - fromView.RestPosition.x;
-            float direction = Mathf.Abs(dx) < 0.01f ? 1f : Mathf.Sign(dx);
+            // Eğilme yönü işte hazır: doğal yön ya da (2. gelen ise) ilkinin tersi.
+            // Zıt yönler iki kaynağı hedefin iki yanına ayırır, üst üste binmezler.
+            float direction = job.Direction;
 
             // Dönüş noktası tüpün ortasında.
             float pivotHeight = fromView.Height * 0.5f;
@@ -1066,10 +1177,15 @@ namespace TubeSort.Game
             float angleVelocity = 0f;
             float moveElapsed = 0f;
 
-            // Emniyet kemeri: hiçbir formül hatası animasyonu bir daha
-            // kilitleyemesin. Doğru işleyişte asla tetiklenmez; tetiklenirse
-            // hata loglanır ve animasyon son değerlerle zorla tamamlanır.
-            const float watchdogSeconds = 4f;
+            // 2 kaynak → 1 hedef: kolonu kaynağın tarafına kaydır (biri sağa, biri
+            // sola) ki ağızlar hedefin merkezinde üst üste binmesin. Tek dökmede 0.
+            // İkinci kaynak katılınca yumuşak kaysın diye MoveTowards ile ilerler.
+            const float mouthSeparation = TubeView.Width * 0.2f;
+            float lateral = 0f;
+
+            // Emniyet kemeri (watchdogSeconds Inspector'dan): hiçbir formül hatası
+            // animasyonu bir daha kilitleyemesin. Doğru işleyişte asla tetiklenmez;
+            // tetiklenirse hata loglanır ve animasyon son değerlerle zorla tamamlanır.
             float watchdogElapsed = 0f;
 
             while (true)
@@ -1089,12 +1205,20 @@ namespace TubeSort.Game
                 // Hedef açı: fill'e göre dinamik, tek kaynak.
                 float targetAngle = -CalculatePourAngle(fromView) * direction;
 
+                // Lateral kayma: hedefe 2 gelen varsa kolonu kaynağın tarafına
+                // (soldan gelen sola, sağdan gelen sağa) kaydır; yumuşak ilerle.
+                float lateralTarget = IncomingCount(result.ToIndex) >= 2
+                    ? -direction * mouthSeparation : 0f;
+                lateral = Mathf.MoveTowards(
+                    lateral, lateralTarget, mouthSeparation / slideDuration * dt);
+
                 // pourPos her kare güncel açıya göre hesaplanır.
                 // mouth.y = pourPos.y + mouthRise(angle) = destMouthY + margin (sabit).
                 // Açı SmoothDamp ile pürüzsüz değiştiği için pourPos da pürüzsüz kayar.
                 float angleForPos = Mathf.Abs(currentAngle) > 0.05f
                     ? currentAngle : initialSignedAngle;
-                pourPos = CalculatePourPosition(fromView, toView, angleForPos, pivotHeight);
+                pourPos = CalculatePourPosition(
+                    fromView, toView, angleForPos, pivotHeight, lateral);
 
                 // Kayma: startPos'tan pourPos'a pürüzsüz geçiş.
                 moveElapsed += dt;
@@ -1132,7 +1256,13 @@ namespace TubeSort.Game
 
                     float pourT = Mathf.Clamp01(pourElapsed / pourDuration);
                     fromView.SetFillLevel(Mathf.Lerp(fromStart, fromTarget, pourT));
-                    toView.SetFillLevel(Mathf.Lerp(toStart, toTarget, pourT));
+                    // Hedef: bu dökmenin bu kareki katkı ARTIŞINI ekle (toplamalı).
+                    // İki gelen aynı hedefi kendi payınca yükseltir; biri erken
+                    // bitse de kalan dökmenin artışı sürer. Tek dökmede toplam
+                    // katkı = FillAmount, eski lineer Lerp'e eşittir.
+                    float fillDelta = job.FillAmount * (pourT - job.FillProgress);
+                    job.FillProgress = pourT;
+                    toView.SetFillLevel(toView.CurrentFill + fillDelta);
                 }
 
                 // Pozisyon: kayma + tilt offset birlikte uygulanır.
@@ -1152,13 +1282,17 @@ namespace TubeSort.Game
                     // doğru belirginleşiyordu).
                     Vector3 liquidEdge = CalculateStreamSource(fromView, currentAngle);
                     sourcePoint.y = Mathf.Max(sourcePoint.y, liquidEdge.y);
+                    // Hedef uçlarını da lateral kadar kaydır: kolon dikey kalıp
+                    // hedefin kaynağa bakan yanına insin (kaynak ağzıyla aynı x).
                     Vector3 destMouth = CalculateDestMouth(toView);
+                    destMouth.x += lateral;
                     Vector3 destSurface = CalculateDestSurface(toView, toView.CurrentFill);
+                    destSurface.x += lateral;
                     streamingNow = sourcePoint.y > destSurface.y;
                     if (streamingNow)
-                        streamView.Show(streamColor, sourcePoint, destMouth, destSurface);
+                        stream.Show(streamColor, sourcePoint, destMouth, destSurface);
                     else
-                        streamView.Hide();
+                        stream.Hide();
                 }
 
                 // Sıçrama: akış hedef yüzeye aktığı sürece değme noktasından
@@ -1174,18 +1308,31 @@ namespace TubeSort.Game
                 yield return null;
             }
 
-            // Son değerleri kesin uygula.
+            // Kaynağı ve kendi akışını kesin bitir (her dökme kendi işi).
             fromView.SetFillLevel(fromTarget);
-            toView.SetFillLevel(toTarget);
-            streamView.Hide();
-            toView.SetSplashStrength(0f);   // sıçrama durur
-            // Sıvı yüzeye oturdu: damla halkası patlaması şimdi oynar
-            // (efekt dökme bitince hissedilmeli).
-            toView.PlayRippleBurst();
-            // Dökme bitti: tüp tamamlandıysa tıpa ŞİMDİ, takılma animasyonuyla;
-            // akış sandviçi kapanır (tıpalıysa dilimler tıpa üzerinden açık kalır).
-            toView.SetCorkSuppressed(false);
-            toView.SetMouthOverlay(false);
+            ReleaseStream(stream);
+            // Bu dökmenin kalan katkısını kesin uygula (pourT tam 1'e ulaşmadıysa).
+            toView.SetFillLevel(toView.CurrentFill + job.FillAmount * (1f - job.FillProgress));
+            job.FillProgress = 1f;
+            job.Pouring = false;   // dökme fazı bitti (kaynak doğrulma fazına geçer)
+
+            // Hedef tamamlanması (final doluluk, halka, tıpa, sandviç kapanışı)
+            // yalnız SON dökücü bitince yapılır: 2 kaynak → 1 hedef durumunda ilki
+            // biterken diğeri hâlâ döküyorsa atlanır, sonuncu yapar.
+            if (!TargetHasOtherPouring(result.ToIndex, job))
+            {
+                // Birikimli toplamın kayan noktada sürüklenmesini gidermek için
+                // hedefi tam veri seviyesine oturt.
+                toView.SetFillLevel(toView.TargetFillLevel);
+                toView.SetSplashStrength(0f);   // sıçrama durur
+                // Sıvı yüzeye oturdu: damla halkası patlaması şimdi oynar
+                // (efekt dökme bitince hissedilmeli).
+                toView.PlayRippleBurst();
+                // Tüp tamamlandıysa tıpa ŞİMDİ, takılma animasyonuyla; akış
+                // sandviçi kapanır (tıpalıysa dilimler tıpa üzerinden açık kalır).
+                toView.SetCorkSuppressed(false);
+                toView.SetMouthOverlay(false);
+            }
 
             // --- Faz 4+5: Doğrulma ve geri dönüş eş zamanlı ---
             // Giderken kayma+eğilme eş zamanlıydı; dönüşte de doğrulma+kayma
@@ -1213,7 +1360,7 @@ namespace TubeSort.Game
             fromView.SetSurfaceLift(0f);
 
             fromView.SetSortingOffset(0);
-            isAnimating = false;
+            activeJobs.Remove(job);
             ReportBoardState();
         }
 
@@ -1222,23 +1369,22 @@ namespace TubeSort.Game
         /// Eğildikten sonra kaynak ağzı hedefin ağzının biraz üstüne düşer.
         /// </summary>
         private Vector3 CalculatePourPosition(TubeView from, TubeView to,
-            float signedAngle, float pivotHeight)
+            float signedAngle, float pivotHeight, float lateralOffset)
         {
             Vector3 dest = to.RestPosition;
 
-            // --- X: döken ağız ucu (deliğin hedefe bakan kenarı) tam hedefin
-            // MERKEZİNİN üstüne gelsin: akış kolonu dikey düştüğü için ancak
-            // böyle hem kaynağın deliğinden çıkar hem hedef deliğin ortasına
-            // iner. ApplyTiltWithPivot modeli: nokta = taban + pivotTelafisi +
-            // R(açı)·yerel — buradan taban çözülür. (Eski yaklaşık mouthReach +
-            // pullBack cam ağzını kabaca hizalıyordu; kolonla ağız arasında
-            // yatay kayma bırakıyordu.)
+            // --- X: döken ağız ucu (deliğin hedefe bakan kenarı) hedefin
+            // merkezi + lateralOffset üstüne gelsin: akış kolonu dikey düştüğü
+            // için ancak böyle hem kaynağın deliğinden çıkar hem hedefte istenen
+            // noktaya iner. lateralOffset 2 kaynak → 1 hedef durumunda kolonu
+            // kaynağın tarafına kaydırır (tek dökmede 0). ApplyTiltWithPivot
+            // modeli: nokta = taban + pivotTelafisi + R(açı)·yerel — taban çözülür.
             float lipSide = -Mathf.Sign(signedAngle);
             Vector3 spout = from.CollarMouthLip(lipSide);
             float cos = Mathf.Cos(signedAngle);
             float sin = Mathf.Sin(signedAngle);
             float spoutOffsetX = pivotHeight * sin + (cos * spout.x - sin * spout.y);
-            float xTarget = dest.x - spoutOffsetX;
+            float xTarget = dest.x + lateralOffset - spoutOffsetX;
 
             // --- Y: kaynak tüpün dibi hedefin ağzının üstünde kalsın ---
             // Böylece kayma sırasında (henüz eğilmeden) gövdeler çakışmaz.
@@ -1392,9 +1538,17 @@ namespace TubeSort.Game
         /// Tüpler saydam olduğu için akış ağızda değil, sıvının
         /// olduğu seviyede bitmeli.
         /// </summary>
+        // Boş hedefte kolon dibinin oturacağı iç-dip payı: RestPosition tüpün
+        // pivot (dış) dibidir; görünür iç dip biraz yukarıda, kolon oraya otursun.
+        private const float DestBottomInset = 0.06f;
+
         private static Vector3 CalculateDestSurface(TubeView toView, float fillLevel)
         {
             float surfaceY = fillLevel * toView.Height;
+            // Boş/az dolu hedefte kolonun dibi tüpün altına taşmasın: kolon dibi
+            // yüzeyden SurfacePlunge kadar aşağı iner; yüzey en az bu + iç-dip payı
+            // kadar tüp dibinin (RestPosition) üstünde tutulur.
+            surfaceY = Mathf.Max(surfaceY, StreamView.SurfacePlunge + DestBottomInset);
             return toView.RestPosition + new Vector3(0f, surfaceY, 0f);
         }
 
