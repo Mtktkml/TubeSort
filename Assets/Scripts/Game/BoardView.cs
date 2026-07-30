@@ -98,6 +98,12 @@ namespace TubeSort.Game
             // olur ama iş hâlâ activeJobs'ta kalır (kaynak meşgul). Hedef
             // tamamlanmasının "son dökücü" kararı buna bakar.
             public bool Pouring;
+            // Bu dökmenin hedefe eklediği doluluk miktarı (dünya ölçüsü) ve o an
+            // uygulanmış ilerlemesi (0-1). Hedef doluluğu, aktif dökmelerin
+            // katkılarının TOPLAMIyla artar (max değil) — her kaynak hedefi kendi
+            // payınca yükseltir, biri erken bitse de kalan artışı sürer.
+            public float FillAmount;
+            public float FillProgress;
         }
 
         /// <summary>Aktif işlerin kullanmadığı en küçük offset bandını (10, 20, …) verir:
@@ -505,8 +511,13 @@ namespace TubeSort.Game
             // Bir hedef en fazla 2 gelen alır (karşı taraflardan); 3. reddedilir.
             if (IncomingCount(toIndex) >= 2) return false;
 
+            // Bu dökmenin hedefe ekleyeceği doluluk miktarı: board.Pour öncesi/
+            // sonrası hedef seviyesinin farkı (TubeView tüpü canlı board tüpü,
+            // Push yerinde değiştirir). Diğer dökmelerden bağımsız kendi payı.
+            float fillBefore = tubeViews[toIndex].TargetFillLevel;
             PourResult result = board.Pour(fromIndex, toIndex);
             if (!result.Success) return false;
+            float fillAmount = tubeViews[toIndex].TargetFillLevel - fillBefore;
 
             history.Record(result);
             var job = new PourJob
@@ -516,6 +527,7 @@ namespace TubeSort.Game
                 SortingOffset = AllocateSortingOffset(),
                 Direction = ComputePourDirection(fromIndex, toIndex),
                 Pouring = true,
+                FillAmount = fillAmount,
             };
             activeJobs.Add(job);
             StartCoroutine(AnimatePour(result, job));
@@ -1133,12 +1145,12 @@ namespace TubeSort.Game
         /// </summary>
         private IEnumerator AnimatePour(PourResult result, PourJob job)
         {
-            const float slideDuration = 0.24f;
-            const float pourDuration = 0.4f;
+            const float slideDuration = 2f;
+            const float pourDuration = 2f;
 
             // SmoothDamp tepki süresi. Kritik sönümleme: aşım yok, hızlı yakınsama.
             // Hem ilk eğilme hem dökme sırasındaki açı değişimi tek parametre.
-            const float angleSmoothTime = 0.12f;
+            const float angleSmoothTime = 2f;
 
             ClearSelection();
 
@@ -1148,7 +1160,6 @@ namespace TubeSort.Game
 
             // Board hamleyi zaten uyguladı; tube verileri yeni durumu yansıtıyor.
             float fromTarget = fromView.TargetFillLevel;
-            float toTarget = toView.TargetFillLevel;
 
             // Hedef tüp: katmanları şimdi güncelle (yeni renk görünsün),
             // ama seviyeyi eski yerine geri al (oradan yükselecek). Tıpa bu
@@ -1191,13 +1202,13 @@ namespace TubeSort.Game
             // 2 kaynak → 1 hedef: kolonu kaynağın tarafına kaydır (biri sağa, biri
             // sola) ki ağızlar hedefin merkezinde üst üste binmesin. Tek dökmede 0.
             // İkinci kaynak katılınca yumuşak kaysın diye MoveTowards ile ilerler.
-            const float mouthSeparation = TubeView.Width * 0.4f;
+            const float mouthSeparation = TubeView.Width * 0.2f;
             float lateral = 0f;
 
             // Emniyet kemeri: hiçbir formül hatası animasyonu bir daha
             // kilitleyemesin. Doğru işleyişte asla tetiklenmez; tetiklenirse
             // hata loglanır ve animasyon son değerlerle zorla tamamlanır.
-            const float watchdogSeconds = 4f;
+            const float watchdogSeconds = 16f;
             float watchdogElapsed = 0f;
 
             while (true)
@@ -1268,11 +1279,13 @@ namespace TubeSort.Game
 
                     float pourT = Mathf.Clamp01(pourElapsed / pourDuration);
                     fromView.SetFillLevel(Mathf.Lerp(fromStart, fromTarget, pourT));
-                    // Hedef doluluğu monoton artar: iki gelen dökme aynı hedefi
-                    // birlikte doldurabilsin diye mevcut seviyeyle max alınır
-                    // (tek dökmede lerp zaten monoton, davranış değişmez).
-                    toView.SetFillLevel(Mathf.Max(
-                        toView.CurrentFill, Mathf.Lerp(toStart, toTarget, pourT)));
+                    // Hedef: bu dökmenin bu kareki katkı ARTIŞINI ekle (toplamalı).
+                    // İki gelen aynı hedefi kendi payınca yükseltir; biri erken
+                    // bitse de kalan dökmenin artışı sürer. Tek dökmede toplam
+                    // katkı = FillAmount, eski lineer Lerp'e eşittir.
+                    float fillDelta = job.FillAmount * (pourT - job.FillProgress);
+                    job.FillProgress = pourT;
+                    toView.SetFillLevel(toView.CurrentFill + fillDelta);
                 }
 
                 // Pozisyon: kayma + tilt offset birlikte uygulanır.
@@ -1321,6 +1334,9 @@ namespace TubeSort.Game
             // Kaynağı ve kendi akışını kesin bitir (her dökme kendi işi).
             fromView.SetFillLevel(fromTarget);
             ReleaseStream(stream);
+            // Bu dökmenin kalan katkısını kesin uygula (pourT tam 1'e ulaşmadıysa).
+            toView.SetFillLevel(toView.CurrentFill + job.FillAmount * (1f - job.FillProgress));
+            job.FillProgress = 1f;
             job.Pouring = false;   // dökme fazı bitti (kaynak doğrulma fazına geçer)
 
             // Hedef tamamlanması (final doluluk, halka, tıpa, sandviç kapanışı)
@@ -1328,7 +1344,9 @@ namespace TubeSort.Game
             // biterken diğeri hâlâ döküyorsa atlanır, sonuncu yapar.
             if (!TargetHasOtherPouring(result.ToIndex, job))
             {
-                toView.SetFillLevel(Mathf.Max(toView.CurrentFill, toTarget));
+                // Birikimli toplamın kayan noktada sürüklenmesini gidermek için
+                // hedefi tam veri seviyesine oturt.
+                toView.SetFillLevel(toView.TargetFillLevel);
                 toView.SetSplashStrength(0f);   // sıçrama durur
                 // Sıvı yüzeye oturdu: damla halkası patlaması şimdi oynar
                 // (efekt dökme bitince hissedilmeli).

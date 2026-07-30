@@ -63,9 +63,11 @@ namespace TubeSort.Tests.PlayMode
             Assert.IsTrue(view.TryPour(0, 1), "ilk dökme başlamalıydı");
             Assert.IsTrue(view.IsAnimating, "animasyon başlamalıydı");
 
-            // Meşgul hedefe (1) dökme: board-geçerli olsa da reddedilmeli.
-            Assert.IsFalse(view.TryPour(4, 1),
-                "meşgul hedefe dökme reddedilmeliydi");
+            // Boşalan (kaynak) tüpe dökme: board-geçerli olsa da reddedilmeli.
+            // (0 şu an 1'e boşalıyor; 4'ün kırmızısı boş 0'a board-geçerli ama
+            // 0 meşgul kaynak olduğu için reddedilir.)
+            Assert.IsFalse(view.TryPour(4, 0),
+                "boşalan (kaynak) tüpe dökme reddedilmeliydi");
 
             // Ayrık çift: ilk dökme sürerken eşzamanlı kabul edilmeliydi
             // (eski seri kilitte bu false dönerdi).
@@ -84,7 +86,7 @@ namespace TubeSort.Tests.PlayMode
             Board result = view.Board;
             Assert.IsTrue(result[0].IsEmpty, "0: kaynak boşalmalı");
             Assert.AreEqual(2, result[1].TopSegmentLength,
-                "1: yalnız ilk dökmeyi almalı (4->1 reddedildi, 4 değil 2 birim)");
+                "1: yalnız ilk dökmeyi almalı (2 birim kırmızı)");
             Assert.IsTrue(result[2].IsEmpty, "2: kaynak boşalmalı");
             Assert.AreEqual(2, result[3].TopSegmentLength, "3: sarı dökmeyi almalı");
             Assert.IsFalse(result[4].IsEmpty, "4: reddedilen kaynak değişmemeli");
