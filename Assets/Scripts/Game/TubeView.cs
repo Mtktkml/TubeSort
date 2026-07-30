@@ -15,7 +15,7 @@ namespace TubeSort.Game
     public class TubeView : MonoBehaviour
     {
         public const float Width = 0.8f;
-        public const float UnitHeight = 0.5f;
+        private const float UnitHeight = 0.5f;
 
         /// <summary>
         /// Shader'daki MAX_LAYERS ile aynı olmak zorunda.
@@ -82,7 +82,7 @@ namespace TubeSort.Game
         // ölçümleri, 29 Tem 2026). Görsel ya da PPU değişirse buradaki
         // piksel/PPU sabitleri de birlikte güncellenmeli. ──
         /// <summary>Yakanın yarı genişliği (yerleşim çapası; FullWidth = 2×bu).</summary>
-        public const float CollarRx = Width * 0.75f;
+        private const float CollarRx = Width * 0.75f;
         /// <summary>Yaka merkezinin tüp tepesine göre y'si: yakanın alt kenarı
         /// tüp ağzını örter, arada fon boşluğu kalmaz.</summary>
         private const float CollarCenterY = Width * 0.21f;
@@ -693,7 +693,7 @@ namespace TubeSort.Game
         /// Sıvıyı çalkalar (sönümlü salınım): level başında ve tüp
         /// seçildiğinde çağrılır. Süren bir çalkantı varsa yenisi onu keser.
         /// </summary>
-        public void PlaySlosh(float amplitude, float duration)
+        private void PlaySlosh(float amplitude, float duration)
         {
             if (sloshRoutine != null)
                 StopCoroutine(sloshRoutine);

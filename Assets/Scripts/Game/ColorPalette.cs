@@ -22,8 +22,6 @@ namespace TubeSort.Game
             new Color(0.88f, 0.55f, 0.48f),   // 7 somon
         };
 
-        public int Count => Colors.Length;
-
         public Color Get(int colorId)
         {
             if (colorId < 0 || colorId >= Colors.Length)

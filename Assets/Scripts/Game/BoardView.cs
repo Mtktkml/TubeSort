@@ -1028,8 +1028,6 @@ namespace TubeSort.Game
             isAnimating = true;
             ClearSelection();
 
-            Debug.Log($"{result.Amount} birim renk#{result.Color}: tüp {result.FromIndex} -> tüp {result.ToIndex}");
-
             TubeView fromView = tubeViews[result.FromIndex];
             TubeView toView = tubeViews[result.ToIndex];
 
@@ -1202,9 +1200,7 @@ namespace TubeSort.Game
             // Giderken kayma+eğilme eş zamanlıydı; dönüşte de doğrulma+kayma
             // eş zamanlı. Tilt offset tüpü kaldırır, hedef tüple çakışma olmaz.
             fromView.Refresh();
-            float returnDuration = Mathf.Max(
-                fromTarget < 0.001f ? slideDuration * 0.7f : slideDuration,
-                slideDuration);
+            float returnDuration = slideDuration;
             float returnElapsed = 0f;
             float returnStartAngle = currentAngle;
 
@@ -1404,42 +1400,6 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// Dökme sırasında her kare: eğim açısını sıvı seviyesine göre artır,
-        /// akışın uç noktalarını güncelle. Fill animasyonlarıyla paralel çalışır.
-        /// </summary>
-        private IEnumerator AnimateStream(Color color, TubeView fromView, TubeView toView,
-            float direction, Vector3 pourPos, float pivotHeight, float duration)
-        {
-            float elapsed = 0f;
-            while (elapsed < duration)
-            {
-                elapsed += Time.deltaTime;
-
-                // Sıvı azaldıkça eğim artar — sıvı her zaman ağza ulaşır.
-                float angle = -CalculatePourAngle(fromView) * direction;
-                ApplyTiltWithPivot(fromView, angle, pourPos, pivotHeight);
-                AnchorLiquidToLip(fromView, angle);
-
-                Vector3 sourceMouth = CalculateSourceMouth(fromView, angle);
-                // Kolonun tepesi döken kenardaki sıvı yüzeyine yapışık kalır
-                // (bkz. ana döngüdeki not).
-                Vector3 liquidEdge = CalculateStreamSource(fromView, angle);
-                sourceMouth.y = Mathf.Max(sourceMouth.y, liquidEdge.y);
-                Vector3 destMouth = CalculateDestMouth(toView);
-                Vector3 destSurface = CalculateDestSurface(toView, toView.CurrentFill);
-
-                // Kaynak ağız hedef yüzeyinin üstündeyse akış göster,
-                // altına düştüyse gizle (kolon ters dönerdi).
-                if (sourceMouth.y > destSurface.y)
-                    streamView.Show(color, sourceMouth, destMouth, destSurface);
-                else
-                    streamView.Hide();
-
-                yield return null;
-            }
-        }
-
-        /// <summary>
         /// Hedef tüpteki sıvı yüzeyinin board-local konumu.
         /// Tüpler saydam olduğu için akış ağızda değil, sıvının
         /// olduğu seviyede bitmeli.
@@ -1448,43 +1408,6 @@ namespace TubeSort.Game
         {
             float surfaceY = fillLevel * toView.Height;
             return toView.RestPosition + new Vector3(0f, surfaceY, 0f);
-        }
-
-        /// <summary>Tüpü A noktasından B noktasına pürüzsüzce kaydırır.</summary>
-        private static IEnumerator AnimateMove(TubeView view, Vector3 from, Vector3 to, float duration)
-        {
-            float elapsed = 0f;
-            while (elapsed < duration)
-            {
-                elapsed += Time.deltaTime;
-                float t = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(elapsed / duration));
-                view.transform.localPosition = Vector3.Lerp(from, to, t);
-                yield return null;
-            }
-
-            view.transform.localPosition = to;
-        }
-
-        /// <summary>
-        /// Tüpü verilen açıdan hedef açıya eğer. Dönüş noktası tüpün dibinde
-        /// değil ağzına yakın bir noktada olmalı: pivotHeight kadar yukarıda
-        /// sanal bir eksen etrafında döner gibi pozisyon telafisi uygulanır.
-        /// </summary>
-        private static IEnumerator AnimateTilt(TubeView view, float fromAngle, float toAngle,
-            float duration, Vector3 basePosition, float pivotHeight)
-        {
-            float elapsed = 0f;
-            while (elapsed < duration)
-            {
-                elapsed += Time.deltaTime;
-                float t = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(elapsed / duration));
-                float angle = Mathf.Lerp(fromAngle, toAngle, t);
-
-                ApplyTiltWithPivot(view, angle, basePosition, pivotHeight);
-                yield return null;
-            }
-
-            ApplyTiltWithPivot(view, toAngle, basePosition, pivotHeight);
         }
 
         /// <summary>
