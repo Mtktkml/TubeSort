@@ -128,8 +128,10 @@ namespace TubeSort.Game
             collarFrontBottomSprite = TubeView.CreateCollarFrontBottomSprite(collarSprite);
 
             // Tahta önceliği: dışarıdan verilen (LoadBoard) > pilot önizleme >
-            // seçili level > elle kurulmuş test tahtası (teşhis anahtarına göre
-            // çözülebilir ya da çözülemez olan). Level yüklenemezse test tahtasına düşer.
+            // seçili level > son çare pilot merdivenin ilk tahtası (teşhis
+            // anahtarı açıksa çözülemez örnek tahta). Eski elle kurulmuş
+            // CreateTestBoard silindi: level sistemi tek kaynak, testler kendi
+            // tahtalarını LoadBoard ile enjekte eder.
             if (board == null && pilotPreview)
             {
                 pilotCount = LevelLibrary.LevelCount(PilotResource);
@@ -140,7 +142,14 @@ namespace TubeSort.Game
                 board = LevelLibrary.Load(levelNumber);
 
             if (board == null)
-                board = useUnsolvableBoard ? CreateUnsolvableTestBoard() : CreateTestBoard();
+                board = useUnsolvableBoard ? CreateUnsolvableTestBoard() : LoadPilot(1);
+
+            if (board == null)
+            {
+                Debug.LogError("Hiçbir tahta yüklenemedi (pilot_levels.json eksik olabilir).");
+                enabled = false;
+                return;
+            }
 
             pristineBoard = board.Clone();   // restart bu kopyayı geri yükler
 
@@ -552,25 +561,6 @@ namespace TubeSort.Game
             if (piece == null) return;
             Destroy(piece.texture);
             Destroy(piece);
-        }
-
-        /// <summary>
-        /// Elle kurulmuş geçici bir tahta. Level üretici gelene kadar bununla test ediyoruz.
-        /// Kasıtlı olarak karışık: hem tam dökme, hem kısmi dökme denenebilsin.
-        /// </summary>
-        private Board CreateTestBoard()
-        {
-            const int Red = 0, Yellow = 1, Blue = 2, Green = 3;
-
-            return new Board(new[]
-            {
-                new Tube(4, Red, Yellow, Yellow, Blue),
-                new Tube(4, Green, Red, Blue, Yellow),
-                new Tube(4, Blue, Green, Green, Red),
-                new Tube(4, Yellow, Blue, Red, Green),
-                new Tube(4),
-                new Tube(4)
-            });
         }
 
         /// <summary>
@@ -1406,7 +1396,7 @@ namespace TubeSort.Game
             surfaceNorm = Mathf.Clamp(surfaceNorm, 0f, 1f);
 
             Vector3 localPos = new Vector3(
-                TubeView.MouthWidth * 0.5f * lipSide,
+                TubeView.Width * 0.5f * lipSide,
                 surfaceNorm * fromView.Height, 0f);
 
             Vector3 worldPos = fromView.transform.TransformPoint(localPos);

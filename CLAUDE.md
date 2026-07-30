@@ -115,7 +115,7 @@ yanlış çizmek yerine).
 **SDF formülleri iki yerde:** `TubeShape.hlsl` (sıvı shader'ı, piksel boyama)
 ve `TubeView.cs` (C#, tıklama doğrulama). GPU ile CPU arasında kod
 paylaşılamadığı için tekrar kaçınılmaz. Sıvının şekli değişirse ikisi birlikte
-güncellenmelidir: `SdRoundedBox`, `SdSmoothUnion` ve `SdTube`.
+güncellenmelidir: `SdRoundedBox` ve `SdTube`.
 
 **Sabitleri ölçüden türet, uydurma.** `horizontalSpacing = 1.2f` ve
 `maxTubesPerRow = 5` gibi ekranla/ölçüyle ilgisiz sayılar iki kez sorun çıkardı.
@@ -232,11 +232,24 @@ haritası (29 Tem; sırayla, her madde gözle onay + commit):
 **Yol haritası TAMAM (29 Tem 2026).** Sıradaki işler cila adaylarından
 seçilecek.
 
-Cila adayları (harita dışı): `SdTube` no-op mouth zinciri sadeleştirme,
-ses/ikon, sahne/nesne adları + `CreateTestBoard` temizliği. Telefon
-performans turu (targetFrameRate + hamle-başı `IsSolvable` maliyeti)
-"Bilinen eksikler"de. Görsel ince ayarlar (dip kavisi, dökme sonu
-kopmalar, tıpa animasyonu) kullanıcı onayıyla kapandı (29 Tem).
+Cila adayları (harita dışı): ses/ikon. Telefon performans turu
+(targetFrameRate + hamle-başı `IsSolvable` maliyeti) "Bilinen eksikler"de.
+Kapananlar (29 Tem): görsel ince ayarlar kullanıcı onayıyla; `SdTube`
+no-op zinciri, sahne/nesne adları (`Game.unity` / `Board`), `v2.unity` ve
+`CreateTestBoard` temizlendi (testler tahtayı `TestBoards.Classic` ile
+enjekte eder).
+
+**Devam noktası (29 Tem oturum sonu):** Temizlik işi
+**`chore/cleanup-scene-sdtube`** branch'inde commit'li ama **Unity
+doğrulaması bekliyor** — master'a MERGE EDİLMEDİ. Yarın ilk iş:
+1. Unity'yi aç: derleme temiz mi; `TestBoards.cs` için üretilecek .meta
+   dosyasını küçük bir ek commit'le branch'e al.
+2. Kontroller: sahne `Game`, kök nesne `Board`; oyun görünümünde SIFIR
+   fark olmalı (tur tamamen davranışsız temizlik); EditMode + PlayMode
+   testleri (üçü artık tahta enjekte ediyor: LayoutFit, ClickDetection,
+   UndoButton).
+3. Yeşilse: master'a `--no-ff` merge, branch sil, push.
+master şu an push'lu ve güncel (`73ed071`); bu branch ondan dallandı.
 
 ### Kaldığımız yer (23 Tem 2026)
 
@@ -345,12 +358,10 @@ gözlemi "Bilinen eksikler"de.
 
 ### Bilinen eksikler
 
-- `BoardView.CreateTestBoard()` elle kurulmuş geçici bir tahta; çözülebilirliği
-  garanti değil. Level üreticiyle silinecek. (Dışarıdan tahta verme kapısı
-  hazır: `BoardView.LoadBoard` — Start öncesi çağrılırsa kurulum onunla
-  yapılır, oyun sırasında çağrılırsa görünümler yıkılıp yeniden kurulur.
-  Level üretici ve level geçişi bu kapıyı kullanacak.)
-- Sahne hâlâ `SampleScene` adında; içindeki `BoardView` nesnesi `GameObject`.
+- Dışarıdan tahta verme kapısı: `BoardView.LoadBoard` — Start öncesi
+  çağrılırsa kurulum onunla yapılır, oyun sırasında çağrılırsa görünümler
+  yıkılıp yeniden kurulur. Level geçişi ve testler bu kapıyı kullanır;
+  hiçbir kaynak yoksa son çare pilot merdivenin ilk tahtası yüklenir.
 - Ses ve ikon cila adımında (Kenney.nl, freesound.org); yazı tipi TMP
   LiberationSans ile geldi (Faz 1B).
 - **Telefonda akıcılık (23 Tem 2026, cihaz testi):** animasyonlar cihazda
