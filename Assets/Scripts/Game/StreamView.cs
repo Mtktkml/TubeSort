@@ -30,8 +30,10 @@ namespace TubeSort.Game
         private const float StreamWidth = 0.14f;
 
         /// <summary>Kolonun alt ucunun hedef yüzeyin altına dalma payı: yuvarlak
-        /// uç yüzey çizgisinin altında kalır, akış yüzeye "girer" okunur.</summary>
-        private const float SurfacePlunge = 0.07f;
+        /// uç yüzey çizgisinin altında kalır, akış yüzeye "girer" okunur.
+        /// BoardView bunu boş hedefte kolonun tüp dibinin altına taşmaması için
+        /// kullanır (yüzey en az bu kadar dipten yukarıda tutulur).</summary>
+        public const float SurfacePlunge = 0.07f;
 
         /// <summary>Üst kolonun ağzın içine doğru uzama payı: tepe ucu deliğin
         /// karanlığına gömülür, kaynaktaki sıvıyla bağlantı kopuk görünmez.</summary>

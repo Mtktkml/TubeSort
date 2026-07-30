@@ -1564,6 +1564,10 @@ namespace TubeSort.Game
         private static Vector3 CalculateDestSurface(TubeView toView, float fillLevel)
         {
             float surfaceY = fillLevel * toView.Height;
+            // Boş/az dolu hedefte kolonun dibi tüpün altına taşmasın: kolon dibi
+            // yüzeyden SurfacePlunge kadar aşağı iner, o yüzden yüzey en az bu
+            // kadar tüp dibinin (RestPosition) üstünde tutulur.
+            surfaceY = Mathf.Max(surfaceY, StreamView.SurfacePlunge);
             return toView.RestPosition + new Vector3(0f, surfaceY, 0f);
         }
 
