@@ -4,13 +4,12 @@ using UnityEngine;
 namespace TubeSort.Game
 {
     /// <summary>
-    /// Faz 1'in yeni butonları (önceki level, restart, +tüp) için ortak görsel.
-    /// Görseller koddan çizili basit placeholder — "asset yok" felsefesine uygun;
-    /// 1C'de gerçek sprite'larla değişecek (undo/next dahil hepsi birleşecek).
+    /// Level butonları (önceki level, restart, +tüp) için ortak görsel.
+    /// Görselleri koddan çizilir (sprite asset'i yok).
     ///
-    /// Var olan UndoButtonView / PilotNextButtonView deseniyle aynı (görsel +
-    /// collider taşır, tıklama yakalama BoardView'da); tek fark birden çok butonu
-    /// tek sınıfta <see cref="Kind"/> ile toplaması — placeholder tekrarını azaltır.
+    /// UndoButtonView / PilotNextButtonView ile aynı desen (görsel + collider
+    /// taşır, tıklama yakalama BoardView'da); farkı birden çok butonu tek sınıfta
+    /// <see cref="Kind"/> ile toplaması.
     /// </summary>
     public class ButtonView : MonoBehaviour
     {
@@ -49,7 +48,7 @@ namespace TubeSort.Game
 
         /// <summary>
         /// Butonu yanıp söndürerek dikkat çeker (çıkmazda kaçış kapısı ipucu).
-        /// Kapatınca temel renge döner. (Placeholder efekt; 1C'de cilalanır.)
+        /// Kapatınca temel renge döner.
         /// </summary>
         public void SetHighlight(bool on)
         {
@@ -87,7 +86,7 @@ namespace TubeSort.Game
             Destroy(texture);
         }
 
-        /// <summary>Placeholder renkleri: butonlar birbirinden ayrışsın.</summary>
+        /// <summary>Buton renkleri: her tür birbirinden ayrışsın.</summary>
         private static Color TintFor(ButtonKind kind)
         {
             switch (kind)

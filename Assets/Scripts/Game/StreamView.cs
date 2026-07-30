@@ -18,9 +18,9 @@ namespace TubeSort.Game
         private static readonly int CenterYId = Shader.PropertyToID("_CenterY");
 
         // Akış İKİ parça: kaynak tarafı her şeyin önünde, hedef tarafı hedefin
-        // yaka sandviçinin içinde (tıpa katmanı) — tek quad iki tüpün farklı
-        // katman ihtiyacını aynı anda karşılayamıyordu (kullanıcı bulgusu:
-        // akış hedef yakasının üstünden geçiyordu).
+        // yaka sandviçinin içinde (tıpa katmanı). Tek quad iki tüpün farklı
+        // katman ihtiyacını aynı anda karşılayamaz: hedef tarafı yakanın
+        // altında kalmalı, kaynak tarafı üstünde.
         private SpriteRenderer quadTop;      // ağızdan hedef deliğe
         private SpriteRenderer quadBottom;   // hedef delikten sıvı yüzeyine
         private MaterialPropertyBlock properties;
@@ -90,7 +90,7 @@ namespace TubeSort.Game
 
             // Birleşim uçları KÖŞELİ ve JoinOverlap kadar üst üste biner:
             // kapsül uçlar dikişte boğum yapıp kolonu "yeniden başlıyor"
-            // gösteriyordu (kullanıcı bulgusu). Serbest uçlar yuvarlak kalır.
+            // gösterir. Serbest uçlar yuvarlak kalır.
             PlaceColumn(quadTop, color, x,
                 sourceMouthLocal.y + TopOverlap, destMouthLocal.y - JoinOverlap,
                 capTop: cap, capBottom: 0f);

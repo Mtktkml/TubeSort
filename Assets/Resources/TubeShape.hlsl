@@ -6,9 +6,8 @@
 // İki taraf ayrı hesaplasaydı en küçük fark bile sıvının tıklama alanından
 // ya da cam görselinin içinden sapmasına yol açardı.
 //
-// Tüp tek parçadır: dibi yarım daire, gövdesi düz. (Görseldeki ağız
-// genişlemesi bej yakanın işi; eski ağız genişletme parametre zinciri
-// etkisiz kaldığı için kaldırıldı.)
+// Tüp tek parçadır: dibi yarım daire, gövdesi düz. Görseldeki ağız
+// genişlemesi bej yakanın işi, bu SDF'e girmez.
 //
 //      |     |
 //      |     |      <- gövde: sıvı burada durur
@@ -53,8 +52,7 @@ float2 BodyCenter(float2 quadSize, float2 bodySize)
 }
 
 // Sıvının şekli: yalnızca gövde kutusu — dibi yarım daire, tepesi hafif
-// yuvarlak köşe. (Görseldeki ağız genişlemesi bej yakanın işi; eski ağız
-// parametre zinciri etkisiz kaldığı için imzadan da temizlendi.)
+// yuvarlak köşe.
 float SdTube(float2 p, float2 quadSize, float2 bodySize,
     float topRadius, float bottomRadius)
 {

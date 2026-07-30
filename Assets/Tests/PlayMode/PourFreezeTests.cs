@@ -72,8 +72,9 @@ namespace TubeSort.Tests.PlayMode
         [UnityTest]
         public IEnumerator Pour_SingleUnitFromCapacity5Tube_Completes()
         {
-            // Telefonda donduran kombinasyon (level 3): kapasite 5, tek birim.
-            // Eski formülde açı tavanı kenar yüksekliğine yetmiyordu.
+            // Dökme kilidine karşı regresyon: kapasite 5, tek birim. Açı
+            // tavanı, sıvıyı döken kenarda (lip) tutmaya yetmeli; yetmezse
+            // dökme başlamaz ve animasyon kilitlenir.
             var board = new Board(new List<Tube>
             {
                 new Tube(5, 0),
@@ -87,8 +88,8 @@ namespace TubeSort.Tests.PlayMode
         [UnityTest]
         public IEnumerator Pour_SingleUnitFromCapacity7Tube_Completes()
         {
-            // En kötü en-boy oranı: kapasite 7'de eski açı tavanı fill 0.44'e
-            // kadar olan her kaynağı kilitliyordu.
+            // En kötü en-boy oranı: kapasite 7. Dar/uzun tüpte açı tavanının
+            // sıvıyı lip'te tutması en zordur; bu sınır durumu da kilitlenmemeli.
             var board = new Board(new List<Tube>
             {
                 new Tube(7, 0),

@@ -9,10 +9,9 @@ using UnityEngine.TestTools;
 namespace TubeSort.Tests.PlayMode
 {
     /// <summary>
-    /// Faz 1A davranışları: +tüp ve restart — tahta enjeksiyonuyla test edilebilen
+    /// +tüp ve restart davranışları — tahta enjeksiyonuyla test edilebilen
     /// kısım. Level navigasyonu (skip/önceki) ve oto-geçiş pilot moduna
     /// (pilot_levels.json) bağlı olduğu için Device Simulator'da elle doğrulanır.
-    /// Harness BoardInjectionTests'i izler.
     /// </summary>
     public class LevelFlowTests
     {

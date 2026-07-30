@@ -15,9 +15,9 @@ namespace TubeSort.Game
             new Color(0.28f, 0.58f, 0.90f),   // 2 mavi
             new Color(0.35f, 0.78f, 0.38f),   // 3 yeşil
             new Color(0.95f, 0.58f, 0.22f),   // 4 turuncu
-            new Color(0.10f, 0.62f, 0.62f),   // 5 petrol (beyazdı: açık cam
-                                              // zemininde boş tüpten ayırt
-                                              // edilemiyordu — kullanıcı bulgusu)
+            new Color(0.10f, 0.62f, 0.62f),   // 5 petrol (açık/beyaza yakın renk
+                                              // açık cam zeminde boş tüpten
+                                              // ayırt edilemez)
             new Color(0.62f, 0.38f, 0.75f),   // 6 mor
             new Color(0.88f, 0.55f, 0.48f),   // 7 somon
         };

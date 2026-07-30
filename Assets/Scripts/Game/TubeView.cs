@@ -5,9 +5,9 @@ using UnityEngine;
 namespace TubeSort.Game
 {
     /// <summary>
-    /// Tek bir tüpü ekranda çizer: cam/yaka/tıpa ekip görselleri
+    /// Tek bir tüpü ekranda çizer: cam/yaka/tıpa sprite'ları
     /// (SpriteRenderer katmanları), sıvı ve 2.5D yüzeyi (damla halkaları
-    /// dahil) shader.
+    /// dahil) shader ile.
     ///
     /// Bu sınıfın işi çekirdekteki Tube'u görünümün diline çevirmek:
     /// "dipten yukarı [kırmızı, sarı, sarı]" -> sınırlar [0.25, 0.75] ve renkler.
@@ -48,8 +48,7 @@ namespace TubeSort.Game
 
         /// <summary>
         /// Sıvı/tıklama dörtgeninin gövde dışına yan payı: kenar yumuşaması
-        /// kırpılmasın. (Eski ağız-harman payının halefi — ağız genişletme
-        /// zinciri kaldırıldı, toplam dörtgen genişliği aynı kaldı.)
+        /// kırpılmasın.
         /// </summary>
         private const float QuadPadding = 0.06f;
 
@@ -57,9 +56,8 @@ namespace TubeSort.Game
         /// Tüp ağzına kadar dolu olsa bile sıvının tepesiyle tüpün ucu arasında
         /// kalan boşluk (dünya birimi, tüpün boyuyla ölçeklenmez). Ölçüden
         /// türer: tıpanın tüpe sarkan kısmı + görünür pay — tıpa takılıyken
-        /// üst sıvı katmanı da tamamen görünür kalır. (Sabit 0.2'yken tıpa,
-        /// sıvının tepesini örtüyordu.) HeightFor tüpü bu pay kadar uzatır;
-        /// birim sıvı boyu etkilenmez.
+        /// üst sıvı katmanı da tamamen görünür kalır. HeightFor tüpü bu pay
+        /// kadar uzatır; birim sıvı boyu etkilenmez.
         /// </summary>
         private static float FillHeadroom => CorkSpriteHeight - TopOverhang + CorkLiquidGap;
 
@@ -75,12 +73,12 @@ namespace TubeSort.Game
         /// </summary>
         private const float MouthExtension = Width * 0.15f;
 
-        // ── Görsel katman: cam/yaka/tıpa ekip PNG'leri (Resources/Sprites),
+        // ── Görsel katman: cam/yaka/tıpa PNG'leri (Resources/Sprites),
         // SpriteRenderer ile. Ölçek çapası: yaka görselinin tam genişliği =
         // FullWidth (1.2 birim); PPU'lar buna göre girildi (collar 244,
         // cork 229, tube 247.5 — birleşik referans `tube (2).png` piksel
-        // ölçümleri, 29 Tem 2026). Görsel ya da PPU değişirse buradaki
-        // piksel/PPU sabitleri de birlikte güncellenmeli. ──
+        // oranlarından). Görsel ya da PPU değişirse buradaki piksel/PPU
+        // sabitleri de birlikte güncellenmeli. ──
         /// <summary>Yakanın yarı genişliği (yerleşim çapası; FullWidth = 2×bu).</summary>
         private const float CollarRx = Width * 0.75f;
         /// <summary>Yaka merkezinin tüp tepesine göre y'si: yakanın alt kenarı
@@ -103,11 +101,10 @@ namespace TubeSort.Game
         /// FillHeadroom türetimi statik kalsın diye sabit; görsel/PPU değişirse
         /// birlikte güncellenir (CreateCork konumu çalışma anında sprite'tan okur).</summary>
         private const float CorkSpriteHeight = 201f / 229f;
-        // collar.png eğri sınırları (piksel, satırlar ÜSTTEN; 29 Tem taraması).
-        // Ön parçalar dikdörtgen DEĞİL eğri maskeyle kesilir: düz kenarlar
-        // tıpayı cetvelle kesilmiş gösteriyordu (kullanıcı bulgusu). Görsel
-        // değişirse bu sayılar yeniden ölçülmeli (tarama: koyu piksel sütun
-        // taraması, delik altı 40→48, seam 59→66 parabolü).
+        // collar.png eğri sınırları (piksel, satırlar ÜSTTEN). Ön parçalar
+        // dikdörtgen DEĞİL eğri maskeyle kesilir: düz kenarlar tıpayı cetvelle
+        // kesilmiş gösterir. Görsel değişirse bu sayılar yeniden ölçülmeli
+        // (koyu piksel sütun taraması; delik altı 40→48, seam 59→66 parabolü).
         /// <summary>Delik elipsinin merkezi (x).</summary>
         private const float CollarHoleCx = 146f;
         /// <summary>Delik elipsinin merkezi (satır).</summary>
@@ -119,9 +116,9 @@ namespace TubeSort.Game
         /// biter, koyu yay tıpanın ÖNÜNDE kalır → "deliğe girmiş" okunur.</summary>
         private const float CollarHoleRim = 3.5f;
         // Parantez (seam) sınırı sabit eğri DEĞİL: çizginin alt kenarı çalışma
-        // anında sütun sütun ölçülür (MeasureSeamBottom) — el çizimi çizgi
-        // simetrik değil (sol uç dx-60'ta satır 63, sağ uçta 61), parabol
-        // uydurması uçlarda 1-2 px bej sızdırıyordu.
+        // anında sütun sütun ölçülür (MeasureSeamBottom). El çizimi çizgi
+        // simetrik değil (sol uç dx-60'ta satır 63, sağ uçta 61); sabit parabol
+        // uçlarda 1-2 px bej sızdırır.
         /// <summary>Çizgi araması bu satır aralığında yapılır (üstten).</summary>
         private const int CollarSeamScanTop = 56;
         private const int CollarSeamScanBottom = 76;
@@ -213,9 +210,9 @@ namespace TubeSort.Game
 
             properties = new MaterialPropertyBlock();
 
-            // Cam artık ekip görseli (9-slice); tepesi MouthExtension kadar
-            // yakanın arkasına uzanır. Sıvı shader'ı aynı kalır: kendi şeklini
-            // kendisi çizer, kısa gövdeyle kırpılır (fill matematiği aynı).
+            // Cam 9-slice görsel; tepesi MouthExtension kadar yakanın arkasına
+            // uzanır. Sıvı shader'ı kendi şeklini kendisi çizer, kısa gövdeyle
+            // kırpılır (fill matematiği camdan bağımsız).
             CreateGlass(tubeSprite);
             liquid = CreateQuad("Liquid", liquidMaterial, sortingOrder: 1, QuadHeight);
 
@@ -227,7 +224,6 @@ namespace TubeSort.Game
 
             // Level başı çalkantısı: görünüm kurulur kurulmaz sıvı sallanır,
             // sönümlenip durulur (boş tüpte sıvı yok, etki görünmez).
-            // Süre kullanıcı turlarıyla ayarlandı: 3.5 → 2 → 1.6.
             PlaySlosh(0.15f, 1.6f);
         }
 
@@ -391,9 +387,9 @@ namespace TubeSort.Game
                 {
                     if (keep(x, row)) continue;
                     // Yalnız alfa sıfırlanır, RGB korunur: Color.clear (şeffaf
-                    // SİYAH) kullanılınca bilinear filtre kenar pikselini siyahla
-                    // harmanlıyor ve maske sınırları boyunca soluk koyu çizgiler
-                    // beliriyordu (kullanıcı bulgusu).
+                    // SİYAH) kullanılırsa bilinear filtre kenar pikselini siyahla
+                    // harmanlar ve maske sınırları boyunca soluk koyu çizgiler
+                    // bırakır.
                     Color c = pixels[ty * w + x];
                     c.a = 0f;
                     pixels[ty * w + x] = c;
@@ -412,7 +408,7 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// Mantar tıpayı ekip görseliyle kurar (order 3: arka yakanın önünde, ön
+        /// Mantar tıpa sprite'ını kurar (order 3: arka yakanın önünde, ön
         /// dilimlerin arkasında — sandviç). Konum birleşik referanstan: tepe, yaka
         /// üst kenarının CorkTopAboveCollarTop kadar üstünde; boy PPU'dan gelir,
         /// alt ucu tüp ağzından içeri sarkar. Başlangıçta gizli; yalnız tamamlanan
@@ -480,7 +476,7 @@ namespace TubeSort.Game
         private float GlassQuadHeight => BodyHeight + MouthExtension;
 
         /// <summary>
-        /// Cam tüpü ekip görseliyle kurar (order 0, sıvının arkasında). 9-slice:
+        /// Cam tüp sprite'ını kurar (order 0, sıvının arkasında). 9-slice:
         /// import'ta tanımlı alt border dip kavisini korur, yalnız düz gövde
         /// kapasiteye göre uzar (görseldeki parlama şeritleri de orantılı
         /// uzar — dikey çizgiler, doğal durur). Pivot Bottom olduğu için yerel
@@ -561,8 +557,8 @@ namespace TubeSort.Game
 
         /// <summary>
         /// Dökme animasyonu boyunca tıpanın erken belirmesini engeller: veri
-        /// dökme başında değiştiği için tıpa, akış daha akarken "tak" diye
-        /// geliyordu. false'a dönerken tüp tamamlandıysa tıpa takılma
+        /// dökme başında değiştiği için, bastırılmazsa tıpa akış daha akarken
+        /// belirir. false'a dönerken tüp tamamlandıysa tıpa takılma
         /// animasyonuyla gelir.
         /// </summary>
         public void SetCorkSuppressed(bool suppressed)
@@ -653,8 +649,8 @@ namespace TubeSort.Game
 
         /// <summary>
         /// Dökme bittiğinde damla halkası patlaması: halkalar hızla belirir,
-        /// dışa yayılırken ~1 sn'de sönümlenir (kullanıcı isteği: efekt dökme
-        /// sırasında değil, sıvı yüzeye oturduğunda hissedilmeli).
+        /// dışa yayılırken ~1 sn'de sönümlenir. Efekt dökme sırasında değil,
+        /// sıvı yüzeye oturduğunda tetiklenir.
         /// </summary>
         public void PlayRippleBurst()
         {
@@ -708,8 +704,8 @@ namespace TubeSort.Game
         private IEnumerator Slosh(float amplitude, float duration)
         {
             // Hızlı salınım + süreye bağlı sönüm: kısa çalkantıda bile 2-3 yön
-            // değişimi olur — tek salınım "çalkalanma" hissi vermiyordu
-            // (kullanıcı bulgusu). Sönüm sonu ~%7 genlik: kuyruk hafif oynar.
+            // değişimi olsun — tek salınım "çalkalanma" hissi vermez. Sönüm
+            // sonu ~%7 genlik: kuyruk hafif oynar.
             const float omega = 9f;      // salınım hızı (rad/sn)
             float damping = 2.6f / duration;
 
@@ -880,7 +876,7 @@ namespace TubeSort.Game
 
         /// <summary>
         /// Yaka ağzındaki kahverengi deliğin MERKEZİ, tüp-yerel konum. Hedef
-        /// tüpte akış kolonunun indiği nokta (delik merkezi; kullanıcı isteği).
+        /// tüpte akış kolonunun indiği nokta.
         /// </summary>
         public Vector3 CollarMouth => new Vector3(
             0f,
@@ -889,9 +885,9 @@ namespace TubeSort.Game
 
         /// <summary>
         /// Deliğin döken kenarı (hedefe en yakın nokta), tüp-yerel konum.
-        /// KAYNAK tüpte akış buradan başlar: merkezden başlayınca kolon deliğin
-        /// ortasından fışkırıyor görünüyordu (kullanıcı bulgusu) — sıvı deliğin
-        /// hedefe bakan dudağından taşmalı. side = ±1, döken taraf.
+        /// KAYNAK tüpte akış buradan başlar: merkezden başlarsa kolon deliğin
+        /// ortasından fışkırıyor görünür — sıvı deliğin hedefe bakan dudağından
+        /// taşmalı. side = ±1, döken taraf.
         /// </summary>
         public Vector3 CollarMouthLip(float side) => new Vector3(
             CollarHoleRx / CollarPpu * side,
@@ -928,9 +924,9 @@ namespace TubeSort.Game
         }
 
         /// <summary>Seçili tüp yukarı kalkar; oyuncu neyi seçtiğini görsün.
-        /// Hem kalkışın hem inişin sarsıntısı sıvıyı çalkalar (kullanıcı
-        /// isteği: boşluğa tıklayıp seçimi iptal etmek — tüpün inişi — de
-        /// tetikler). Genlik level başındakiyle aynı, süresi daha kısa.</summary>
+        /// Hem kalkışın hem inişin sarsıntısı sıvıyı çalkalar (iniş, boşluğa
+        /// tıklayıp seçimi iptal etmeyi de kapsar). Genlik level başındakiyle
+        /// aynı, süresi daha kısa.</summary>
         public void SetSelected(bool selected)
         {
             bool changed = isSelected != selected;

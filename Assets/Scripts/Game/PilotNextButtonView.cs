@@ -4,10 +4,10 @@ namespace TubeSort.Game
 {
     /// <summary>
     /// Pilot önizlemede "sıradaki level" butonu. Görseli koddan üretilen basit
-    /// sağ (ileri) ok — geri al butonunun aynası, asset yok felsefesine uygun.
-    /// Yalnız pilot önizleme modunda kurulur (telefonda ok tuşu olmadığı için
-    /// mentöre demo amaçlı). Tıklama yakalama BoardView'dadır: buton yalnızca
-    /// görsel + collider taşır. Tahtanın çocuğu değildir; tahta ölçeklense de
+    /// sağ (ileri) ok — geri al butonunun aynası (sprite asset'i yok). Yalnız
+    /// pilot önizleme modunda level'ler arası gezinme yolu olarak kurulur.
+    /// Tıklama yakalama BoardView'dadır: buton yalnızca görsel + collider
+    /// taşır. Tahtanın çocuğu değildir; tahta ölçeklense de
     /// buton sabit boyutta kalır.
     /// </summary>
     public class PilotNextButtonView : MonoBehaviour
