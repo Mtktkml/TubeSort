@@ -208,7 +208,13 @@ Unity Editor **kapalı** olmalı; açıksa proje kilitli olur ve batchmode başl
   `Application.targetFrameRate = 60` (Unity mobilde varsayılan 30'a kilitler); yetmezse
   cihazda profiler (SDF shader'ların piksel maliyeti + overdraw). Çıkmaz tespitinin
   hamle başı `Solver.IsSolvable` maliyeti de burada ölçülür.
-- **Ses ve ikon:** cila adımında (Kenney.nl, freesound.org). Yazı tipi TMP LiberationSans.
+- **Ses ve ikon:** cila adımında (Kenney.nl, freesound.org).
+- **Yazı tipi:** TMP LiberationSans. Ana font (`LiberationSans SDF`) Static, 250
+  karakter (`ç Ç ö Ö ü Ü` dahil). `ı`/`ş` orada yok; yedek font
+  (`LiberationSans SDF - Fallback`) bu ikisini gömülü taşır ve **Static'e alındı**
+  (runtime'da yeniden yazıp git'i kirletmesin diye). Ödün: `ğ Ğ İ Ş` şu an hiçbir
+  fonta gömülü değil — bir UI yazısına girerlerse boş görünür. Gerekirse TMP Font
+  Asset Creator ile ana fonta (ya da yedeğe) eklenip yeniden Static bakılmalı.
 - **300 level hedefi:** önce 30 tahta oyuncu testine gider; ağırlık kalibre olunca
   kovalar genişletilip ölçeklenir.
 - **Build.**
