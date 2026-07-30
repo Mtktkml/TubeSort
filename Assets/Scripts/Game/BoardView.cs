@@ -29,24 +29,6 @@ namespace TubeSort.Game
         [Range(0f, 0.4f)]
         [SerializeField] private float screenMargin = 0.1f;
 
-        [Header("Level")]
-        [Tooltip("Oynanacak level (Resources/levels.json'dan). 0 = level yok, " +
-                 "elle kurulmuş test tahtası kullanılır.")]
-        [SerializeField] private int levelNumber;
-
-        [Header("Pilot Önizleme (geçici)")]
-        [Tooltip("C aşamasının pilot merdivenini (pilot_levels.json) yükle ve " +
-                 "ok tuşlarıyla (← →) gez. levelNumber ve test tahtasının önüne " +
-                 "geçer, LoadBoard'ın arkasında kalır. D'nin level dosyası " +
-                 "(levels.json) bundan etkilenmez.")]
-        [SerializeField] private bool pilotPreview;
-
-        [Header("Teşhis")]
-        [Tooltip("Çözülemez test tahtasını kur: solver'ın 'ÇÖZÜLEMEZ' kararını " +
-                 "ve oyun içi çıkmazı elle denemek için. Yalnız levelNumber = 0 " +
-                 "iken etkilidir.")]
-        [SerializeField] private bool useUnsolvableBoard;
-
         [Header("Animasyon süreleri (sn)")]
         [Tooltip("Kaynak tüpün hedefe kayma süresi.")]
         [SerializeField] private float slideDuration = 0.24f;
@@ -232,22 +214,14 @@ namespace TubeSort.Game
             collarFrontTopSprite = TubeView.CreateCollarFrontTopSprite(collarSprite);
             collarFrontBottomSprite = TubeView.CreateCollarFrontBottomSprite(collarSprite);
 
-            // Tahta önceliği: dışarıdan verilen (LoadBoard) > pilot önizleme >
-            // seçili level > son çare pilot merdivenin ilk tahtası (teşhis
-            // anahtarı açıksa çözülemez örnek tahta). Eski elle kurulmuş
-            // CreateTestBoard silindi: level sistemi tek kaynak, testler kendi
-            // tahtalarını LoadBoard ile enjekte eder.
-            if (board == null && pilotPreview)
+            // Tahta önceliği: dışarıdan verilen (LoadBoard) önce; yoksa pilot
+            // merdiveni (pilot_levels.json) yüklenir. Testler kendi tahtalarını
+            // LoadBoard ile enjekte eder.
+            if (board == null)
             {
                 pilotCount = LevelLibrary.LevelCount(PilotResource);
-                board = LoadPilot(pilotIndex);
+                board = LoadPilot(pilotIndex);   // pilotIndex 1'den başlar
             }
-
-            if (board == null && levelNumber > 0)
-                board = LevelLibrary.Load(levelNumber);
-
-            if (board == null)
-                board = useUnsolvableBoard ? CreateUnsolvableTestBoard() : LoadPilot(1);
 
             if (board == null)
             {
@@ -262,11 +236,8 @@ namespace TubeSort.Game
             BuildUndoButton();
             BuildRestartButton();
             BuildAddTubeButton();
-            if (pilotPreview)
-            {
-                BuildPilotNextButton();
-                BuildPrevButton();
-            }
+            BuildPilotNextButton();
+            BuildPrevButton();
             BuildDeadlockBanner();
             BuildLevelTitle();
             ApplyLayout();
@@ -369,12 +340,10 @@ namespace TubeSort.Game
             levelTitle.text = string.IsNullOrEmpty(label) ? "" : $"LEVEL {label}";
         }
 
-        /// <summary>Mevcut levelin ekran adı: pilot modunda label ("1.1"), yoksa numara.</summary>
+        /// <summary>Mevcut levelin ekran adı: pilot merdiveninin label'ı ("1.1").</summary>
         private string CurrentLabel()
         {
-            if (pilotPreview && pilotCount > 0)
-                return LevelLibrary.LabelOf(PilotResource, pilotIndex);
-            return levelNumber > 0 ? levelNumber.ToString() : "";
+            return pilotCount > 0 ? LevelLibrary.LabelOf(PilotResource, pilotIndex) : "";
         }
 
         /// <summary>
@@ -694,26 +663,6 @@ namespace TubeSort.Game
             Destroy(piece);
         }
 
-        /// <summary>
-        /// Kanıtlanmış çözülemez tahta: rastgele üretilip solver ile tarandı
-        /// (58 durumun tamamı gezildi, çözüm yok). Hamleler var, yani oyuncu
-        /// bir süre oynayıp çıkmaza girebilir — "hamle var ama kazanılamaz"
-        /// durumunun elle test edilebilir örneği.
-        /// </summary>
-        private Board CreateUnsolvableTestBoard()
-        {
-            const int Red = 0, Yellow = 1, Blue = 2, Green = 3;
-
-            return new Board(new[]
-            {
-                new Tube(4, Blue, Blue, Green, Red),
-                new Tube(4, Blue, Red, Green, Yellow),
-                new Tube(4, Green, Red, Green, Yellow),
-                new Tube(4, Blue, Red, Yellow, Yellow),
-                new Tube(4)
-            });
-        }
-
         private void BuildViews()
         {
             for (int i = 0; i < board.TubeCount; i++)
@@ -973,9 +922,9 @@ namespace TubeSort.Game
         {
             RefitIfViewChanged();
 
-            // Pilot önizleme: ok tuşlarıyla level gezme. Geçiş yapıldıysa bu kare
-            // tıklama işlenmez (yeni tahta zaten kuruldu).
-            if (pilotPreview && !AnyAnimating && HandlePilotBrowse())
+            // Ok tuşlarıyla level gezme. Geçiş yapıldıysa bu kare tıklama
+            // işlenmez (yeni tahta zaten kuruldu).
+            if (!AnyAnimating && HandlePilotBrowse())
                 return;
 
             // Pointer, Mouse ve Touchscreen'in ortak atasıdır: masaüstünde fare,
@@ -1099,7 +1048,7 @@ namespace TubeSort.Game
             {
                 HideDeadlock();
                 Debug.Log("<color=lime>Tahta çözüldü!</color>");
-                if (pilotPreview && pilotCount > 0)
+                if (pilotCount > 0)
                     StartCoroutine(AutoAdvanceToNext());
                 return;
             }

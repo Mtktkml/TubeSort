@@ -6,7 +6,7 @@ using UnityEngine;
 namespace TubeSort.Game
 {
     /// <summary>
-    /// Python üreticisinin yazdığı levelleri okur (Resources/levels.json).
+    /// Python üreticisinin yazdığı levelleri okur (Resources/pilot_levels.json).
     /// Üretim ve çözülebilirlik doğrulaması Unity dışında (Python) yapılır;
     /// buraya yalnız veri gelir. JsonUtility iç içe dizi okuyamadığı için
     /// tüpler "dipten yukarı virgüllü metin" olarak taşınır ("" = boş tüp).
@@ -29,17 +29,9 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// İstenen leveli varsayılan level dosyasından (levels.json) kurar.
+        /// Leveli verilen Resources kaynağından (ör. pilot_levels.json) kurar.
         /// Bulunamazsa ya da dosya bozuksa hata loglayıp null döner; çağıran
-        /// taraf yedeğe düşer.
-        /// </summary>
-        public static Board Load(int levelNumber) => LoadFrom("levels", levelNumber);
-
-        /// <summary>
-        /// Leveli verilen Resources kaynağından kurar. levels.json dışında bir
-        /// dosyadan okumak için (ör. pilot önizleme: pilot_levels.json).
-        /// Şema aynıdır; yalnız kaynak adı değişir. Hata mesajları kaynak adını
-        /// içerir.
+        /// taraf yedeğe düşer. Hata mesajları kaynak adını içerir.
         /// </summary>
         public static Board LoadFrom(string resourceName, int levelNumber)
         {
