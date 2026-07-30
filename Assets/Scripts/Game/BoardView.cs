@@ -36,8 +36,9 @@ namespace TubeSort.Game
         [SerializeField] private float pourDuration = 0.4f;
         [Tooltip("Eğim açısı SmoothDamp tepki süresi (kritik sönümleme, aşım yok).")]
         [SerializeField] private float angleSmoothTime = 0.12f;
-        [Tooltip("Emniyet: dökme bu süre içinde bitmezse hata loglanıp zorla tamamlanır.")]
-        [SerializeField] private float watchdogSeconds = 4f;
+        [Tooltip("Emniyet: dökme bu süre içinde bitmezse hata loglanıp zorla tamamlanır. " +
+                 "Süreler play mode'da yavaşlatıldığında bunu da büyütmen gerekebilir.")]
+        [SerializeField] private float watchdogSeconds = 6f;
 
         private Board board;
         private readonly MoveHistory history = new MoveHistory();
@@ -1398,23 +1399,31 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// Tüpteki sıvı miktarına göre eğim açısını hesaplar.
-        /// Az sıvıda sıvının ağza ulaşması için daha fazla eğilme gerekir.
-        /// Dolu tüpte 50°, neredeyse boş tüpte 110°'ye kadar çıkar.
+        /// Tüpteki sıvı miktarına göre eğim açısını hesaplar. Az sıvıda sıvının
+        /// ağza ulaşması için daha fazla eğilme gerekir. İki bileşenin büyüğü:
+        /// (1) sezgisel doluluk→açı aralığı (dolu 60°, boş 100°); (2) yükseklik-
+        /// farkında GEOMETRİK alt sınır — sıvının döken kenarda ağza ulaşması
+        /// için gereken açı. (2) uzun tüpler (kap 8) için şart: sabit aralık
+        /// oralarda mid-fill'de yetmiyor, dökme hiç başlamıyordu (watchdog).
         /// </summary>
         private static float CalculatePourAngle(TubeView fromView)
         {
             const float minAngle = 60f * Mathf.Deg2Rad;
             const float maxAngle = 100f * Mathf.Deg2Rad;
 
-            // Doluluk oranı (0 = boş, 1 = dolu). Açı aralığı, eğik sıvının
-            // tüpün fiziksel ağız ucuna (1.0) ulaşması için yeterli marjla
-            // seçildi. Eski 50-90° aralığı FillSpan eşiğine göre tasarlanmıştı;
-            // 1.0 eşiğiyle yarı dolu tüpte 0.001 eksik kalıp deadlock'a giriyordu.
+            // (1) Sezgisel: doluluk oranıyla açı (dolu az, boş çok eğilir).
             float fillSpan = 1f - 0.2f / fromView.Height; // FillHeadroom = 0.2
             float fillRatio = Mathf.Clamp01(fromView.CurrentFill / fillSpan);
+            float heuristic = Mathf.Lerp(maxAngle, minAngle, fillRatio);
 
-            return Mathf.Lerp(maxAngle, minAngle, fillRatio);
+            // (2) Geometrik alt sınır: eğik yüzeyin döken kenarı ağza (1.05, küçük
+            // pay) ulaşsın diye gereken açı = atan(2·(1.05-fill)·yükseklik/genişlik).
+            // Kısa tüplerde sezgisel bunu zaten aşar (max() etkisiz), uzun tüplerde
+            // devreye girip dökmenin başlamasını garantiler.
+            float needed = Mathf.Atan2(
+                2f * (1.05f - fromView.CurrentFill) * fromView.Height, TubeView.Width);
+
+            return Mathf.Max(heuristic, needed);
         }
 
         /// <summary>

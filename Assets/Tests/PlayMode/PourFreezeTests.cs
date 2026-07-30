@@ -114,5 +114,21 @@ namespace TubeSort.Tests.PlayMode
 
             yield return AssertPourCompletes(board, 0, 1, "kapasite 7 / tam boşaltma");
         }
+
+        [UnityTest]
+        public IEnumerator Pour_MidFillFromCapacity8Tube_Completes()
+        {
+            // Kap 8 (en uzun tüp) mid-fill: sabit 60-100° açı aralığı bu boyda
+            // sıvıyı döken kenarda ağza ulaştırmaya yetmiyor, dökme hiç başlamıyor
+            // (pourStarted hep false → watchdog). Yükseklik-farkında geometrik
+            // açı alt sınırının regresyonu; yeni kap-8 leveller bunu tetikledi.
+            var board = new Board(new List<Tube>
+            {
+                new Tube(8, 0, 0, 0, 0, 0),   // 5 birim renk 0 (mid-fill, kilit aralık)
+                new Tube(8),
+            });
+
+            yield return AssertPourCompletes(board, 0, 1, "kapasite 8 / mid-fill");
+        }
     }
 }
