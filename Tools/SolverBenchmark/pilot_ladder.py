@@ -1,13 +1,12 @@
-"""TubeSort — C asamasi: ~15 levellik pilot merdiveni + zorluk skoru.
+"""TubeSort — pilot zorluk merdiveni + skor.
 
-AMAC (pilot, shippable degil): parametre merdiveni (kapasite, renk, bos) ile
-OLCULEN zorluk skorunun uyusup uyusmadigini sinamak. Cikti bir ANALIZ raporu
-(pilot_ladder.md); levels.json'a DOKUNULMAZ (o D asamasinin isi).
+Parametre merdiveni (kapasite, renk, bos) uzerinden OLCULEN zorluk skorunun
+merdiven sirasiyla uyusup uyusmadigini sinar. Cikti: analiz raporu
+(pilot_ladder.md) + pilot_levels.json. Agirlik kalibrasyonu oyuncu testiyle.
 
 Iki katman (karistirilmasin):
   - Parametre merdiveni: kaba zorluk sinifi + cesitlilik garantisi.
   - Olculen skor: ince siralama + slot ici aday secimi.
-Pilotun isi bu ikisinin uyustugunu SINAMAK, varsaymak degil.
 
 Skor: AGIRLIKLI TOPLAM. Her terim tum aday havuzu uzerinde [0,1]'e min-max
 normalize edilir, boylece agirliklar dogrudan "zorlugun yuzde kaci" diye okunur.
@@ -15,23 +14,18 @@ normalize edilir, boylece agirliklar dogrudan "zorlugun yuzde kaci" diye okunur.
   C (0.25) = log(durum sayisi)       -> arama karmasikligi (buyuk=zor)
   A (0.15) = -log(cozum sayisi)      -> affetmezlik (az cozum=zor)
   T (0.15) = olu-durum orani         -> tuzak yogunlugu (cok=zor)
-Agirlik revizyonu (mentor karari, 27 Tem 2026): ESKI surumde T baskindi (0.55);
-mentor bunu begenmedi. Sikayet: leveller ~12'ye kadar tup/renk artiyor, sonra
-BIRDEN dusuyordu -- cunku bos=1 tahtalar KUCUK ama cok tuzakli (yuksek T) +
-az cozumlu (yuksek A); T/A agir oldugu icin zorluk siralamasinda SONA firliyordu.
-Cozum: boyutu (L,C) one cikar, tuzagi (T)/affetmezligi (A) geri cek -> siralama
-tahta hacmini izler, tup/renk monoton artar; bos=1 leveller kucuk boyutlarina
-gore yerine oturur (artik "en zor" degil).
+Boyut (L,C) baskin tutulur ki siralama tahta hacmini izlesin ve tup/renk
+artisinda monoton kalsin; tuzak (T)/affetmezlik (A) ikincil eslik-bozuculardir.
+Bos=1 tahtalar kucuk ama tuzakli/az-cozumludur; T/A agir olsaydi hacimlerinin
+otesinde "en zor" siralanirdi.
 Yapisal parametreler (kap/renk/bos) formulde DOGRUDAN yok: L zaten hacmi temsil
 eder, kap/renk'i ayrica koymak hacmi cift sayardi.
 UYARI: L hacmi (renk*kap) izler ama tup=renk+bos ve kapasite degisken; boyuta
-gore siralamak tup VE rengi ayni anda birebir monoton yapmayabilir. Buyuk dususu
-duzeltir; kucuk dalgalanma kalirsa yapisal siralama (dogrudan tup/renk) gundeme gelir.
+gore siralamak tup VE rengi ayni anda birebir monoton yapmayabilir.
 
 Slot ici secim: 30 aday SKORA gore siralanir, ORTANIN HEMEN USTUNDEKI 2 aday
 temsilci alinir (ordered[15], ordered[16]; her tier ekranda X.1/X.2 diye 2
-tahta gosterilir; mentor karari 27 Tem 2026 — tam-orta 14,15 yerine bir kademe
-zora yaslanir). Ogretici tier'lar (1-2) bunun disinda: SABIT, skora girmez.
+tahta gosterilir). Ogretici tier'lar (1-2) bunun disinda: SABIT, skora girmez.
 
 Butce/OUT_OF_BUDGET ve cozulemez adaylar AYRI loglanir — sessizce elenip
 level havuzunu kolaya yamultmasin (Murase 1996 dersi).
@@ -47,19 +41,16 @@ import time
 
 import crosscheck as cc
 
-# Parametre merdiveni: (kapasite, renk, bos). Pilot v1'in iki dersiyle revize
-# edildi (24 Tem 2026):
-#   Bulgu 1 — bos=1 saf rastgele uretimde kap>=5'te COKUYOR (kabul orani ~%0;
-#     kap6 renk7 bos1'de 600 denemede 0 kabul). Karar: bos=1 yalniz kap<=4'te
-#     sunulur (kabul ~%15-24, tolere edilebilir). Ust uc bos=2 kalir; garantili
-#     bos=1 uretimi (ters-uretim) D asamasina birakildi.
-#   Bulgu 2 — enKisa ~= 0.8*(renk*kap) = tahta hacmi; slot sirasi degil hacmi
-#     takip eder. Kapasite artip renk sifirlaninca enKisa DUSUYORDU (eski slot
-#     6, 11). Karar: merdiven HACME gore monoton dizilir; bos=1 ayni hacimde
+# Parametre merdiveni: (kapasite, renk, bos). Iki kisit sekillendirir:
+#   - bos=1 saf rastgele uretimde kap>=5'te cokuyor (kabul orani ~%0; kap6
+#     renk7 bos1'de 600 denemede 0 kabul). Bu yuzden bos=1 yalniz kap<=4'te
+#     sunulur; ust uc bos=2 kalir.
+#   - enKisa ~= 0.8*(renk*kap) = tahta hacmi, slot sirasi degil hacmi takip
+#     eder. Merdiven bu yuzden HACME gore monoton dizilir; bos=1 ayni hacimde
 #     "daha dar" (az cozum) oldugu icin ikizinin hemen ardina konur.
 # Hacim (renk*kap) monoton: 12,16,20,20,24,24,25,30,30,35,36,42. Tup = renk+bos.
-# (4,4,1) KOPRU olarak eklendi: skora gore siralamada bos 2->1 ucurumunu
-# (~0.28->0.49) yumusatmak icin; yeri hacimle degil OLCULEN skorla belirlenir.
+# (4,4,1) KOPRU: skora gore siralamada bos 2->1 ucurumunu yumusatir; yeri
+# hacimle degil OLCULEN skorla belirlenir.
 LADDER = [
     (4, 3, 2),              # 12
     (4, 4, 2),              # 16
@@ -83,7 +74,7 @@ assert all(empties >= 2 or cap <= 4 for cap, _c, empties in LADDER), \
 #   Tier 1: tek renk, 2 tup — uretici tek rengi karistiramaz, o yuzden ELLE.
 #           Iki varyant: 1+3 ve 2+2 bolunme. Tek amac "dokun-dok, birlesir".
 #   Tier 2: 2 renk, 2 bos, 4 tup — uretici uretir. 2 bos tup: cikmaz neredeyse
-#           imkansiz (ogretici cikmaza dusmesin). (1 bos'ta 2.1/2.2 tuzakliydi.)
+#           imkansiz (ogretici cikmaza dusmesin; 1 bos tup kilitlenmeye acikti).
 TUTORIAL_CAP = 4
 TUTORIAL_COLOR = 0
 TUTORIAL1_BOARDS = [
@@ -96,9 +87,8 @@ CANDIDATES_PER_SLOT = 30    # slot basina KABUL edilen (SOLVABLE) aday sayisi
 MAX_ATTEMPTS_FACTOR = 20    # sonsuz donguye karsi: en fazla 30*20 deneme
 SEED = 42
 
-# Dort-terim skor agirliklari (toplam 1.0). BOYUT baskin (mentor karari, 27 Tem
-# 2026): L+C hakim, T/A geri cekildi ki tup/renk monoton artsin. Eskiden T=0.55
-# baskindi; mentor begenmedi (bos=1 kucuk-tuzakli leveller sona firliyordu).
+# Dort-terim skor agirliklari (toplam 1.0). Boyut (L,C) baskin, tuzak/affetmezlik
+# (T,A) ikincil — tup/renk artisinda siralama monoton kalsin diye.
 WEIGHTS = {"L": 0.45, "C": 0.25, "A": 0.15, "T": 0.15}
 
 
@@ -295,7 +285,8 @@ def write_pilot_levels(tiers):
       tubes[]        — dipten yukari virgullu; bos tup "" (ParseTube uyumlu)
       shortest       — enKisa cozum uzunlugu (ham metrik; C# okur, hesaplamaz)
       solutionCount  — cozum sayisi (ham metrik)
-    Agirliga bagli SKOR yazilmaz: oyun testiyle degisecek (mentor karari)."""
+    Agirliga bagli SKOR yazilmaz, yalniz ham metrik: agirlik degisince
+    yeniden siralanabilsin diye."""
     levels = []
     for t_idx, (cap, boards) in enumerate(tiers, start=1):
         for v_idx, c in enumerate(boards, start=1):
