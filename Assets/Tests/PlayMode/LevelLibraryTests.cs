@@ -6,10 +6,10 @@ using TubeSort.Game;
 namespace TubeSort.Tests.PlayMode
 {
     /// <summary>
-    /// Python'un ürettiği pilot_levels.json'un (öğretici + köprü + ranked;
-    /// 15 tier x 2 = 30 tahta) Unity tarafında doğru okunduğunu doğrular.
-    /// Sahne gerekmez ama Resources yüklemesi oyun ortamı istediği için
-    /// PlayMode'dadır.
+    /// Python'un ürettiği pilot_levels.json'un (2 öğretici + 13 ranked;
+    /// 15 tier x 2 = 30 tahta, hepsi 2 boş) Unity tarafında doğru okunduğunu
+    /// doğrular. Sahne gerekmez ama Resources yüklemesi oyun ortamı istediği
+    /// için PlayMode'dadır.
     /// </summary>
     public class LevelLibraryTests
     {

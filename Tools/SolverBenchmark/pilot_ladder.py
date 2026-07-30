@@ -16,8 +16,6 @@ normalize edilir, boylece agirliklar dogrudan "zorlugun yuzde kaci" diye okunur.
   T (0.15) = olu-durum orani         -> tuzak yogunlugu (cok=zor)
 Boyut (L,C) baskin tutulur ki siralama tahta hacmini izlesin ve tup/renk
 artisinda monoton kalsin; tuzak (T)/affetmezlik (A) ikincil eslik-bozuculardir.
-Bos=1 tahtalar kucuk ama tuzakli/az-cozumludur; T/A agir olsaydi hacimlerinin
-otesinde "en zor" siralanirdi.
 Yapisal parametreler (kap/renk/bos) formulde DOGRUDAN yok: L zaten hacmi temsil
 eder, kap/renk'i ayrica koymak hacmi cift sayardi.
 UYARI: L hacmi (renk*kap) izler ama tup=renk+bos ve kapasite degisken; boyuta
@@ -41,35 +39,33 @@ import time
 
 import crosscheck as cc
 
-# Parametre merdiveni: (kapasite, renk, bos). Iki kisit sekillendirir:
-#   - bos=1 saf rastgele uretimde kap>=5'te cokuyor (kabul orani ~%0; kap6
-#     renk7 bos1'de 600 denemede 0 kabul). Bu yuzden bos=1 yalniz kap<=4'te
-#     sunulur; ust uc bos=2 kalir.
-#   - enKisa ~= 0.8*(renk*kap) = tahta hacmi, slot sirasi degil hacmi takip
-#     eder. Merdiven bu yuzden HACME gore monoton dizilir; bos=1 ayni hacimde
-#     "daha dar" (az cozum) oldugu icin ikizinin hemen ardina konur.
-# Hacim (renk*kap) monoton: 12,16,20,20,24,24,25,30,30,35,36,42. Tup = renk+bos.
-# (4,4,1) KOPRU: skora gore siralamada bos 2->1 ucurumunu yumusatir; yeri
-# hacimle degil OLCULEN skorla belirlenir.
+# Parametre merdiveni: (kapasite, renk, bos). Her tahta HEP 2 bos tup icerir
+# (kullanici kolayca cikmaza girmesin diye); zorluk yalniz (kapasite, renk)
+# artisindan gelir. Tup = renk+2, hacim = renk*kap. Siralama OLCULEN skora gore
+# (asagida); merdiven yalnizca aday havuzunu tanimlar. Ust uc daha cok renk/
+# kapasiteyle zorlar (tavan (8,7,2)); sinirlar: kap<=8 (MaxLayers), renk<=8 (palet).
 LADDER = [
-    (4, 3, 2),              # 12
-    (4, 4, 2),              # 16
-    (4, 5, 2), (4, 5, 1),   # 20  (bos=1 = ayni hacim, daha dar)
-    (4, 6, 2), (4, 6, 1),   # 24  (bos=1 = ayni hacim, daha dar)
-    (5, 5, 2),              # 25
-    (5, 6, 2), (6, 5, 2),   # 30  (ayni hacim, farkli kapasite: cap etkisi probu)
-    (5, 7, 2),              # 35
-    (6, 6, 2),              # 36
-    (6, 7, 2),              # 42
-    (4, 4, 1),              # KOPRU (bos=1, az renk): bos 2->1 ucurumu icin
+    (4, 3, 2),   # hacim 12, 5 tup
+    (4, 4, 2),   # 16, 6
+    (4, 5, 2),   # 20, 7
+    (4, 6, 2),   # 24, 8
+    (5, 5, 2),   # 25, 7
+    (5, 6, 2),   # 30, 8
+    (6, 5, 2),   # 30, 7   (ayni hacim, farkli kapasite: cap etkisi probu)
+    (5, 7, 2),   # 35, 9
+    (6, 6, 2),   # 36, 8
+    (6, 7, 2),   # 42, 9
+    (7, 6, 2),   # 42, 8
+    (7, 7, 2),   # 49, 9
+    (8, 7, 2),   # 56, 9   (tavan)
 ]
 
-# Guvenlik: bos=1 yalniz kap<=4'te (Bulgu 1). Ihlal edilirse uretim cokerdi.
-assert all(empties >= 2 or cap <= 4 for cap, _c, empties in LADDER), \
-    "bos=1 yalniz kap<=4'te olabilir (kap>=5'te rastgele uretim cokuyor)"
+# Hepsi 2 bos: kullaniciyi kolay cikmazdan korur.
+assert all(empties == 2 for _cap, _colors, empties in LADDER), \
+    "her slot 2 bos tup icermeli (kolay cikmaz onlemi)"
 
-# Ogretici tier'lar: ekranin en basi, SABIT sira (skora gore siralamaya
-# GIRMEZLER, yoksa bos=1 ogreticisi tuzak-yogunlugundan zor kumeye kayabilir).
+# Ogretici tier'lar: ekranin en basi, SABIT sira (skora GIRMEZLER; kucuk
+# ogreticiler skorla siralanirsa yanlis yere kayabilir, hep en basta dursunlar).
 # Referans oyunun ilk 2 seviyesi ornek alindi: az tup, oyuncuyu korkutmasin.
 #   Tier 1: tek renk, 2 tup — uretici tek rengi karistiramaz, o yuzden ELLE.
 #           Iki varyant: 1+3 ve 2+2 bolunme. Tek amac "dokun-dok, birlesir".
@@ -317,7 +313,7 @@ def fmt_tubes(board):
 
 def write_report(ranked, tut1, tut2, bounds, total_secs, score_fn):
     """pilot_ladder.md: (1) tier ozeti (ogretici + skora sirali ranked, her
-    tier 2 tahta), (2) kopru (4,4,1) kontrolu, (3) secilen 30 tahta (label ile)."""
+    tier 2 tahta), (2) secilen 30 tahta (label ile)."""
     lines = []
     lines.append("# TubeSort — Level Merdiveni Raporu")
     lines.append("")
@@ -360,30 +356,8 @@ def write_report(ranked, tut1, tut2, bounds, total_secs, score_fn):
                               r["boards"], r["score"]))
     lines.append("")
 
-    # (2) Kopru (4,4,1) kontrolu
-    lines.append("## 2. Kopru (4,4,1) kontrolu")
-    lines.append("")
-    bridge_idx = next((i for i, r in enumerate(ranked)
-                       if (r["cap"], r["colors"], r["empties"]) == (4, 4, 1)), None)
-    if bridge_idx is None:
-        lines.append("Kopru (4,4,1) ranked icinde bulunamadi (?).")
-    else:
-        tier_no = bridge_idx + 3
-        bscore = ranked[bridge_idx]["score"]
-        lines.append(f"Kopru tier **{tier_no}** olarak yerlesti, skor **{bscore:.3f}**.")
-        if bridge_idx > 0:
-            prev_s = ranked[bridge_idx - 1]["score"]
-            lines.append(f"- Onceki tier skoru: {prev_s:.3f}  (fark {bscore - prev_s:+.3f})")
-        if bridge_idx + 1 < len(ranked):
-            next_s = ranked[bridge_idx + 1]["score"]
-            lines.append(f"- Sonraki tier skoru: {next_s:.3f}  (fark {next_s - bscore:+.3f})")
-        lines.append("")
-        lines.append("Beklenti: kopru bos=2 kumesi ile bos=1 kumesi ARASINA dusmeli; "
-                     "iki fark da makul olmali (tek buyuk ucurum kalmamali).")
-    lines.append("")
-
-    # (3) Secilen tahtalar (label ile)
-    lines.append("## 3. Secilen tahtalar (label)")
+    # (2) Secilen tahtalar (label ile)
+    lines.append("## 2. Secilen tahtalar (label)")
     lines.append("")
 
     def board_lines(tier_no, cap, colors, empties, boards):
