@@ -85,13 +85,19 @@ namespace TubeSort.Game
         private readonly List<PourJob> activeJobs = new List<PourJob>();
         private bool AnyAnimating => activeJobs.Count > 0;
 
-        /// <summary>Süren bir dökme/geri-alma animasyonu: kaynak/hedef indeksleri ve
-        /// kaynağın çizim-sırası offset'i (eşzamanlı kaynaklar farklı bantta durur).</summary>
+        /// <summary>Süren bir dökme/geri-alma animasyonu: kaynak/hedef indeksleri,
+        /// kaynağın çizim-sırası offset'i (eşzamanlı kaynaklar farklı bantta durur)
+        /// ve eğim yönü (+1 hedef sağda, -1 solda; 2. gelen ilkinin tersini alır).</summary>
         private sealed class PourJob
         {
             public int FromIndex;
             public int ToIndex;
             public int SortingOffset;
+            public float Direction;
+            // Dökme fazı sürüyor mu? Geri dönüş (kaynak doğrulma) fazında false
+            // olur ama iş hâlâ activeJobs'ta kalır (kaynak meşgul). Hedef
+            // tamamlanmasının "son dökücü" kararı buna bakar.
+            public bool Pouring;
         }
 
         /// <summary>Aktif işlerin kullanmadığı en küçük offset bandını (10, 20, …) verir:
@@ -117,6 +123,43 @@ namespace TubeSort.Game
                 if (job.FromIndex == index || job.ToIndex == index)
                     return true;
             return false;
+        }
+
+        /// <summary>Bu tüpe o an kaç dökme akıyor (0, 1 ya da 2).</summary>
+        private int IncomingCount(int index)
+        {
+            int count = 0;
+            foreach (PourJob job in activeJobs)
+                if (job.ToIndex == index) count++;
+            return count;
+        }
+
+        /// <summary>Bu tüp başka bir dökmenin kaynağı mı (boşalıyor)?</summary>
+        private bool IsDraining(int index)
+        {
+            foreach (PourJob job in activeJobs)
+                if (job.FromIndex == index) return true;
+            return false;
+        }
+
+        /// <summary>Bu hedefe, verilen iş DIŞINDA hâlâ döken başka bir iş var mı?
+        /// Hedef tamamlanması (tıpa/halka) yalnız son dökücü bitince yapılsın diye.</summary>
+        private bool TargetHasOtherPouring(int toIndex, PourJob self)
+        {
+            foreach (PourJob job in activeJobs)
+                if (job != self && job.ToIndex == toIndex && job.Pouring) return true;
+            return false;
+        }
+
+        /// <summary>Dökmenin eğim yönü: hedefe o an bir dökme akıyorsa ilkinin
+        /// TERSİ (biri sağdan, biri soldan); yoksa doğal yön (hedef sağdaysa +1).</summary>
+        private float ComputePourDirection(int fromIndex, int toIndex)
+        {
+            foreach (PourJob job in activeJobs)
+                if (job.ToIndex == toIndex) return -job.Direction;
+
+            float dx = tubeViews[toIndex].RestPosition.x - tubeViews[fromIndex].RestPosition.x;
+            return Mathf.Abs(dx) < 0.01f ? 1f : Mathf.Sign(dx);
         }
 
         private Camera mainCamera;
@@ -455,10 +498,12 @@ namespace TubeSort.Game
         /// </summary>
         public bool TryPour(int fromIndex, int toIndex)
         {
-            // Tüp-bazlı kilit: kaynak ya da hedef başka bir dökmeye dahilse yeni
-            // dökme başlamaz. Ayrık tüp çiftleri aynı anda dökülebilir.
-            // (Faz 2: hedef 1 gelen alıyorsa karşı taraftan 2.'ye izin verilecek.)
-            if (IsBusy(fromIndex) || IsBusy(toIndex)) return false;
+            // Kaynak tamamen serbest olmalı (ne boşalıyor ne dolduruluyor).
+            if (IsBusy(fromIndex)) return false;
+            // Hedef başka bir dökmenin kaynağı olamaz (boşalan tüpe dökülmez).
+            if (IsDraining(toIndex)) return false;
+            // Bir hedef en fazla 2 gelen alır (karşı taraflardan); 3. reddedilir.
+            if (IncomingCount(toIndex) >= 2) return false;
 
             PourResult result = board.Pour(fromIndex, toIndex);
             if (!result.Success) return false;
@@ -469,6 +514,8 @@ namespace TubeSort.Game
                 FromIndex = fromIndex,
                 ToIndex = toIndex,
                 SortingOffset = AllocateSortingOffset(),
+                Direction = ComputePourDirection(fromIndex, toIndex),
+                Pouring = true,
             };
             activeJobs.Add(job);
             StartCoroutine(AnimatePour(result, job));
@@ -1124,10 +1171,9 @@ namespace TubeSort.Game
             // Kaynak tüpü üstte çiz (eşzamanlı kaynaklar farklı bantta).
             fromView.SetSortingOffset(job.SortingOffset);
 
-            // Eğilme yönü: hedefe doğru eğil.
-            // Aynı sütundaysa (dx ≈ 0) sağa doğru eğil.
-            float dx = toView.RestPosition.x - fromView.RestPosition.x;
-            float direction = Mathf.Abs(dx) < 0.01f ? 1f : Mathf.Sign(dx);
+            // Eğilme yönü işte hazır: doğal yön ya da (2. gelen ise) ilkinin tersi.
+            // Zıt yönler iki kaynağı hedefin iki yanına ayırır, üst üste binmezler.
+            float direction = job.Direction;
 
             // Dönüş noktası tüpün ortasında.
             float pivotHeight = fromView.Height * 0.5f;
@@ -1215,7 +1261,11 @@ namespace TubeSort.Game
 
                     float pourT = Mathf.Clamp01(pourElapsed / pourDuration);
                     fromView.SetFillLevel(Mathf.Lerp(fromStart, fromTarget, pourT));
-                    toView.SetFillLevel(Mathf.Lerp(toStart, toTarget, pourT));
+                    // Hedef doluluğu monoton artar: iki gelen dökme aynı hedefi
+                    // birlikte doldurabilsin diye mevcut seviyeyle max alınır
+                    // (tek dökmede lerp zaten monoton, davranış değişmez).
+                    toView.SetFillLevel(Mathf.Max(
+                        toView.CurrentFill, Mathf.Lerp(toStart, toTarget, pourT)));
                 }
 
                 // Pozisyon: kayma + tilt offset birlikte uygulanır.
@@ -1257,18 +1307,26 @@ namespace TubeSort.Game
                 yield return null;
             }
 
-            // Son değerleri kesin uygula.
+            // Kaynağı ve kendi akışını kesin bitir (her dökme kendi işi).
             fromView.SetFillLevel(fromTarget);
-            toView.SetFillLevel(toTarget);
             ReleaseStream(stream);
-            toView.SetSplashStrength(0f);   // sıçrama durur
-            // Sıvı yüzeye oturdu: damla halkası patlaması şimdi oynar
-            // (efekt dökme bitince hissedilmeli).
-            toView.PlayRippleBurst();
-            // Dökme bitti: tüp tamamlandıysa tıpa ŞİMDİ, takılma animasyonuyla;
-            // akış sandviçi kapanır (tıpalıysa dilimler tıpa üzerinden açık kalır).
-            toView.SetCorkSuppressed(false);
-            toView.SetMouthOverlay(false);
+            job.Pouring = false;   // dökme fazı bitti (kaynak doğrulma fazına geçer)
+
+            // Hedef tamamlanması (final doluluk, halka, tıpa, sandviç kapanışı)
+            // yalnız SON dökücü bitince yapılır: 2 kaynak → 1 hedef durumunda ilki
+            // biterken diğeri hâlâ döküyorsa atlanır, sonuncu yapar.
+            if (!TargetHasOtherPouring(result.ToIndex, job))
+            {
+                toView.SetFillLevel(Mathf.Max(toView.CurrentFill, toTarget));
+                toView.SetSplashStrength(0f);   // sıçrama durur
+                // Sıvı yüzeye oturdu: damla halkası patlaması şimdi oynar
+                // (efekt dökme bitince hissedilmeli).
+                toView.PlayRippleBurst();
+                // Tüp tamamlandıysa tıpa ŞİMDİ, takılma animasyonuyla; akış
+                // sandviçi kapanır (tıpalıysa dilimler tıpa üzerinden açık kalır).
+                toView.SetCorkSuppressed(false);
+                toView.SetMouthOverlay(false);
+            }
 
             // --- Faz 4+5: Doğrulma ve geri dönüş eş zamanlı ---
             // Giderken kayma+eğilme eş zamanlıydı; dönüşte de doğrulma+kayma

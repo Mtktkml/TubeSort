@@ -89,5 +89,43 @@ namespace TubeSort.Tests.PlayMode
             Assert.AreEqual(2, result[3].TopSegmentLength, "3: sarı dökmeyi almalı");
             Assert.IsFalse(result[4].IsEmpty, "4: reddedilen kaynak değişmemeli");
         }
+
+        [UnityTest]
+        public IEnumerator TwoSources_PourIntoOneTarget_ThirdRejected()
+        {
+            // Üç kırmızı kaynak, bir boş hedef (kapasite 4). İlk iki dökme hedefe
+            // kabul edilmeli (karşı taraflardan); hedef 2 gelenle dolunca üçüncü
+            // reddedilmeli.
+            const int Red = 0;
+            var view = BuildBoard(new Board(new List<Tube>
+            {
+                new Tube(4, Red, Red),
+                new Tube(4),
+                new Tube(4, Red, Red),
+                new Tube(4, Red, Red),
+            }));
+            yield return null; // Start çalışsın
+
+            Assert.IsTrue(view.TryPour(0, 1), "1. gelen kabul edilmeliydi");
+            Assert.IsTrue(view.TryPour(2, 1),
+                "2. gelen (karşı taraf) kabul edilmeliydi");
+            Assert.IsFalse(view.TryPour(3, 1),
+                "3. gelen reddedilmeliydi (hedef 2 gelenle dolu)");
+
+            float elapsed = 0f;
+            while (view.IsAnimating && elapsed < 8f)
+            {
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+            Assert.IsFalse(view.IsAnimating, $"animasyonlar {elapsed:F1} sn'de bitmedi");
+
+            Board result = view.Board;
+            Assert.IsTrue(result[0].IsEmpty, "0: kaynak boşalmalı");
+            Assert.IsTrue(result[1].IsComplete,
+                "1: iki gelenle dolup tamamlanmalı (4 kırmızı)");
+            Assert.IsTrue(result[2].IsEmpty, "2: kaynak boşalmalı");
+            Assert.IsFalse(result[3].IsEmpty, "3: reddedilen kaynak değişmemeli");
+        }
     }
 }
