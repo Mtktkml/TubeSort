@@ -438,6 +438,7 @@ namespace TubeSort.Game
         private void StepPilot(int step)
         {
             if (pilotCount <= 0) return;
+            if (AnyAnimating) return;   // meta aksiyon: animasyon sürerken level değişmez
 
             pilotIndex = ((pilotIndex - 1 + step + pilotCount) % pilotCount) + 1;
             Board next = LoadPilot(pilotIndex);
@@ -454,9 +455,10 @@ namespace TubeSort.Game
         /// </summary>
         public bool TryPour(int fromIndex, int toIndex)
         {
-            // Faz 0: hâlâ seri — herhangi bir animasyon varken yeni dökme yok.
-            // (Faz 1 bunu tüp-bazlı kurala gevşetir.)
-            if (AnyAnimating) return false;
+            // Tüp-bazlı kilit: kaynak ya da hedef başka bir dökmeye dahilse yeni
+            // dökme başlamaz. Ayrık tüp çiftleri aynı anda dökülebilir.
+            // (Faz 2: hedef 1 gelen alıyorsa karşı taraftan 2.'ye izin verilecek.)
+            if (IsBusy(fromIndex) || IsBusy(toIndex)) return false;
 
             PourResult result = board.Pour(fromIndex, toIndex);
             if (!result.Success) return false;
@@ -902,7 +904,9 @@ namespace TubeSort.Game
             Pointer pointer = Pointer.current;
             if (pointer == null) return;
 
-            if (AnyAnimating) return;
+            // Animasyon sürerken de tıklama işlenir: dökmeye dahil olmayan tüpler
+            // arasında eşzamanlı dökme yapılabilsin. Meşgul tüp/meta kuralları
+            // aşağıda (HandleTubeClick / meta aksiyon guard'ları) uygulanır.
             if (!pointer.press.wasPressedThisFrame) return;
 
             HandleClick(pointer.position.ReadValue());
@@ -999,11 +1003,12 @@ namespace TubeSort.Game
             }
         }
 
-        /// <summary>Dökme kaynağı olabilecek tüp: boş değil ve tıpalı (complete)
-        /// değil. Tıpalı tüp kilitlidir — Board.PourableAmount da aynı kuralı
-        /// uygular; buradaki kontrol seçim/kaldırma davranışı için.</summary>
+        /// <summary>Dökme kaynağı olabilecek tüp: boş değil, tıpalı (complete)
+        /// değil ve o an bir dökmeye dahil (meşgul) değil. Tıpalı tüp kilitlidir —
+        /// Board.PourableAmount da aynı kuralı uygular; buradaki kontrol
+        /// seçim/kaldırma davranışı için.</summary>
         private bool IsSelectable(int index) =>
-            !board[index].IsEmpty && !board[index].IsComplete;
+            !board[index].IsEmpty && !board[index].IsComplete && !IsBusy(index);
 
         private void ClearSelection()
         {
