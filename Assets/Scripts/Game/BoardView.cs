@@ -1157,6 +1157,10 @@ namespace TubeSort.Game
             TubeView fromView = tubeViews[result.FromIndex];
             TubeView toView = tubeViews[result.ToIndex];
             StreamView stream = AcquireStream();
+            // Akış üst parçası kaynağın offset bandının önünde (ön dilimler
+            // offset+4'ün üstü); alt parça hedefin sandviçinde (tıpa katmanı 3,
+            // hedef offset almaz). Böylece öndeki kaynağın akışı arkasında kalmaz.
+            stream.SetSortingOrders(job.SortingOffset + 5, 3);
 
             // Board hamleyi zaten uyguladı; tube verileri yeni durumu yansıtıyor.
             float fromTarget = fromView.TargetFillLevel;
@@ -1561,13 +1565,17 @@ namespace TubeSort.Game
         /// Tüpler saydam olduğu için akış ağızda değil, sıvının
         /// olduğu seviyede bitmeli.
         /// </summary>
+        // Boş hedefte kolon dibinin oturacağı iç-dip payı: RestPosition tüpün
+        // pivot (dış) dibidir; görünür iç dip biraz yukarıda, kolon oraya otursun.
+        private const float DestBottomInset = 0.06f;
+
         private static Vector3 CalculateDestSurface(TubeView toView, float fillLevel)
         {
             float surfaceY = fillLevel * toView.Height;
             // Boş/az dolu hedefte kolonun dibi tüpün altına taşmasın: kolon dibi
-            // yüzeyden SurfacePlunge kadar aşağı iner, o yüzden yüzey en az bu
+            // yüzeyden SurfacePlunge kadar aşağı iner; yüzey en az bu + iç-dip payı
             // kadar tüp dibinin (RestPosition) üstünde tutulur.
-            surfaceY = Mathf.Max(surfaceY, StreamView.SurfacePlunge);
+            surfaceY = Mathf.Max(surfaceY, StreamView.SurfacePlunge + DestBottomInset);
             return toView.RestPosition + new Vector3(0f, surfaceY, 0f);
         }
 

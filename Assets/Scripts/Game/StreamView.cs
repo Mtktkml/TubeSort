@@ -50,17 +50,25 @@ namespace TubeSort.Game
         {
             properties = new MaterialPropertyBlock();
 
-            // Üst parça: kaynak tüpün TÜM parçalarının önünde (dökme sırasında
-            // kaynak +10 offset alır: yaka 12, tıpa 13, ön dilimler 14). Tepesi
-            // deliğin karanlığına gömülü başlar, bej yakanın önünden akar —
-            // "deliğin içinden çıkıyor" okunur.
+            // Üst parça: kaynak tüpün TÜM parçalarının önünde. Kaynak dökme
+            // sırasında bir offset bandı alır (10/20/…); üst parça o kaynağın ön
+            // dilimlerinin (offset+4) hemen üstünde olmalı. Sıra her dökmede
+            // BoardView'dan SetSortingOrders ile atanır; buradaki 15 varsayılan.
             quadTop = CreateQuad(unitSprite, streamMaterial, "StreamTop", 15);
 
             // Alt parça: hedefin yaka sandviçinde TIPA katmanı (order 3, arka
-            // yaka 2 ile ön dilimler 4 arası). Dökme sırasında hedefin ön
-            // dilimleri açılır (TubeView.SetMouthOverlay): kolon delikten girer,
-            // bej bandın arkasında kaybolur, tüpte yeniden görünür.
+            // yaka 2 ile ön dilimler 4 arası). Hedef offset almaz (dökülmüyor).
+            // Dökme sırasında hedefin ön dilimleri açılır (SetMouthOverlay):
+            // kolon delikten girer, bej bandın arkasında kaybolur, tüpte görünür.
             quadBottom = CreateQuad(unitSprite, streamMaterial, "StreamBottom", 3);
+        }
+
+        /// <summary>Akışın çizim sırasını kaynağın offset bandına göre ayarlar:
+        /// üst parça kaynağın önünde (offset+5), alt parça hedefin sandviçinde.</summary>
+        public void SetSortingOrders(int topOrder, int bottomOrder)
+        {
+            quadTop.sortingOrder = topOrder;
+            quadBottom.sortingOrder = bottomOrder;
         }
 
         private SpriteRenderer CreateQuad(Sprite unitSprite, Material material,
