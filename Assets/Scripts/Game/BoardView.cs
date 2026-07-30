@@ -618,7 +618,13 @@ namespace TubeSort.Game
             board.AddTube(board[0].Capacity);
             ClearSelection();
             if (initialized)
+            {
                 RebuildViews();
+                // +tüp genelde çıkmazı çözer (boş tüp = daha çok yer) ama garanti
+                // değil: RebuildViews banner'ı gizledi; yeni tahta hâlâ çıkmazsa
+                // banner geri gelir (undo'daki koşullu temizlemenin aynısı).
+                RefreshDeadlockBanner();
+            }
         }
 
         /// <summary>Mevcut tüp görünümlerini yıkıp tahtayı baştan kurar.</summary>
@@ -1158,12 +1164,12 @@ namespace TubeSort.Game
         /// </summary>
         private IEnumerator AnimatePour(PourResult result, PourJob job)
         {
-            const float slideDuration = 2f;
-            const float pourDuration = 2f;
+            const float slideDuration = 0.24f;
+            const float pourDuration = 0.4f;
 
             // SmoothDamp tepki süresi. Kritik sönümleme: aşım yok, hızlı yakınsama.
             // Hem ilk eğilme hem dökme sırasındaki açı değişimi tek parametre.
-            const float angleSmoothTime = 2f;
+            const float angleSmoothTime = 0.12f;
 
             ClearSelection();
 
@@ -1225,7 +1231,7 @@ namespace TubeSort.Game
             // Emniyet kemeri: hiçbir formül hatası animasyonu bir daha
             // kilitleyemesin. Doğru işleyişte asla tetiklenmez; tetiklenirse
             // hata loglanır ve animasyon son değerlerle zorla tamamlanır.
-            const float watchdogSeconds = 16f;
+            const float watchdogSeconds = 4f;
             float watchdogElapsed = 0f;
 
             while (true)
