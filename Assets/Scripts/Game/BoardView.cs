@@ -47,6 +47,16 @@ namespace TubeSort.Game
                  "iken etkilidir.")]
         [SerializeField] private bool useUnsolvableBoard;
 
+        [Header("Animasyon süreleri (sn)")]
+        [Tooltip("Kaynak tüpün hedefe kayma süresi.")]
+        [SerializeField] private float slideDuration = 0.24f;
+        [Tooltip("Sıvının dökülme (seviye değişimi) süresi.")]
+        [SerializeField] private float pourDuration = 0.4f;
+        [Tooltip("Eğim açısı SmoothDamp tepki süresi (kritik sönümleme, aşım yok).")]
+        [SerializeField] private float angleSmoothTime = 0.12f;
+        [Tooltip("Emniyet: dökme bu süre içinde bitmezse hata loglanıp zorla tamamlanır.")]
+        [SerializeField] private float watchdogSeconds = 4f;
+
         private Board board;
         private readonly MoveHistory history = new MoveHistory();
         private ColorPalette palette;
@@ -1164,13 +1174,9 @@ namespace TubeSort.Game
         /// </summary>
         private IEnumerator AnimatePour(PourResult result, PourJob job)
         {
-            const float slideDuration = 0.24f;
-            const float pourDuration = 0.4f;
-
-            // SmoothDamp tepki süresi. Kritik sönümleme: aşım yok, hızlı yakınsama.
-            // Hem ilk eğilme hem dökme sırasındaki açı değişimi tek parametre.
-            const float angleSmoothTime = 0.12f;
-
+            // slideDuration/pourDuration/angleSmoothTime Inspector'dan gelir
+            // (sabit değil): görsel izlemek için play mode'da yavaşlatılabilir.
+            // angleSmoothTime = eğim açısı SmoothDamp tepki süresi (kritik sönüm).
             ClearSelection();
 
             TubeView fromView = tubeViews[result.FromIndex];
@@ -1228,10 +1234,9 @@ namespace TubeSort.Game
             const float mouthSeparation = TubeView.Width * 0.2f;
             float lateral = 0f;
 
-            // Emniyet kemeri: hiçbir formül hatası animasyonu bir daha
-            // kilitleyemesin. Doğru işleyişte asla tetiklenmez; tetiklenirse
-            // hata loglanır ve animasyon son değerlerle zorla tamamlanır.
-            const float watchdogSeconds = 4f;
+            // Emniyet kemeri (watchdogSeconds Inspector'dan): hiçbir formül hatası
+            // animasyonu bir daha kilitleyemesin. Doğru işleyişte asla tetiklenmez;
+            // tetiklenirse hata loglanır ve animasyon son değerlerle zorla tamamlanır.
             float watchdogElapsed = 0f;
 
             while (true)
