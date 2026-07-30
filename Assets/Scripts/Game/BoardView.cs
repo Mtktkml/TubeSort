@@ -963,46 +963,39 @@ namespace TubeSort.Game
         /// Ekran koordinatındaki dokunuşu ilgili hedefe yönlendirir: geri al
         /// butonu ya da tüp. Tüplerde BoxCollider2D hızlı eleme yapar; ardından
         /// SDF ile dokunuşun gerçekten tüp şekli içinde olduğu doğrulanır.
+        ///
+        /// Tek bir OverlapPoint yetmez: dökme sırasında kaynak tüp hedefin
+        /// ÜSTÜNE asılır, collider'ları çakışır. Tüm collider'lara bakıp gerçek
+        /// şekline (SDF) girilen tüpü seçeriz — yoksa hedefe yapılan tıklama,
+        /// asılı kaynağın collider'ına takılıp boşluk sanılır (2. dökme başlamaz).
         /// </summary>
         private void HandleClick(Vector2 screenPosition)
         {
             Vector3 worldPoint = mainCamera.ScreenToWorldPoint(screenPosition);
-            Collider2D hit = Physics2D.OverlapPoint(worldPoint);
-            if (hit == null)
+            Collider2D[] hits = Physics2D.OverlapPointAll(worldPoint);
+
+            // Butonlar tüplerin/akışın üstünde; herhangi bir collider buysa öncelikli.
+            foreach (Collider2D hit in hits)
             {
-                // Boşluğa tıklamak vazgeçmektir: mevcut seçimi iptal et.
-                ClearSelection();
-                return;
+                if (hit.GetComponent<UndoButtonView>() != null) { UndoLastMove(); return; }
+                if (hit.GetComponent<PilotNextButtonView>() != null) { StepPilot(1); return; }
+                var button = hit.GetComponent<ButtonView>();
+                if (button != null) { HandleActionButton(button.Kind); return; }
             }
 
-            if (hit.GetComponent<UndoButtonView>() != null)
+            // Gerçek şekline (SDF) dokunulan tüp: asılı kaynak üstte olsa da
+            // altındaki durağan tüp doğru bulunur.
+            foreach (Collider2D hit in hits)
             {
-                UndoLastMove();
-                return;
+                var view = hit.GetComponent<TubeView>();
+                if (view != null && view.ContainsPoint(worldPoint))
+                {
+                    HandleTubeClick(view.Index);
+                    return;
+                }
             }
 
-            if (hit.GetComponent<PilotNextButtonView>() != null)
-            {
-                StepPilot(1);   // skip: tamamlamadan sonraki level
-                return;
-            }
-
-            var button = hit.GetComponent<ButtonView>();
-            if (button != null)
-            {
-                HandleActionButton(button.Kind);
-                return;
-            }
-
-            var view = hit.GetComponent<TubeView>();
-            if (view != null && view.ContainsPoint(worldPoint))
-            {
-                HandleTubeClick(view.Index);
-                return;
-            }
-
-            // Collider'a girip tüpün gerçek şekline (SDF) girmeyen tıklama da
-            // boşluk sayılır: seçim iptal.
+            // Hiçbir tüpün şekline girmeyen tıklama boşluktur: seçim iptal.
             ClearSelection();
         }
 
@@ -1195,6 +1188,12 @@ namespace TubeSort.Game
             float angleVelocity = 0f;
             float moveElapsed = 0f;
 
+            // 2 kaynak → 1 hedef: kolonu kaynağın tarafına kaydır (biri sağa, biri
+            // sola) ki ağızlar hedefin merkezinde üst üste binmesin. Tek dökmede 0.
+            // İkinci kaynak katılınca yumuşak kaysın diye MoveTowards ile ilerler.
+            const float mouthSeparation = TubeView.Width * 0.4f;
+            float lateral = 0f;
+
             // Emniyet kemeri: hiçbir formül hatası animasyonu bir daha
             // kilitleyemesin. Doğru işleyişte asla tetiklenmez; tetiklenirse
             // hata loglanır ve animasyon son değerlerle zorla tamamlanır.
@@ -1218,12 +1217,20 @@ namespace TubeSort.Game
                 // Hedef açı: fill'e göre dinamik, tek kaynak.
                 float targetAngle = -CalculatePourAngle(fromView) * direction;
 
+                // Lateral kayma: hedefe 2 gelen varsa kolonu kaynağın tarafına
+                // (soldan gelen sola, sağdan gelen sağa) kaydır; yumuşak ilerle.
+                float lateralTarget = IncomingCount(result.ToIndex) >= 2
+                    ? -direction * mouthSeparation : 0f;
+                lateral = Mathf.MoveTowards(
+                    lateral, lateralTarget, mouthSeparation / slideDuration * dt);
+
                 // pourPos her kare güncel açıya göre hesaplanır.
                 // mouth.y = pourPos.y + mouthRise(angle) = destMouthY + margin (sabit).
                 // Açı SmoothDamp ile pürüzsüz değiştiği için pourPos da pürüzsüz kayar.
                 float angleForPos = Mathf.Abs(currentAngle) > 0.05f
                     ? currentAngle : initialSignedAngle;
-                pourPos = CalculatePourPosition(fromView, toView, angleForPos, pivotHeight);
+                pourPos = CalculatePourPosition(
+                    fromView, toView, angleForPos, pivotHeight, lateral);
 
                 // Kayma: startPos'tan pourPos'a pürüzsüz geçiş.
                 moveElapsed += dt;
@@ -1285,8 +1292,12 @@ namespace TubeSort.Game
                     // doğru belirginleşiyordu).
                     Vector3 liquidEdge = CalculateStreamSource(fromView, currentAngle);
                     sourcePoint.y = Mathf.Max(sourcePoint.y, liquidEdge.y);
+                    // Hedef uçlarını da lateral kadar kaydır: kolon dikey kalıp
+                    // hedefin kaynağa bakan yanına insin (kaynak ağzıyla aynı x).
                     Vector3 destMouth = CalculateDestMouth(toView);
+                    destMouth.x += lateral;
                     Vector3 destSurface = CalculateDestSurface(toView, toView.CurrentFill);
+                    destSurface.x += lateral;
                     streamingNow = sourcePoint.y > destSurface.y;
                     if (streamingNow)
                         stream.Show(streamColor, sourcePoint, destMouth, destSurface);
@@ -1363,23 +1374,22 @@ namespace TubeSort.Game
         /// Eğildikten sonra kaynak ağzı hedefin ağzının biraz üstüne düşer.
         /// </summary>
         private Vector3 CalculatePourPosition(TubeView from, TubeView to,
-            float signedAngle, float pivotHeight)
+            float signedAngle, float pivotHeight, float lateralOffset)
         {
             Vector3 dest = to.RestPosition;
 
-            // --- X: döken ağız ucu (deliğin hedefe bakan kenarı) tam hedefin
-            // MERKEZİNİN üstüne gelsin: akış kolonu dikey düştüğü için ancak
-            // böyle hem kaynağın deliğinden çıkar hem hedef deliğin ortasına
-            // iner. ApplyTiltWithPivot modeli: nokta = taban + pivotTelafisi +
-            // R(açı)·yerel — buradan taban çözülür. (Eski yaklaşık mouthReach +
-            // pullBack cam ağzını kabaca hizalıyordu; kolonla ağız arasında
-            // yatay kayma bırakıyordu.)
+            // --- X: döken ağız ucu (deliğin hedefe bakan kenarı) hedefin
+            // merkezi + lateralOffset üstüne gelsin: akış kolonu dikey düştüğü
+            // için ancak böyle hem kaynağın deliğinden çıkar hem hedefte istenen
+            // noktaya iner. lateralOffset 2 kaynak → 1 hedef durumunda kolonu
+            // kaynağın tarafına kaydırır (tek dökmede 0). ApplyTiltWithPivot
+            // modeli: nokta = taban + pivotTelafisi + R(açı)·yerel — taban çözülür.
             float lipSide = -Mathf.Sign(signedAngle);
             Vector3 spout = from.CollarMouthLip(lipSide);
             float cos = Mathf.Cos(signedAngle);
             float sin = Mathf.Sin(signedAngle);
             float spoutOffsetX = pivotHeight * sin + (cos * spout.x - sin * spout.y);
-            float xTarget = dest.x - spoutOffsetX;
+            float xTarget = dest.x + lateralOffset - spoutOffsetX;
 
             // --- Y: kaynak tüpün dibi hedefin ağzının üstünde kalsın ---
             // Böylece kayma sırasında (henüz eğilmeden) gövdeler çakışmaz.
