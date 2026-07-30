@@ -39,7 +39,7 @@ namespace TubeSort.Game
         /// Leveli verilen Resources kaynağından kurar. levels.json dışında bir
         /// dosyadan okumak için (ör. pilot önizleme: pilot_levels.json).
         /// Şema aynıdır; yalnız kaynak adı değişir. Hata mesajları kaynak adını
-        /// içerir (kaynak "levels" iken eski mesajlarla birebir aynı kalır).
+        /// içerir.
         /// </summary>
         public static Board LoadFrom(string resourceName, int levelNumber)
         {

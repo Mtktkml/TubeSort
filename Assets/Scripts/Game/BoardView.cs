@@ -53,7 +53,7 @@ namespace TubeSort.Game
         private Sprite unitSprite;
         private Material liquidMaterial;
         private Material streamMaterial;
-        private Sprite tubeSprite;              // ekip görselleri (Resources/Sprites)
+        private Sprite tubeSprite;              // Resources/Sprites görselleri
         private Sprite collarSprite;
         private Sprite corkSprite;
         private Sprite collarFrontTopSprite;    // yakadan eğri maskeyle üretilen ön
@@ -110,7 +110,7 @@ namespace TubeSort.Game
             liquidMaterial = CreateMaterial("Liquid");
             streamMaterial = CreateMaterial("Stream");
 
-            // Cam, yaka ve tıpa artık shader değil ekip görseli (feature/asset-tube).
+            // Cam, yaka ve tıpa sprite (Resources/Sprites); sıvı ve akış shader.
             tubeSprite = LoadSprite(TubeView.TubeSpritePath);
             collarSprite = LoadSprite(TubeView.CollarSpritePath);
             corkSprite = LoadSprite(TubeView.CorkSpritePath);
@@ -214,20 +214,15 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// Çıkmaz uyarı banner'ını kurar (TMP, gizli başlar). Dünya uzayında,
-        /// butonlar gibi kameraya göre konumlanır; TMP varsayılan fontunu kullanır
-        /// (TMP Essentials import edilmiş olmalı). Boyut/konum placeholder — 1C'de cila.
-        /// </summary>
-        /// <summary>
         /// Çıkmaz uyarısını iki TMP parçası olarak kurar (gizli başlar): üst parça
         /// ekranın üstünde, alt parça altında, ikisi de yatayda ortada. Uzun mesaj
-        /// dar ekrana sığsın diye ikiye bölündü. Boyut/konum placeholder — 1C'de cila.
+        /// dar ekrana sığsın diye ikiye bölündü. TMP varsayılan fontunu kullanır
+        /// (TMP Essentials import edilmiş olmalı).
         /// </summary>
         private void BuildDeadlockBanner()
         {
-            // Boyut, başlık-tahta bandına göre seçildi (4/3.2 tüplere taşıyordu,
-            // 2.2/1.6 küçük kaldı): uyarı bandın ortasında, okunur, tüplere
-            // değmeden durur.
+            // Boyut başlık-tahta bandına göre seçilir: uyarı bandın ortasında,
+            // okunur ve tüplere değmeden durur.
             deadlockBannerTop = CreateBannerPart("DeadlockBannerTop", "Çıkmaz!", 3.2f);
             deadlockBannerBottom = CreateBannerPart(
                 "DeadlockBannerBottom", "Geri al, tüp ekle ya da yeniden başla", 2.3f);
@@ -249,7 +244,7 @@ namespace TubeSort.Game
 
         /// <summary>
         /// Üst-orta level başlığını kurar (TMP). Metin UpdateLevelTitle ile her
-        /// level değişiminde tazelenir. Boyut/konum placeholder — 1C'de cila.
+        /// level değişiminde tazelenir.
         /// </summary>
         private void BuildLevelTitle()
         {
@@ -281,9 +276,8 @@ namespace TubeSort.Game
         /// <summary>
         /// Butonları görüş alanının üst köşelerine dizer. Sol küme (soldan sağa):
         /// geri al, restart, +tüp — oyun aksiyonları. Sağ küme (sağdan sola):
-        /// skip, önceki — level navigasyonu. Üst-orta level başlığına (1B) ayrık.
+        /// skip, önceki — level navigasyonu. Üst-orta level başlığından ayrık.
         /// Butonlar tahtanın çocuğu değil; tahta ölçeklense de sabit kalırlar.
-        /// (Placeholder yerleşim; kalabalık ve hizalama 1C'de sprite'larla cilalanır.)
         /// </summary>
         private void PositionButtons()
         {
@@ -310,9 +304,9 @@ namespace TubeSort.Game
                 levelTitle.transform.position = new Vector3(cam.x, titleY, 0f);
 
             // Çıkmaz uyarısı: başlık ile tahta tavanı arasındaki bandın ORTASINA
-            // yerleşmiş iki satır (kullanıcı isteği). Ofsetler dünya biriminde:
-            // TitleClearance da dünya biriminde olduğundan tahta tavanı her
-            // zoom'da uyarının altından geçer — uyarı tüplerin üstüne binmez.
+            // yerleşen iki satır. Ofsetler dünya biriminde: TitleClearance da
+            // dünya biriminde olduğundan tahta tavanı her zoom'da uyarının
+            // altından geçer — uyarı tüplerin üstüne binmez.
             if (deadlockBannerTop != null)
                 deadlockBannerTop.transform.position =
                     new Vector3(cam.x, titleY - 0.45f, 0f);
@@ -427,9 +421,8 @@ namespace TubeSort.Game
         /// <summary>
         /// Son hamleyi geri alır. Animasyon sürerken ve geçmiş boşken çağrı
         /// yok sayılır. Tıpa (varsa) anında kalkar ama sıvı ışınlanmaz:
-        /// seviyeler dökmedeki gibi kademeli akar (sektör standardı,
-        /// kullanıcı bulgusu). Kayma/eğilme/akış görseli yok — geri alma
-        /// bir hamle değil düzeltmedir.
+        /// seviyeler dökmedeki gibi kademeli akar. Kayma/eğilme/akış görseli
+        /// yok — geri alma bir hamle değil düzeltmedir.
         /// </summary>
         public void UndoLastMove()
         {
@@ -751,9 +744,8 @@ namespace TubeSort.Game
         private const float TitleClearance = 0.95f;
 
         /// <summary>Tahta tavanı, kamera merkezine göre: başlık hizasının
-        /// payla altı. Tüpler NE OLURSA OLSUN bu çizgiyi geçemez — uzun tüplü
-        /// levellerde tahta LEVEL yazısının üstüne biniyordu (kullanıcı
-        /// bulgusu).</summary>
+        /// payla altı. Tüpler NE OLURSA OLSUN bu çizgiyi geçemez; uzun tüplü
+        /// levellerde tahta LEVEL başlığının altında kalır.</summary>
         private float BoardCeiling => CameraView.y * TitleFraction - TitleClearance;
 
         /// <summary>Tahtaya ayrılan alan: yatayda tüm görüş, dikeyde ekran
@@ -1028,8 +1020,6 @@ namespace TubeSort.Game
             isAnimating = true;
             ClearSelection();
 
-            Debug.Log($"{result.Amount} birim renk#{result.Color}: tüp {result.FromIndex} -> tüp {result.ToIndex}");
-
             TubeView fromView = tubeViews[result.FromIndex];
             TubeView toView = tubeViews[result.ToIndex];
 
@@ -1041,7 +1031,7 @@ namespace TubeSort.Game
             // ama seviyeyi eski yerine geri al (oradan yükselecek). Tıpa bu
             // Refresh'te ERKEN gelmesin: veri dökme başında değiştiği için tüp
             // "tamamlanmış" sayılır ama görsel dökme daha sürüyor — tıpa dökme
-            // bitince takılma animasyonuyla gelir (kullanıcı bulgusu).
+            // bitince takılma animasyonuyla gelir.
             float toStart = toView.CurrentFill;
             toView.SetCorkSuppressed(true);
             toView.SetMouthOverlay(true);   // akış sandviçi: ön dilimler açılır
@@ -1172,9 +1162,8 @@ namespace TubeSort.Game
                 }
 
                 // Sıçrama: akış hedef yüzeye aktığı sürece değme noktasından
-                // iki yana damlacıklar; güç yumuşak açılır/kapanır. (Halkalar
-                // dökme SIRASINDA değil, bitince patlama olarak oynar —
-                // kullanıcı isteği.)
+                // iki yana damlacıklar; güç yumuşak açılır/kapanır. Halkalar
+                // dökme SIRASINDA değil, bitince patlama olarak oynar.
                 splashStrength = Mathf.MoveTowards(
                     splashStrength, streamingNow ? 1f : 0f, dt * 6f);
                 toView.SetSplashStrength(splashStrength);
@@ -1191,7 +1180,7 @@ namespace TubeSort.Game
             streamView.Hide();
             toView.SetSplashStrength(0f);   // sıçrama durur
             // Sıvı yüzeye oturdu: damla halkası patlaması şimdi oynar
-            // (kullanıcı isteği: efekt dökme bitince hissedilmeli).
+            // (efekt dökme bitince hissedilmeli).
             toView.PlayRippleBurst();
             // Dökme bitti: tüp tamamlandıysa tıpa ŞİMDİ, takılma animasyonuyla;
             // akış sandviçi kapanır (tıpalıysa dilimler tıpa üzerinden açık kalır).
@@ -1202,9 +1191,7 @@ namespace TubeSort.Game
             // Giderken kayma+eğilme eş zamanlıydı; dönüşte de doğrulma+kayma
             // eş zamanlı. Tilt offset tüpü kaldırır, hedef tüple çakışma olmaz.
             fromView.Refresh();
-            float returnDuration = Mathf.Max(
-                fromTarget < 0.001f ? slideDuration * 0.7f : slideDuration,
-                slideDuration);
+            float returnDuration = slideDuration;
             float returnElapsed = 0f;
             float returnStartAngle = currentAngle;
 
@@ -1255,10 +1242,9 @@ namespace TubeSort.Game
 
             // --- Y: kaynak tüpün dibi hedefin ağzının üstünde kalsın ---
             // Böylece kayma sırasında (henüz eğilmeden) gövdeler çakışmaz.
-            // Eğilince ağız hedefin üstüne doğru iner. Eski pay -0.25 çıplak
-            // cam dönemindendi: yaka/tıpa tüpten taştığı için en dik açıda
-            // (~100°) kaynak yaka hedefe DEĞİYORDU (kullanıcı bulgusu) —
-            // dökme artık hedef ağzının 0.2 üstünden yapılır.
+            // Eğilince ağız hedefin üstüne doğru iner. Dökme, hedef ağzının 0.2
+            // üstünden yapılır: en dik açıda (~100°) kaynağın yaka/tıpası tüpten
+            // taştığı için daha alçakta hedefe değerdi.
             float destMouthY = dest.y + TallestTube;
             float yTarget = destMouthY + 0.2f;
 
@@ -1329,14 +1315,12 @@ namespace TubeSort.Game
         /// <summary>
         /// Görsel yüzeyi fiziksel modele demirler. Shader eğik yüzeyi düzlem
         /// kaydırmasıyla çizer ve dik açılarda dudaktaki sıvıyı gerçek (hacim
-        /// korunumlu) TiltedEdgeLevel modelinden ALÇAK gösterir — dökme kapısı
-        /// "sıvı dudakta" derken görsel geride kalıyor, akış kolonu sıvıdan
-        /// kopuk görünüyordu (kullanıcı bulgusu). Fark her kare kaldırma olarak
-        /// shader'a yazılır; açı sıfıra dönünce fark da kendiliğinden sıfırlanır.
-        /// TiltedEdgeLevel 90°+ açıda sonsuz döner: kaldırma tüp tepesinin
-        /// hemen üstüyle sınırlanır (görsel zaten ağızda kırpılıyor).
-        /// (Denenen ve geri alınan: kenarı ağza SABİT kilitlemek — kullanıcı
-        /// beğenmedi, "hiç olmadı".)
+        /// korunumlu) TiltedEdgeLevel modelinden ALÇAK gösterir; böylece dökme
+        /// kapısı "sıvı dudakta" derken görsel geride kalır ve akış kolonu
+        /// sıvıdan kopuk görünür. Fark her kare kaldırma olarak shader'a yazılır;
+        /// açı sıfıra dönünce fark da kendiliğinden sıfırlanır. TiltedEdgeLevel
+        /// 90°+ açıda sonsuz döner: kaldırma tüp tepesinin hemen üstüyle
+        /// sınırlanır (görsel zaten ağızda kırpılıyor).
         /// </summary>
         private static void AnchorLiquidToLip(TubeView fromView, float signedAngle)
         {
@@ -1404,42 +1388,6 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// Dökme sırasında her kare: eğim açısını sıvı seviyesine göre artır,
-        /// akışın uç noktalarını güncelle. Fill animasyonlarıyla paralel çalışır.
-        /// </summary>
-        private IEnumerator AnimateStream(Color color, TubeView fromView, TubeView toView,
-            float direction, Vector3 pourPos, float pivotHeight, float duration)
-        {
-            float elapsed = 0f;
-            while (elapsed < duration)
-            {
-                elapsed += Time.deltaTime;
-
-                // Sıvı azaldıkça eğim artar — sıvı her zaman ağza ulaşır.
-                float angle = -CalculatePourAngle(fromView) * direction;
-                ApplyTiltWithPivot(fromView, angle, pourPos, pivotHeight);
-                AnchorLiquidToLip(fromView, angle);
-
-                Vector3 sourceMouth = CalculateSourceMouth(fromView, angle);
-                // Kolonun tepesi döken kenardaki sıvı yüzeyine yapışık kalır
-                // (bkz. ana döngüdeki not).
-                Vector3 liquidEdge = CalculateStreamSource(fromView, angle);
-                sourceMouth.y = Mathf.Max(sourceMouth.y, liquidEdge.y);
-                Vector3 destMouth = CalculateDestMouth(toView);
-                Vector3 destSurface = CalculateDestSurface(toView, toView.CurrentFill);
-
-                // Kaynak ağız hedef yüzeyinin üstündeyse akış göster,
-                // altına düştüyse gizle (kolon ters dönerdi).
-                if (sourceMouth.y > destSurface.y)
-                    streamView.Show(color, sourceMouth, destMouth, destSurface);
-                else
-                    streamView.Hide();
-
-                yield return null;
-            }
-        }
-
-        /// <summary>
         /// Hedef tüpteki sıvı yüzeyinin board-local konumu.
         /// Tüpler saydam olduğu için akış ağızda değil, sıvının
         /// olduğu seviyede bitmeli.
@@ -1448,43 +1396,6 @@ namespace TubeSort.Game
         {
             float surfaceY = fillLevel * toView.Height;
             return toView.RestPosition + new Vector3(0f, surfaceY, 0f);
-        }
-
-        /// <summary>Tüpü A noktasından B noktasına pürüzsüzce kaydırır.</summary>
-        private static IEnumerator AnimateMove(TubeView view, Vector3 from, Vector3 to, float duration)
-        {
-            float elapsed = 0f;
-            while (elapsed < duration)
-            {
-                elapsed += Time.deltaTime;
-                float t = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(elapsed / duration));
-                view.transform.localPosition = Vector3.Lerp(from, to, t);
-                yield return null;
-            }
-
-            view.transform.localPosition = to;
-        }
-
-        /// <summary>
-        /// Tüpü verilen açıdan hedef açıya eğer. Dönüş noktası tüpün dibinde
-        /// değil ağzına yakın bir noktada olmalı: pivotHeight kadar yukarıda
-        /// sanal bir eksen etrafında döner gibi pozisyon telafisi uygulanır.
-        /// </summary>
-        private static IEnumerator AnimateTilt(TubeView view, float fromAngle, float toAngle,
-            float duration, Vector3 basePosition, float pivotHeight)
-        {
-            float elapsed = 0f;
-            while (elapsed < duration)
-            {
-                elapsed += Time.deltaTime;
-                float t = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(elapsed / duration));
-                float angle = Mathf.Lerp(fromAngle, toAngle, t);
-
-                ApplyTiltWithPivot(view, angle, basePosition, pivotHeight);
-                yield return null;
-            }
-
-            ApplyTiltWithPivot(view, toAngle, basePosition, pivotHeight);
         }
 
         /// <summary>

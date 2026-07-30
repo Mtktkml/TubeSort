@@ -9,9 +9,8 @@ using UnityEngine.TestTools;
 namespace TubeSort.Tests.PlayMode
 {
     /// <summary>
-    /// Tahta enjeksiyonunu doğrular. Enjeksiyon sayesinde testler tüp sayısını
-    /// kesin iddia edebilir; eskiden BoardView kendi test tahtasını kurduğu
-    /// için bu mümkün değildi.
+    /// Tahta enjeksiyonunu doğrular: enjekte edilen tahta bilindiği için testler
+    /// tüp sayısını kesin iddia edebilir.
     /// </summary>
     public class BoardInjectionTests
     {

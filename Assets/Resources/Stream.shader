@@ -1,6 +1,5 @@
 // Dökme akışı: kaynağın yaka ağzından hedef sıvı yüzeyine DİK inen
-// dikdörtgen kolon. (Eski kuadratik Bezier eğrisi kavisli akıtıyordu;
-// referans oyunlardaki gibi yerçekimiyle düz düşen kolon istendi.)
+// dikdörtgen kolon (yerçekimiyle düz düşer, kavisli değil).
 // Uçlar kolon yarı genişliği kadar yuvarlak (kapsül): üst uç ağızdan
 // çıkan damla gibi, alt uç yüzeye dalar. Akış hissi aşağı kayan
 // parlaklık bantlarından gelir.
@@ -84,8 +83,8 @@ Shader "TubeSort/Stream"
                 // Dikey kutu; uç yuvarlaklıkları parça başına: serbest uçlar
                 // kapsül gibi yuvarlak, iki parçanın birleştiği uçlar KÖŞELİ —
                 // yuvarlak uçlar birleşim yerinde boğum yapıp kolonu "yeniden
-                // başlıyor" gösteriyordu (kullanıcı bulgusu). Yarıçap sırası
-                // TubeShape.SdRoundedBox: (sağ üst, sağ alt, sol üst, sol alt).
+                // başlıyor" gösterir. Yarıçap sırası TubeShape.SdRoundedBox:
+                // (sağ üst, sağ alt, sol üst, sol alt).
                 // fwidth discard'dan ÖNCE (mobil türev kuralı).
                 float d = SdRoundedBox(p, float2(_StreamHalf, _ColumnHalf),
                     float4(_CapTop, _CapBottom, _CapTop, _CapBottom));

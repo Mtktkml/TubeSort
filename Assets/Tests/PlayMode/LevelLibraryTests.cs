@@ -41,9 +41,9 @@ namespace TubeSort.Tests.PlayMode
         [Test]
         public void Pilot_AllLevels_AreSolvableByCSharpSolver()
         {
-            // Python "çözülebilir" dedi; son sözü oyunun kendi solver'ı söylesin.
+            // Python üretimi çözülebilir dedi; oyunun kendi solver'ı da doğrulamalı.
             // İki bağımsız implementasyonun aynı karara varması, JSON aktarımının
-            // da bozulmadığının kanıtı.
+            // bozulmadığını da gösterir.
             for (int level = 1; level <= ExpectedCount; level++)
             {
                 Board board = LevelLibrary.LoadFrom(Pilot, level);
@@ -67,9 +67,8 @@ namespace TubeSort.Tests.PlayMode
         [Test]
         public void Pilot_SecondTutorial_IsTwoColorWithTwoEmpties()
         {
-            // Tier 2 (level 3-4): 2 renk, 2 boş, 4 tüp. Başta 1 boştu; mentör
-            // kararıyla (`e11e871`) çıkmaz-güvenli yapıldı — tek boşla 2.1/2.2
-            // tuzaklıydı. Test o değişiklikte güncellenmeyi atlamıştı.
+            // Tier 2 (level 3-4): 2 renk, 2 boş, 4 tüp. İki boş tüp öğreticiyi
+            // çıkmaz-güvenli tutar (tek boşla oyuncu kilitlenebilir).
             Board board = LevelLibrary.LoadFrom(Pilot, 3);
             Assert.AreEqual("2.1", LevelLibrary.LabelOf(Pilot, 3));
             Assert.AreEqual(4, board.TubeCount, "Öğretici 2: 4 tüp olmalı");

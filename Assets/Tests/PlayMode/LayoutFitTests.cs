@@ -44,8 +44,7 @@ namespace TubeSort.Tests.PlayMode
             cameraObject.transform.position = new Vector3(0f, 0f, -10f);
 
             boardObject = new GameObject("BoardView");
-            // Tahta enjekte edilir: test, level verisinden bağımsız kalır
-            // (üretimdeki varsayılan tahta fallback'i silindi).
+            // Tahta enjekte edilir: test, level verisinden bağımsız kalır.
             boardObject.AddComponent<BoardView>().LoadBoard(TestBoards.Classic());
 
             yield return new WaitForFixedUpdate();
@@ -150,10 +149,9 @@ namespace TubeSort.Tests.PlayMode
         [UnityTest]
         public IEnumerator BoardStaysBelowLevelTitle_WithTallBoard()
         {
-            // Uzun ve kalabalık tahta (12 tüp, kapasite 6): eski yerleşim tüm
-            // ekrana ortalayıp sığdırdığı için tahta LEVEL başlığının üstüne
-            // biniyordu (kullanıcı bulgusu). Tahtaya ayrılan alan başlığın
-            // altında biter — sınırlar başlık hizasını geçmemeli.
+            // Uzun ve kalabalık tahta (12 tüp, kapasite 6): tahtaya ayrılan
+            // alan LEVEL başlığının altında bitmeli; sınırlar başlık hizasını
+            // geçemez (testin koruduğu invariant).
             cameraObject = new GameObject("Main Camera") { tag = "MainCamera" };
             camera = cameraObject.AddComponent<Camera>();
             camera.orthographic = true;

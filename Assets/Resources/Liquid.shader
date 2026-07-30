@@ -21,17 +21,15 @@ Shader "TubeSort/Liquid"
         // merkezli elips halkalar (su birikintisine damla düşmüş gibi) — patlama
         // zarfını TubeView.PlayRippleBurst sürer. Dökme SIRASINDA ise değme
         // noktasından iki yana damlacık sıçraması oynar (_SplashStrength).
-        // Boşta yüzey DURGUN: sürekli dalga bilinçli olarak kaldırıldı.
-        // Sıklık 3.5 → 2 → 1.2 (kullanıcı turlarıyla): tek geniş halka +
-        // kenarda sönen kuyruk — daha kalabalığı kıpır kıpır/testere duruyordu.
+        // Boşta yüzey DURGUN: sürekli dalga yok. Düşük sıklık = tek geniş halka +
+        // kenarda sönen kuyruk; yüksek sıklık kıpır kıpır/testere görünür.
         _RippleFrequency ("Halka sıklığı (yarıçap başına)", Float) = 1.2
         _RippleSpeed ("Halka yayılma hızı", Float) = 2.2
-        // 0.8 → 0.35 → 0.22: renk payı iyice kısıldı, geçişler yumuşak —
-        // asıl iş nazik yüzey kabarmasında.
+        // Renk payı düşük tutulur, geçişler yumuşak — asıl iş nazik yüzey
+        // kabarmasında (_RippleHeight).
         _RippleAmplitude ("Halka belirginliği", Range(0, 1)) = 0.22
         // Halkalar renkten ibaret değil: yüzey halka fazıyla inip çıkar
         // (çukur/tümsek). Dünya birimi — tüple ölçeklenmez.
-        // 0.028 → 0.014 → 0.008 (kullanıcı turları).
         _RippleHeight ("Halka yüksekliği (dünya birimi)", Float) = 0.008
     }
 
@@ -152,7 +150,7 @@ Shader "TubeSort/Liquid"
 
                 // Yumuşaklık dünya biriminde tanımlıdır; burada gövdenin oranına
                 // çevrilir. Doğrudan uv'de kullanılsaydı uzun tüpte kenar da
-                // yumuşardı (eski dalga bu yüzden dünya birimindeydi).
+                // orantılı yumuşar, kısa tüpten farklı görünürdü.
                 float edgeSoftness = _EdgeSoftness / _BodySize.y;
 
                 // Tüp döndüğünde sıvı yüzeyi dünya uzayında yatay kalmalı.
@@ -170,17 +168,17 @@ Shader "TubeSort/Liquid"
                 // sıfıra indirir.
                 tiltOffset += (0.5 - uv.x) * _SwaySlope * (_BodySize.x / _BodySize.y);
 
-                // Yüzey boşta DURGUN: sürekli dalga kaldırıldı (kullanıcı
-                // isteği; hareket dökme sırasındaki damla halkalarından gelir).
+                // Yüzey boşta DURGUN: sürekli dalga yok, hareket yalnız dökme
+                // sırasındaki damla halkalarından gelir.
                 // _SurfaceLift: dökme sırasında dudak demirlemesi (yukarıda).
                 float surface = _FillLevel + tiltOffset + _SurfaceLift;
 
                 // ── 2.5D: hafif üstten bakış. Yüzey, üstten görünen ELİPS bir
                 // disk; katman sınırları da diskin ÖN yayı gibi aşağı kavisli.
                 // nx: sıvı genişliğinde -1..1; arc: elips yay profili (kenarda
-                // 0, ortada 1). Efekt eğik (döken) tüpte de KORUNUR (kullanıcı
-                // isteği): bant eğimli yüzey çizgisini izlediği için disk yana
-                // yatmış mercek olarak okunur.
+                // 0, ortada 1). Efekt eğik (döken) tüpte de sürer: bant eğimli
+                // yüzey çizgisini izlediği için disk yana yatmış mercek olarak
+                // okunur.
                 float halfWidthUV = (_BodySize.x * 0.5 - _WallThickness) / _BodySize.x;
                 float nx = clamp((uv.x - 0.5) / halfWidthUV, -1.0, 1.0);
                 float arc = sqrt(saturate(1.0 - nx * nx));
@@ -189,8 +187,8 @@ Shader "TubeSort/Liquid"
                 // Halka patlaması yüzeyi fiziksel olarak da dalgalandırır:
                 // radyal fazla inip çıkan nazik çukur/tümsekler. Radyal koordinat
                 // yumuşatılmış (sqrt(nx²+ε)): çıplak |nx| merkezde köşe yapıp
-                // zikzak görünüyordu (kullanıcı bulgusu). surface'a eklendiği
-                // için disk, katmanlar ve kenar birlikte dalgalanır.
+                // zikzak görünür. surface'a eklendiği için disk, katmanlar ve
+                // kenar birlikte dalgalanır.
                 float rippleR = sqrt(nx * nx + 0.02);
                 surface += sin((rippleR * _RippleFrequency
                     - _Time.y * _RippleSpeed) * 6.2832)
@@ -219,8 +217,8 @@ Shader "TubeSort/Liquid"
                         float dir = (s < 4) ? -1.0 : 1.0;
                         float k = (float)(s % 4);
                         // Faz, menzil ve boy damlacık başına değişir: tek tip
-                        // 4 damla mekanik duruyordu, kalabalık ve düzensiz
-                        // olunca gerçek sıçrama gibi okunur.
+                        // 4 damla mekanik durur; çeşitlilik gerçek sıçrama gibi
+                        // okunur.
                         float phase = k * 0.27 + dir * 0.13;
                         float reach = 0.20 + 0.05 * k;
                         float rise = 0.42 + 0.07 * ((k + 1.0) % 3.0);
@@ -283,8 +281,8 @@ Shader "TubeSort/Liquid"
 
                 // Cam görselindeki (tube.png) beyaz şeritlerin sıvı bölgesindeki
                 // devamı: cam arkada kaldığı için dolu bölgede şeridi sıvı
-                // çizmeli. Konum/aralıklar görseldeki şeritlerle göz kararı
-                // hizalı; görsel değişirse birlikte ayarlanmalı.
+                // çizmeli. Konum/aralıklar görselden türetilmez, şeritlere elle
+                // hizalanır; görsel değişirse birlikte ayarlanmalı.
                 float streakX = smoothstep(0.05, 0.0, abs(uv.x - 0.20));
                 float longY  = smoothstep(0.50, 0.53, uv.y) * smoothstep(0.85, 0.82, uv.y);
                 float shortY = smoothstep(0.32, 0.35, uv.y) * smoothstep(0.45, 0.42, uv.y);
@@ -305,14 +303,12 @@ Shader "TubeSort/Liquid"
                 // Damla halkaları: akış kolonu tüpün merkezine indiği için
                 // değme noktası disk merkezi. rho: diskin elips-normalize
                 // yarıçapı (merkez 0, kenar 1). Halkalar dışa doğru kayar.
-                // Sinüs keskinleştirilir (smoothstep): yumuşak haliyle halkalar
-                // fark edilmiyordu (kullanıcı bulgusu) — net açık/koyu bantlar.
                 float dy = (uv.y - surface) / max(ellipseDepth, 1e-4);
                 float rho = sqrt(saturate(nx * nx + dy * dy));
                 float ringWave = 0.5 + 0.5 * sin((rho * _RippleFrequency
                     - _Time.y * _RippleSpeed) * 6.2832);
-                // Yumuşak geçiş: keskin bantlar (0.30-0.70 smoothstep) göze
-                // batıyordu — geniş aralık nazik bir ışık oyunu bırakır.
+                // Geniş smoothstep aralığı (0.15-0.85) nazik bir ışık oyunu
+                // bırakır; dar aralık keskin bantlar verir, göze batar.
                 float rings = smoothstep(0.15, 0.85, ringWave);
                 float ringMask = _RippleStrength * _RippleAmplitude
                     * (1.0 - 0.6 * rho);

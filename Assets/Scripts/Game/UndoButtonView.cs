@@ -4,9 +4,9 @@ using UnityEngine;
 namespace TubeSort.Game
 {
     /// <summary>
-    /// Ekrandaki geri al butonu. Görseli koddan üretilen basit sol ok —
-    /// asset yok felsefesine uygun; cila adımında gerçek ikonla değişebilir.
-    /// Tıklama yakalama BoardView'dadır: buton yalnızca görsel + collider taşır.
+    /// Ekrandaki geri al butonu. Görseli koddan üretilen basit sol ok
+    /// (sprite asset'i yok). Tıklama yakalama BoardView'dadır: buton yalnızca
+    /// görsel + collider taşır.
     /// Tahtanın çocuğu değildir; tahta ekrana sığmak için ölçeklense de
     /// buton sabit boyutta kalır.
     /// </summary>
@@ -42,7 +42,7 @@ namespace TubeSort.Game
 
         /// <summary>
         /// Butonu yanıp söndürerek dikkat çeker (çıkmazda "buraya bas" ipucu).
-        /// Kapatınca temel renge döner. (Placeholder efekt; 1C'de cilalanır.)
+        /// Kapatınca temel renge döner.
         /// </summary>
         public void SetHighlight(bool on)
         {

@@ -298,9 +298,9 @@ def dead_ratio(board, cap, max_states=BUDGET):
 
 # C# benchmark ciktisindan alinan SOMUT tahtalar. Yeni sayim semantiginde
 # arama her tahtada erisilebilir uzayi tukettigi icin durum VE cozum sayisi
-# gezinme sirasindan bagimsizdir: artik COZULEBILIRLERDE de birebir
-# kiyaslanir (eski solver'da yalniz karar kiyaslanabiliyordu).
-# Beklenen degerler C# kosusundan donduruldu (23 Tem 2026).
+# gezinme sirasindan bagimsizdir: cozulebilir tahtalarda da karar/durum/cozum
+# uclusu birebir kiyaslanir.
+# Beklenen degerler C# kosusundan donduruldu.
 CROSS_CHECKS = [
     ("4x4 cozulemez (1 bos, ana tablo)", 4,
      [[2, 0, 1, 2], [1, 0, 2, 0], [1, 3, 3, 3], [1, 3, 0, 2], []],

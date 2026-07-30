@@ -58,7 +58,7 @@ namespace TubeSort.Tests.PlayMode
             yield return null;
         }
 
-        /// <summary>Akış artık iki parça: üst (kaynak önünde) + alt (hedef
+        /// <summary>Akış iki parçadır: üst (kaynak önünde) + alt (hedef
         /// sandviçinde). İsimle bulunur; sortingOrder güvenilmez.</summary>
         private SpriteRenderer FindStreamRenderer(string name)
         {
@@ -73,7 +73,7 @@ namespace TubeSort.Tests.PlayMode
             return null;
         }
 
-        /// <summary>Show'un yeni imzası: kaynak ağız, hedef delik, hedef yüzey.</summary>
+        /// <summary>Show parametreleri: kaynak ağız, hedef delik, hedef yüzey.</summary>
         private void ShowSample(Color color)
         {
             streamView.Show(color,

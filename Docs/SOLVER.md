@@ -9,7 +9,7 @@ Level üreticinin ürettiği rastgele tahta çözülebilir mi — ve kaç farkl�
 çıkışı var? Çözülebilirlik kararı NP-tam (Ito et al. 2022); ama tek bir
 tahta için pratikte hızla cevaplanabilir. Amaç *en kısa* çözümü bulmak
 değil, çözülebilirliğe karar vermek ve **çözüm sayısını** ölçmek (zorluk
-metriği; mentör kararı, 23 Tem 2026). En kısa çözüm uzunluğu ayrı ve ucuz
+metriği). En kısa çözüm uzunluğu ayrı ve ucuz
 bir soru olarak build-time'da BFS ile ölçülür (aşağıda).
 
 ## Arama modeli: tek tahta üzerinde geri izlemeli DFS

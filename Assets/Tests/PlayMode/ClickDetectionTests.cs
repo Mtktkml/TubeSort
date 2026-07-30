@@ -48,11 +48,9 @@ namespace TubeSort.Tests.PlayMode
         {
             var views = boardObject.GetComponentsInChildren<TubeView>();
 
-            // Kesin sayı iddia edilmiyor: BoardView tahtasını kendi kurduğu için
-            // test onu bilemez, sayıyı buraya elle yazmak test tahtası her
-            // değiştiğinde kırılır. Tahta dışarıdan verilebilir olduğunda
-            // (level üreticiyle birlikte) burada tam sayı kontrol edilebilir.
-            Assert.Greater(views.Length, 0, "Hiç tüp görünümü oluşmadı");
+            // Enjekte edilen tahta (TestBoards.Classic) 6 tüp içerir; her tüp
+            // için tam bir collider oluşmalı.
+            Assert.AreEqual(6, views.Length, "TestBoards.Classic 6 tüp içerir");
 
             foreach (TubeView view in views)
             {

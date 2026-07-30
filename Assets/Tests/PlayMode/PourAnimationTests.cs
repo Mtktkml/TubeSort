@@ -26,9 +26,8 @@ namespace TubeSort.Tests.PlayMode
         [UnitySetUp]
         public IEnumerator SetUp()
         {
-            // TubeView shader'lara ihtiyaç duyar; Resources'tan yüklenirler.
-            // Kamera olmasa BoardView Start'ta hata verir ama biz BoardView
-            // kullanmıyoruz. Yine de Liquid shader'ın çalışması için sahne lazım.
+            // TubeView shader'ları Resources'tan yükler; test bunun için sahne
+            // ve MainCamera etiketli bir kamera kurar.
             cameraObject = new GameObject("Main Camera") { tag = "MainCamera" };
             var camera = cameraObject.AddComponent<Camera>();
             camera.orthographic = true;
@@ -70,8 +69,8 @@ namespace TubeSort.Tests.PlayMode
             var liquidShader = Resources.Load<Shader>("Liquid");
             var liquidMat = new Material(liquidShader);
 
-            // Cam/yaka/tıpa artık ekip görseli: BoardView'ın yaptığı gibi
-            // sprite'lar yüklenir, ön sandviç parçaları yakadan üretilir.
+            // Cam/yaka/tıpa sprite'ları: BoardView'ın yaptığı gibi yüklenir,
+            // ön sandviç parçaları yakadan üretilir.
             var tubeSprite = Resources.Load<Sprite>(TubeView.TubeSpritePath);
             var collarSprite = Resources.Load<Sprite>(TubeView.CollarSpritePath);
             var corkSprite = Resources.Load<Sprite>(TubeView.CorkSpritePath);

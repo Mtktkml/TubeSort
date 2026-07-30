@@ -3,7 +3,10 @@
 Water Sort (sıvı sıralama) bulmaca oyunu. Unity 6000.3.9f1, 2D URP, mobil hedefli.
 
 Ball Sort'un görsel varyantı **değil**: sıvı grup halinde akar, kısmi dökme vardır
-ve dökülen sıvı hedeftekiyle birleşir.
+ve dökülen sıvı hedeftekiyle birleşir. Su kuralı tek satır:
+`PourableAmount = min(kaynağın üst segmenti, hedefteki boş yer)`.
+
+**İsimlendirme:** kod İngilizce, yorumlar Türkçe.
 
 ## Mimari
 
@@ -24,109 +27,152 @@ Tests.EditMode ──────────> Core
 ### Core — oyunun kuralları
 
 `noEngineReferences: true` ile Unity kodu derleyici düzeyinde yasaklı. `Transform`,
-`Vector3`, `Color`, `MonoBehaviour` buraya yazılamaz; yazılırsa proje derlenmez.
+`Vector3`, `Color`, `MonoBehaviour` buraya yazılamaz. Kazancı: kurallar sahne
+kurmadan, EditMode'da saniyeler içinde test edilebilir.
 
-Kazancı: kurallar sahne kurmadan, EditMode'da saniyeler içinde test edilebiliyor.
-Görsel katman iki kez baştan yazıldı (basit sprite → shader → ekip asset'leri),
-Core'un tek satırı değişmedi.
-
-- `Tube.cs` — bir tüpün içeriği. Sıvı dipten yukarı `int` listesi. Kilit özellik
+- `Tube.cs` — bir tüpün içeriği: dipten yukarı `int` renk listesi. Kilit özellik
   `TopSegmentLength`: üstteki bitişik aynı renk sayısı.
-- `Board.cs` — kurallar. Oyunun tamamı tek fonksiyonda:
-  `PourableAmount = min(kaynağın üst segmenti, hedefteki boş yer)`.
-  Water Sort'u Ball Sort'tan ayıran satır budur.
-- `PourResult` — hamlenin raporu (renk, miktar, kaynak, hedef). Animasyon ve undo
-  bu bilgiyi kullanır.
+- `Board.cs` — hamle kuralları ve `PourableAmount`. `PourResult` struct'ı (hamle
+  raporu: renk, miktar, kaynak, hedef) da bu dosyada; animasyon ve undo bunu kullanır.
+- `Solver.cs` — çözülebilirlik kararı + çözüm/durum sayımı (zorluk metrikleri).
+  Ayrıntı: `Docs/SOLVER.md`.
+- `MoveHistory.cs` — undo için hamle yığını. Board'a gömülmedi: çözücü gibi yoğun
+  kullananlar hamle başına geçmiş maliyeti ödemesin.
 
 Renkler `int`; `Color` bir Unity tipi olduğu için Core'a giremez. Çeviri
 `ColorPalette`'te yapılır.
 
 ### Game — görsel katman
 
-- `ColorPalette.cs` — Core'un `int` renk kimliğini ekran rengine çevirir.
-  Tanımsız kimlikte parlak pembe döner (hata gizlenmesin diye).
-- `TubeView.cs` — çevirmen. Tüpün görünümünü kurar: cam/yaka/tıpa ekip
-  görselleri (SpriteRenderer katmanları), sıvı shader — Core'un verisini
-  bitişik aynı renkleri tek katmanda birleştirip `MaterialPropertyBlock`
-  ile sıvıya gönderir.
+Her şey koddan kurulur; sahnede yalnız kamera, ışık ve boş bir `Board` kök
+nesnesi var. Prefab/asset referansı yok.
+
+- `ColorPalette.cs` — `int` renk kimliğini ekran rengine çevirir. Tanımsız kimlikte
+  parlak pembe döner (hata gizlenmesin diye).
+- `TubeView.cs` — tek tüpün görünümü: cam/yaka/tıpa sprite katmanları + sıvı shader.
+  Core verisini bitişik aynı renkleri birleştirip `MaterialPropertyBlock` ile sıvıya
+  gönderir.
 - `BoardView.cs` — tahtayı kurar, dokunuşu `Board`'a hamleye çevirir, yerleşimi
-  ekrana göre hesaplar. Tek oyun kuralı içermez; hepsini `Board`'a sorar.
+  ekrana göre hesaplar. Oyun kuralı içermez; hepsini `Board`/`Solver`'a sorar.
+  HUD'u da kurar: level başlığı, çıkmaz banner'ı, butonlar (hepsi TMP/kod çizimi).
+- `StreamView.cs` — dökme akışının iki parçalı görseli (aşağıda).
+- `LevelLibrary.cs` — `Resources`'taki JSON'dan tahta kurar.
+- `ButtonView.cs` / `UndoButtonView.cs` / `PilotNextButtonView.cs` — koddan çizilen
+  buton görselleri; tıklama yakalama `BoardView`'da.
+
+**Tahta yükleme kapısı — `BoardView.LoadBoard`:** dışarıdan tahta verir. `Start`
+öncesi çağrılırsa kurulum onunla yapılır; oyun sırasında çağrılırsa görünümler
+yıkılıp yeniden kurulur. Level geçişi ve testler bu kapıyı kullanır. Hiç kaynak
+yoksa son çare pilot merdivenin ilk tahtası yüklenir.
 
 ### Görseller ve shader'lar — `Assets/Resources/`
 
-Statik parçalar (cam tüp, bej yaka, mantar tıpa) ekipten gelen PNG
-sprite'lardır; dinamik olanlar (sıvı, dökme akışı) shader'la çizilir —
-seviye/renk/halka çalışma anında değiştiği için asset'le yapılamazlar.
-`Resources` altındalar çünkü her şey koddan kurulur: sahnede/prefab'da
-referans yok, `Resources` dışında build'e girmezlerdi.
+Statik parçalar (cam tüp, bej yaka, mantar tıpa) PNG sprite'lardır; dinamik olanlar
+(sıvı, dökme akışı) shader'la çizilir — seviye/renk/halka çalışma anında değiştiği
+için asset'le yapılamazlar. `Resources` altındalar çünkü her şey koddan kurulur:
+sahnede/prefab'da referans yok, `Resources` dışında build'e girmezlerdi.
 
-Katman sırası (sortingOrder): cam 0 < sıvı 1 < arka yaka 2 < tıpa 3 <
-ön yaka parçaları 4 < akış 5.
+Katman sırası (sortingOrder), tüp içi: cam 0 < sıvı 1 < arka yaka 2 < tıpa 3 <
+ön yaka parçaları 4. Akışın alt parçası hedefin tıpa katmanına (3), üst parçası
+her şeyin önüne (15) çizilir. Dökülen tüp bu değerlere +10 offset alır
+(`SetSortingOffset`). Butonlar 100, level başlığı ve banner 101.
 
-- `Sprites/tube.png` — cam tüp (PPU 247.5, pivot Bottom, **9-slice** alt
-  border 88: dip kavisi sabit kalır, düz gövde kapasiteyle uzar).
-- `Sprites/collar.png` — bej yaka (PPU 244; tam genişliği = `FullWidth`
-  yerleşim çapası). Tıpa sandviçinin ön parçaları bu görselden çalışma
-  anında **eğri alfa maskesiyle** üretilir (`TubeView.CreateCollarFront*`;
-  bu yüzden Read/Write açık). Maske dışı pikselde yalnız alfa sıfırlanır,
-  RGB korunur — yoksa bilinear filtre kenarda koyu çizgi bırakır.
-- `Sprites/cork.png` — mantar tıpa (PPU 229); yalnız `Tube.IsComplete`
-  tüpte görünür.
-- `TubeShape.hlsl` — sıvının şekil matematiği (SDF); CPU tıklama
-  doğrulaması (`TubeView.SdTube`) aynı formülleri C#'ta uygular.
-- `Liquid.shader` — sıvı: katmanlar, doluluk, 2.5D yüzey diski + damla
-  halkaları (yalnız dökme sırasında; boşta yüzey durgun), eğim.
-- `Stream.shader` — dökme akışı. Kuadratik Bezier eğrisini SDF ile çizer,
-  kaynakta geniş hedefte daralır, akış yönünde parlaklık dalgası kayar.
+- `Sprites/tube.png` — cam tüp (PPU 247.5, pivot Bottom, **9-slice** alt border 88:
+  dip kavisi sabit kalır, düz gövde kapasiteyle uzar).
+- `Sprites/collar.png` — bej yaka (PPU 244; tam genişliği = `FullWidth` yerleşim
+  çapası). Tıpa sandviçinin ön parçaları bu görselden çalışma anında **eğri alfa
+  maskesiyle** üretilir (`TubeView.CreateCollarFront*`; bu yüzden Read/Write açık).
+  Maske dışı pikselde yalnız alfa sıfırlanır, RGB korunur — yoksa bilinear filtre
+  kenarda koyu çizgi bırakır.
+- `Sprites/cork.png` — mantar tıpa (PPU 229); yalnız `Tube.IsComplete` tüpte görünür.
+- `TubeShape.hlsl` — sıvının şekil matematiği (SDF).
+- `Liquid.shader` — sıvı: katmanlar, doluluk, 2.5D yüzey diski + damla halkaları
+  (yalnız dökme sırasında; boşta yüzey durgun), eğim.
+- `Stream.shader` — dökme akışı: dik dikdörtgen kolonu SDF ile çizer; akış yönünde
+  parlaklık dalgası kayar.
 
-PPU'lar tek kaynaktan türetilir: yaka görselinin tam genişliği 1.2 birim
-kabul edilir, diğerleri birleşik referans görselindeki (`tube (2).png`)
-piksel oranlarından hesaplanır. Ekip exportları farklı ölçekte
-gelebiliyor — yeni görselde oran birleşik referansla doğrulanmalı.
+PPU'lar tek kaynaktan türetilir: yaka görselinin tam genişliği 1.2 birim kabul edilir,
+diğerleri birleşik referans görselindeki (`tube (2).png`) piksel oranlarından hesaplanır.
+Yeni görselde oran birleşik referansla doğrulanmalı.
 
-Sıvı elle HLSL yazıldı, Shader Graph değil: katman renkleri **dizi** ve
-döngüyle işleniyor, Shader Graph'ta dizi/döngü yok.
+Sıvı elle HLSL yazıldı, Shader Graph değil: katman renkleri **dizi** ve döngüyle
+işleniyor, Shader Graph'ta dizi/döngü yok.
 
 ## Kurallar ve tuzaklar
 
-**İsimlendirme:** kod İngilizce, yorumlar Türkçe.
+**İki yerde tutulan, derleyicinin zorlayamadığı sabitler:**
+
+- **`MaxLayers = 8`** — `TubeView.MaxLayers` ve `Liquid.shader`'daki `MAX_LAYERS`
+  aynı olmalı. En kötü durumda katman sayısı kapasiteye eşittir, yani bu sayı aynı
+  zamanda **desteklenen en büyük tüp kapasitesi**. Aşılırsa `TubeView.Initialize`
+  hata basar (sessizce yanlış çizmek yerine).
+- **SDF formülleri** — `TubeShape.hlsl` (GPU, piksel boyama) ve `TubeView.cs` (CPU,
+  tıklama doğrulama) aynı şekli çizmeli. GPU/CPU kod paylaşamadığı için tekrar
+  kaçınılmaz. Şekil değişirse `SdRoundedBox` ve `SdTube` ikisinde birlikte güncellenir.
+
+**Renk uzayı:** proje Linear. `SetVectorArray` renk dönüşümü yapmaz (`SetColor` yapar).
+Shader'a giden renkler `TubeView.ToShaderColor` ile çevrilmeli, yoksa kırmızı pembe çıkar.
 
 **Ölçü uzayı — her değer için ayrı karar ver:** "bu şey tüple birlikte büyümeli mi?"
 
 | Tüple ölçeklenir (oran) | Ölçeklenmez (dünya birimi) |
 |---|---|
-| Doluluk seviyesi | Yüzey yumuşaklığı, `FillHeadroom` |
-| Katman sınırları | `MouthExtension`, 9-slice dip kavisi |
-| Damla halkaları (disk-normalize) | Akış kolonu genişliği |
+| Doluluk seviyesi, katman sınırları | Yüzey yumuşaklığı, `FillHeadroom` |
+| Damla halkaları (disk-normalize) | `MouthExtension`, 9-slice dip kavisi, akış kolonu genişliği |
 
-Ders: kaldırılan eski yüzey dalgası bir zamanlar gövde oranındaydı; 12
-birimlik tüpte 4 birimliğin üç katı oluyordu.
-
-**Renk uzayı:** proje Linear. `SetVectorArray` renk dönüşümü yapmaz (`SetColor`
-yapar). Shader'a giden renkler `TubeView.ToShaderColor` ile çevrilmeli, yoksa
-kırmızı pembe çıkar.
-
-**`MaxLayers = 8`** iki yerde: `TubeView.MaxLayers` ve `Liquid.shader`'daki
-`MAX_LAYERS`. Aynı olmak zorunda, derleyici bunu zorlayamıyor. En kötü durumda
-katman sayısı kapasiteye eşittir, yani bu sayı aynı zamanda **desteklenen en
-büyük tüp kapasitesi**. Aşılırsa `TubeView.Initialize` hata basar (sessizce
-yanlış çizmek yerine).
-
-**SDF formülleri iki yerde:** `TubeShape.hlsl` (sıvı shader'ı, piksel boyama)
-ve `TubeView.cs` (C#, tıklama doğrulama). GPU ile CPU arasında kod
-paylaşılamadığı için tekrar kaçınılmaz. Sıvının şekli değişirse ikisi birlikte
-güncellenmelidir: `SdRoundedBox` ve `SdTube`.
-
-**Sabitleri ölçüden türet, uydurma.** `horizontalSpacing = 1.2f` ve
-`maxTubesPerRow = 5` gibi ekranla/ölçüyle ilgisiz sayılar iki kez sorun çıkardı.
-Aralık artık `TubeView.FullWidth`'ten, sütun sayısı kameranın görüş alanından
-hesaplanıyor.
+**Sabitleri ölçüden türet, uydurma.** Ekranla/ölçüyle ilgisiz sihirli sayılar
+(`horizontalSpacing = 1.2`, `maxTubesPerRow = 5`) tekrar tekrar sorun çıkardı.
+Yatay aralık `TubeView.FullWidth`'ten, sütun sayısı kameranın görüş alanından hesaplanır.
 
 **Girdi:** `Mouse` değil `Pointer` kullanılır. `Mouse.current` telefonda ve Device
 Simulator'da null; `Pointer` ikisinin ortak atası.
 
-**Test:** mobil hedef olduğu için doğrulama **Device Simulator**'da yapılmalı,
-Game penceresinde değil. Game penceresi yanıltır.
+## Level sistemi
+
+Leveller runtime'da üretilmez: `Tools/SolverBenchmark/` Python scriptleri build-time'da
+çok sayıda aday üretip metriklerle seçer, zorluğu artan sırayla JSON'a yazar.
+
+- `pilot_ladder.py` — parametre merdiveni (kapasite, renk, boş) + zorluk skoru;
+  `pilot_levels.json` ve analiz raporu `pilot_ladder.md` üretir.
+- `crosscheck.py` — Python ↔ C# solver çapraz doğrulaması.
+- `Resources/pilot_levels.json` — 30 tahta (öğretici + köprü + ölçülü tier'lar);
+  şema `label`, `shortest`, `solutionCount` içerir. `Resources/levels.json` eski
+  5 levellik küçük set (elle, genişletilmiş alanlar yok).
+
+**JSON'a skor değil ham metrik yazılır** (`shortest`, `solutionCount`): ağırlık
+kalibrasyonu oyuncu testiyle değişince yeniden sıralanabilsin diye. C# tarafı
+algoritmayı koşmaz, sayıları JSON'dan okur.
+
+**Tasarım kuralları:** kapasite ≤ 4'te boş tüp sayısı 1 olabilir; kapasite ≥ 5'te
+her zaman 2 boş (rastgele üretim tek boşta çöker). Her tier'dan 2 tahta ekranda
+`1.1`, `1.2`, `2.1`… diye gösterilir. Başta 2 sabit öğretici tier skora girmez.
+
+## Oynanış akışı
+
+- **Level geçişi:** çözülünce kısa gecikmeyle sonraki; skip/önceki navigasyonu;
+  restart (yüklemedeki `pristineBoard` kopyasından); +tüp (`Board.AddTube` + görünüm
+  yeniden kurma).
+- **Çıkmaz tespiti:** her hamleden sonra `Solver.IsSolvable` (ilk çözümde duran ucuz
+  kontrol). Çözülemez duruma düşülünce "Çıkmaz!" banner'ı çıkar ve undo/restart/+tüp
+  butonları yanıp sönerek yönlendirir.
+
+**Dökme animasyonu** — `AnimatePour` coroutine'i, kayma + eğilme + dökme eş zamanlı,
+sonra doğrulma + geri dönüş eş zamanlı:
+
+- Tek açı sistemi: açı `CalculatePourAngle`'dan gelir, `SmoothDamp` ile pürüzsüz
+  takip edilir (`_TiltAngle` uniform'u shader'a geçer; sıvı yüzeyi dünya uzayında
+  yatay kalır). Eğim sıvı miktarına bağlı dinamik: dolu tüp ~60°, boş tüp ~100°.
+- Ağız her karede hedefin üstüne konumlanır (`CalculatePourPosition`); stream kaynağı
+  her zaman lip'ten (`CalculateSourceMouth`), sıvı yüzeyinden değil.
+- Görsel yüzey fiziksel modele demirlenir (`AnchorLiquidToLip`, `_SurfaceLift`):
+  kolon sıvıya yapışık kalır. Ağza sabit kilit denendi, kötü sonuç verdi — tekrar
+  denenmesin.
+- Katman güncelleme zamanlaması: **kaynak** tüp doğrulma sonrası `Refresh`, **hedef**
+  tüp dökme öncesi `Refresh`; seviyeler kademeli akar (ışınlanma yok, undo dahil).
+
+**Sıvı canlılığı:** boşta yüzey durgun. Dökme sırasında değme noktasından damlacık
+sıçraması; dökme bitince damla halkası patlaması (`PlayRippleBurst`). Level başında
+ve tüp kalkış/inişinde sönümlü çalkantı (`PlaySlosh`).
 
 ## Test çalıştırma
 
@@ -140,378 +186,56 @@ Unity Editor **kapalı** olmalı; açıksa proje kilitli olur ve batchmode başl
 
 `-testPlatform PlayMode` ile de aynısı. Editor'dan: **Window → General → Test Runner**.
 
-Mevcut durum: **EditMode 26/26**, **PlayMode 35/35**.
-
-EditMode'u tercih et: sahne kurmadığı için saniyeler sürer. PlayMode'u yalnızca
-gerçek oyun ortamı gerektiğinde kullan.
-
-Batchmode çizim yapmaz: shader'ın derlendiğini doğrular, **doğru göründüğünü**
-doğrulamaz. Görsel doğrulama gözle yapılır.
+- **EditMode'u tercih et:** sahne kurmadığı için saniyeler sürer (Core testleri).
+  PlayMode'u yalnızca gerçek oyun ortamı gerektiğinde kullan (görsel/animasyon testleri).
+- Testler tahtayı `BoardView.LoadBoard` ile enjekte eder; `TestBoards.Classic()`
+  deterministik standart tahtadır.
+- Batchmode çizim yapmaz: shader'ın **derlendiğini** doğrular, **doğru göründüğünü**
+  değil. Görsel doğrulama gözle yapılır.
+- Testi yeşil görmek yetmez: bozup **kırmızıya döndüğü** doğrulanır.
+- Mobil hedef olduğu için görsel doğrulama **Device Simulator**'da yapılmalı, Game
+  penceresinde değil.
 
 ## Çalışma şekli
 
 - Her değişiklik için yeni branch, `--no-ff` ile merge, sonra branch silinir.
 - Adım adım ilerlenir; kullanıcı kodu okuyup onaylamadan merge edilmez.
-- Testi yeşil görmek yetmez: bozup **kırmızıya döndüğü** doğrulanır.
-- `git checkout -- <dosya>` gibi geri döndüren komutlar önce kullanıcıya sorulur
-  (bir kez uncommitted çalışma böyle kayboldu).
+- `git checkout -- <dosya>` gibi geri döndüren komutlar önce kullanıcıya sorulur.
 
-## Yol haritası
+## Bilinen eksikler / sıradaki işler
 
-1. ~~Sıvı mantığı (headless)~~
-2. ~~Basit görsel~~
-3. ~~Sıvı shader'ı~~ (SDF)
-4. ~~Ekrana uyarlanan yerleşim~~
-5. ~~Dökme animasyonu~~
-6. Level üretici
-7. Cila + meta (undo, +1 tüp, kapak animasyonu, ses)
-8. Build
+- **Telefon performansı:** animasyonlar cihazda editörden az akıcı. İlk denenecek
+  `Application.targetFrameRate = 60` (Unity mobilde varsayılan 30'a kilitler); yetmezse
+  cihazda profiler (SDF shader'ların piksel maliyeti + overdraw). Çıkmaz tespitinin
+  hamle başı `Solver.IsSolvable` maliyeti de burada ölçülür.
+- **Ses ve ikon:** cila adımında (Kenney.nl, freesound.org). Yazı tipi TMP LiberationSans.
+- **300 level hedefi:** önce 30 tahta oyuncu testine gider; ağırlık kalibre olunca
+  kovalar genişletilip ölçeklenir.
+- **Build.**
 
-### Kaldığımız yer (29 Tem 2026 — görsel katman ekip asset'leriyle)
+Görsel katmanın önceki tamamen-shader sürümü `runtime-shaders` branch'inde arşivli.
 
-**Görsel katman asset'e geçti (mentör onayı):** cam tüp + bej yaka + mantar
-tıpa, ekipten gelen çizgi-film stili PNG'lerle (`Resources/Sprites/`)
-kuruluyor. Sıvı ve dökme akışı dinamik oldukları için shader olarak kaldı.
-Görsel katmanın runtime'da shader'la çizilen önceki sürümünün tamamı
-**`runtime-shaders`** branch'inde yaşıyor (silinmedi; gerekirse dönülür).
-Butonlar BAŞKA ekibin işi — bizim kapsam tüp + sıvı + akış.
+## Device Simulator sınırlaması
 
-Kurulumun kritik noktaları (ayrıntı "Görseller ve shader'lar" bölümünde):
+Art arda hızlı tıklamada Input System dokunuş "bırakma" olayını kaybedip `isPressed`
+true'da takılabilir. Game penceresinde ve gerçek cihazda bu yok — simülatörün bilinen
+sınırı. Simülatörde donma görülürse önce Console'a bak: watchdog `LogError`'u varsa
+oyun hatasıdır, simülatör değil.
 
-- **Cam 9-slice:** dip kavisi sabit, düz gövde kapasiteyle uzar; tepe
-  `MouthExtension` kadar yakanın arkasına uzanır. Görseldeki parlama
-  şeritleri gövdeyle orantılı uzar; sıvı bölgesindeki devamını
-  `Liquid.shader` çizer (göz kararı hizalı).
-- **Yaka sandviçi:** arka katman görselin tamamı; tıpa; ön parçalar yakadan
-  eğri alfa maskesiyle üretilir — delik ön yayı pencere (tıpa deliğe girmiş
-  okunur), parantez çizgisi sınırı **çalışma anında sütun sütun ölçülür**
-  (el çizimi çizgi asimetrik, sabit eğri uçlarda sızdırıyordu), alt şerit
-  üstü aşağı-dışbükey oval.
-- **Tıpa konumu** birleşik referans (`tube (2).png`) piksel ölçümünden
-  (`CorkTopAboveCollarTop`); ayrı cork.png farklı ölçekte export edilmişti,
-  PPU bunu telafi ediyor (genişlik çapa, boy ~%8 uzun — gözle onaylı).
-- **Yerleşim payları:** `TopOverhang` (tıpa tepesi; tıpa gizliyken de yer
-  ayrılır), `SideOverhang` (0 — yaka görseli tam FullWidth).
+## Kod okuma sırası
 
-**Aktif iş — `feature/liquid-stream`:** akış ve sıvı görünümü. Onaylı yol
-haritası (29 Tem; sırayla, her madde gözle onay + commit):
+Aşağıdan yukarı:
 
-- [x] **1. Tüp boyu + sıvı tepe payı:** tüp uzadı (`HeightFor` = sıvı alanı +
-  `FillHeadroom`; pay = tıpa sarkması 0.312 + görünür boşluk 0.12). Birim
-  sıvı boyu artık tam `UnitHeight` (kapasiteler arası tutarlı). Tıpalıyken
-  üst katman tamamen görünür.
-- [x] **2. 2.5D sıvı:** üst yüzey elips disk (üst katmanın açık tonu, kenarda
-  cama sivrilerek kapanır), katman sınırları ön yay gibi aşağı kavisli;
-  derinlik görsel perspektifinden (0.375 × 0.2 ≈ 0.075). Efekt dökme
-  sırasında da KORUNUR (kullanıcı isteği) — bant eğimli yüzeyi izler.
-- [x] **2.5 (ara madde): tıpalı tüp girişi + seçim iptali** — tıpalı
-  (complete) tüp seçilemez ve dökme kaynağı olamaz (Core kuralı +
-  görünüm); boş alana ya da tıpalı tüpe tıklamak mevcut seçimi iptal eder.
-- [x] **3. Dikdörtgen akış + kaynak yaka ağzı:** Bezier gitti; akış İKİ
-  parçalı dik kolon — üst parça (order 15) kaynağın deliğinin hedefe bakan
-  kenarından, alt parça (order 3, tıpa katmanı) hedef deliğin merkezinden
-  yüzeye, hedefin ön yaka dilimleri dökme sırasında açılıp tıpa sandviçiyle
-  sarar. Ağız ucu her kare hedefin tam üstüne konumlanır (pivot modelinden
-  tam çözüm); birleşim uçları köşeli + bindirmeli, bant fazı board-uzayında
-  (dikişsiz). Görsel yüzey fiziksel modele demirlenir (`AnchorLiquidToLip`,
-  `_SurfaceLift`) — kolon sıvıya yapışık. Ayrıca: dökme hedef ağzının 0.2
-  üstünden (yaka teması bulgusu), tıpa dökme bitince düşme+esneme
-  animasyonuyla takılır, undo kademeli akar (ışınlanma yok). Dökmenin son
-  fazlarındaki kısa sıvı-kolon kopmaları fiziksel demirlemeyle azaltıldı
-  ve mevcut hâli kabul edildi (ağza sabit kilit denendi, "hiç olmadı"
-  diye geri alındı — bir daha denenmesin).
-- [x] **4. Damla efekti + canlılık:** sürekli dalga kalktı, boşta yüzey
-  durgun. Dökme SIRASINDA değme noktasından iki yana damlacık sıçraması
-  (8 damlacık, faz/menzil/boy çeşitli, dünya birimi); dökme BİTİNCE damla
-  halkası patlaması (~1.1 sn zarf, tek geniş halka, nazik yüzey kabarması
-  `_RippleHeight` 0.008 + soluk bantlar — keskin/kalabalık sürümler göze
-  battı, kullanıcı turlarıyla yumuşatıldı). Level başında ve tüp
-  kalkış/inişinde sönümlü çalkantı (`PlaySlosh`; omega 9, level 1.6 sn,
-  seçim 0.9 sn — boşluğa tıklayıp iptal de inişi tetikler).
-
-**Yol haritası TAMAM (29 Tem 2026).** Sıradaki işler cila adaylarından
-seçilecek.
-
-Cila adayları (harita dışı): ses/ikon. Telefon performans turu
-(targetFrameRate + hamle-başı `IsSolvable` maliyeti) "Bilinen eksikler"de.
-Kapananlar (29 Tem): görsel ince ayarlar kullanıcı onayıyla; `SdTube`
-no-op zinciri, sahne/nesne adları (`Game.unity` / `Board`), `v2.unity` ve
-`CreateTestBoard` temizlendi (testler tahtayı `TestBoards.Classic` ile
-enjekte eder).
-
-**Devam noktası (29 Tem oturum sonu):** Temizlik işi
-**`chore/cleanup-scene-sdtube`** branch'inde commit'li ama **Unity
-doğrulaması bekliyor** — master'a MERGE EDİLMEDİ. Yarın ilk iş:
-1. Unity'yi aç: derleme temiz mi; `TestBoards.cs` için üretilecek .meta
-   dosyasını küçük bir ek commit'le branch'e al.
-2. Kontroller: sahne `Game`, kök nesne `Board`; oyun görünümünde SIFIR
-   fark olmalı (tur tamamen davranışsız temizlik); EditMode + PlayMode
-   testleri (üçü artık tahta enjekte ediyor: LayoutFit, ClickDetection,
-   UndoButton).
-3. Yeşilse: master'a `--no-ff` merge, branch sil, push.
-master şu an push'lu ve güncel (`73ed071`); bu branch ondan dallandı.
-
-### Kaldığımız yer (23 Tem 2026)
-
-**Hedef (mentör kararı): 300 önceden üretilmiş-seçilmiş level.** Leveller
-runtime'da üretilmeyecek; Python'da çok sayıda aday üretilip metriklerle
-en iyileri seçilecek, zorluğu artan sırayla dosyaya yazılacak. Kapasite
-4/5/6; renk sayısı (K) ve boş tüp sayısı (2 kolay / 1 zor) bağımsız
-parametreler. Eski plan ("5 leveli EMPTIES=1 ile yeniden üret") bu hattın
-içine katlandı.
-
-Yol haritası — A, B, C tamam, sıra D'de:
-
-- [x] **A. Solver sayım semantiği:** arama ilk çözümde durmaz, uzayı
-  tüketir, çözüme düşen kenarları sayar (`SolutionCount`, `CountIsExact`).
-  C# + Python; çapraz doğrulama 8/8 — karar + durum + çözüm sayısı
-  üçlüsü birebir kıyaslanıyor. Ayrıntı: `Docs/SOLVER.md`.
-- [x] **B. En kısa çözüm uzunluğu:** `crosscheck.py`'de `shortest_solution`
-  — kanonik graf üzerinde BFS, garantili en kısa (DFS ilk yolu metrik
-  değildir: level 5'te ilk yol 59, en kısa 41). Bilinçli olarak yalnız
-  Python'da: tek tüketicisi build-time; C# ileride sayıyı levels.json'dan
-  okur, algoritmayı koşmaz. Makbuz satırı `generate_levels.py`'de
-  (kapasite/renk/boş + çözümSayısı/enKısa/ilkYol/durum) — şimdilik log,
-  şema genişlemesi C'nin kararı.
-- [x] **C. Pilot merdiven + zorluk skoru ilk sürüm:**
-  `Tools/SolverBenchmark/pilot_ladder.py` (ayrı script; `generate_levels.py`
-  D'ye kadar yerinde). Skor **leksikografik** (mentör kararı, 24 Tem):
-  birincil enKısa, eşitlik bozucu `1/çözümSayısı`; **ağırlık yok** —
-  ham sinyaller (enKısa/çözüm/durum) her level için loglanır, ağırlık
-  kararı veriyle mentöre bırakıldı. Slot temsilcisi = 30 adayın **medyanı**,
-  dağılım (min/med/maks) raporlanır. Çıktı: `pilot_ladder.md` (levels.json'a
-  dokunmaz). 12 slotluk merdiven, seçilen enKısa **monoton** (8→33, düşüş
-  yok). Üç bulgu (aşağıda) D'yi şekillendiriyor. Skor doğrulandı; açık
-  kalan tek şey mentörün ağırlık/eğri kararı (pilot ona veriyi sunar).
-
-  **Pilot bulguları (24 Tem, D'nin girdisi):**
-  1. **boş=1 saf rastgele üretimde kap≥5'te çöküyor:** kabul oranı ~%0
-     (kap6 renk7 boş1: 600 denemede 0 kabul). Teoriyle uyumlu (Ito et al.:
-     ~3 boş / 4 dolu). **Karar:** boş=1 yalnız kap≤4'te (kabul ~%15-24).
-     Garantili boş=1 üretimi (**ters-üretim**) D'ye bırakıldı.
-  2. **enKısa ≈ 0.8·(renk×kap) = tahta hacmi**, slot sırasını değil hacmi
-     takip eder. **Karar:** merdiven hacme göre monoton dizilir; son 300
-     level **slot sırasına değil ölçülen skora göre** sıralanacak.
-  3. **`1/çözümSayısı` eşitlik bozucu doğrulandı:** eşit-uzunlukta boş=1
-     ve dar tahtalar 3-12× az çözümle doğru şekilde daha zor sıralanıyor.
-     Yan bulgu: eşit hacimde sığ+çok-renk, derin+az-renkten daha dar
-     (kapasitenin hacim ötesi etkisi — D'de mentöre).
-- [x] **D. Level üretimi + Unity tarafı.** *(27 Tem 2026'da mentör + kullanıcı
-  kararlarıyla revize edildi; Faz 1A + 1B + formül revizyonu master'a birleşti —
-  bkz. commit'ler `ba1e519`, `0cfac29`, `e11e871`, `b17251a`.)*
-  Pilotun açtığı işlerin güncel durumu:
-  - **Ters-üretim: İPTAL.** Gereksiz görüldü; mevcut rastgele generate-and-test
-    onaylandı. Karar: kap≤4'te boş=1 mümkün, **kap≥5'te her zaman 2 boş**
-    (piyasa oyunlarıyla uyumlu: kap4 + 2 boş standart). boş=1 çöküşü artık
-    "kabul et ve 2 boşa geç" ile yönetiliyor, ters-üretime gerek kalmadı.
-  - **Her tier'dan 2 tahta** (mentör): ekranda `level 1.1`, `1.2`, `2.1`…
-    `pilot_ladder.py` → `choose_two` slot başına skora göre **orta-üst 2 adayı**
-    (ordered[15], ordered[16]) seçer (30 aday, tek medyan yok).
-  - **Öğretici + köprü leveller** (kullanıcı, referans oyundan): başa 2 öğretici
-    tier (T1: 1 renk / 2 tüp, **elle**; T2: 2 renk / 1 boş / 3 tüp, üretici) —
-    SABİT, skora girmez (yoksa boş=1 öğreticisi zor kümeye kayardı). En büyük
-    skor uçurumuna (ölçülen 0.277→0.486, boş 2→1 geçişi) köprü `(4,4,1)`.
-    Sonuç: **15 tier × 2 = 30 tahta**.
-  - **Skora göre sıralama:** ranked tier'lar (12 mevcut + köprü) skora göre
-    artan; öğreticiler başa sabit. `pilot_levels.json`'a yazılır.
-  - **Ağırlık/eğri: oyuncu testiyle.** Mentör soyut karar vermeyecek; insanlar
-    oynayacak, feedback `WEIGHTS`'i ayarlayacak. JSON'a skor DEĞİL **ham metrik**
-    (enKısa, çözümSayısı) yazılır — ağırlık değişince yeniden sıralanır.
-    **Güncel WEIGHTS (`e11e871`, mentör):** eski 0.55T/0.20A/0.15L/0.10C →
-    **L0.45 / C0.25 / A0.15 / T0.15**. Boyut baskın olsun diye enKısa (L)
-    öne alındı; tüp/renk artışında monotonluk sağlandı, 12→13'teki büyük düşüş
-    gitti. Öğretici 2 `(4,2,1)` → `(4,2,2)`: 2 boş tüple çıkmaz-güvenli yapıldı
-    (2.1/2.2 tuzaklıydı). `pilot_levels.json` + `pilot_ladder.md` seed 42 ile
-    yeniden üretildi.
-  - **Şema + Unity — TAMAM:** `pilot_levels.json` şeması genişledi (`label`,
-    `shortest`, `solutionCount`); C# tarafı bitti — `LevelLibrary` DTO'ya
-    `label`, `BoardView` "LEVEL x.y" başlığı (TMP), `LevelLibraryTests` 30 tahta.
-    **Faz 1A (`ba1e519`):** level akışı — oto-geçiş (çözülünce 0.7s sonra sonraki),
-    skip/önceki navigasyonu, restart (yüklemedeki `pristineBoard` kopyasından),
-    +tüp (`Board.AddTube` + görünüm yeniden kurma), `ButtonView` (koddan çizili
-    placeholder butonlar). **Faz 1B (`0cfac29`):** çıkmaz tespiti — her hamlede
-    `Solver.IsSolvable`, çıkmazda "Çıkmaz!" banner + undo/restart/+tüp yanıp söner;
-    TMP (LiberationSans SDF) eklendi. Ekran (13+ tüp sığıyor mu) ve `ColorPalette`
-    (renkler ayırt edilebilir mi) göz kontrolü hâlâ açık.
-  - **Mevcut leveller korunmuyor** (kullanıcı): üretim serbestçe yeniden
-    koşuluyor, RNG kayması sorun değil.
-  - **300 hedefi:** önce 30 tahta insan testine gidecek; ağırlık kalibre olunca
-    kovalar genişletilip ölçeklenecek.
-  - **Maliyet notu:** solve() uzayı tükettiği için kap6 slotları pahalı
-    (~70 sn/30 aday); üretim dakikalar sürer — build-time, telefonu etkilemez.
-
-Notlar:
-
-- Benchmark Tablo 2 (2 boş çözülemez avı) yeni semantikte fiilen işlevsiz:
-  avda elenen her çözülebilir aday tam tüketim maliyeti ödüyor, 45 sn'ye
-  3-23 deneme sığıyor. Gerekirse solver'a "yalnız varlık" hızlı modu
-  eklenebilir — mentörle konuşulacak.
-
-Durum (29 Tem sonu): master'da her şey birleşik — solver + sayım, undo
-özelliği (`feature/undo`), dökme donması düzeltmesi (`TiltedEdgeLevel`,
-`fix/pour-freeze`), **D adımının tamamı** (level akışı + navigasyon +
-çıkmaz tespiti + formül revizyonu, `b17251a`) ve **asset görsel katmanı**
-(mentör onayı; shader sürümü `runtime-shaders` branch'inde).
-`feature/level-metrics` ve `feature/asset-redesign` (butonlar başka ekibe
-geçti; son hâli `1ec9f9f`) silindi. Cihazda (APK) doğrulandı, telefonda fps
-gözlemi "Bilinen eksikler"de.
-
-### Bilinen eksikler
-
-- Dışarıdan tahta verme kapısı: `BoardView.LoadBoard` — Start öncesi
-  çağrılırsa kurulum onunla yapılır, oyun sırasında çağrılırsa görünümler
-  yıkılıp yeniden kurulur. Level geçişi ve testler bu kapıyı kullanır;
-  hiçbir kaynak yoksa son çare pilot merdivenin ilk tahtası yüklenir.
-- Ses ve ikon cila adımında (Kenney.nl, freesound.org); yazı tipi TMP
-  LiberationSans ile geldi (Faz 1B).
-- **Telefonda akıcılık (23 Tem 2026, cihaz testi):** animasyonlar cihazda
-  editördekinden az akıcı. Muhtemel sebepler, olasılık sırasıyla:
-  (1) `Application.targetFrameRate` ayarlanmadı — Unity mobilde varsayılan
-  30 fps'e kilitler; (2) SDF shader'ların piksel maliyeti: alpha-blend'li
-  büyük quad'lar mobilde overdraw'a çok duyarlı. Cila adımında ele
-  alınacak: önce targetFrameRate=60 denenecek, yetmezse cihazda profiler.
-
-### Bilinen hatalar
-
-- **Deadlock tespiti — ÇÖZÜLDÜ (`0cfac29`, Faz 1B):**
-  `Board.HasAnyValidMove` yalnızca "yapılabilecek hamle var mı" sorusunu
-  soruyordu; hamle var ama oyun kazanılamaz (gerçek çıkmaz) durumunu
-  yakalamıyordu. Artık her hamleden sonra `Solver.IsSolvable` (ilk çözümde
-  duran ucuz varlık kontrolü) koşuyor; çözülemez duruma düşülünce ekranda
-  "Çıkmaz!" banner'ı çıkıyor ve undo/restart/+tüp butonları yanıp sönerek
-  yönlendiriyor. Aşağıdaki kararlar bu çözümün gerekçesi (referans için
-  korunuyor):
-
-  **Karar — mimari: generate-and-test.** Deadlock oyun sırasında
-  yakalanmaz; level üretiminden **sonra** solver ile "bu tahta çözülebilir
-  mi?" doğrulanır, çözülemeyen tahta atılıp yenisi üretilir. Bu, PCG
-  literatüründe belgelenmiş standart pratik (De Kegel & Haahr, IEEE ToG
-  2020). Alternatif olan yapısal garanti (yeterince boş tüp) kanıtlı ama
-  pratik değil: kapasite 4'te her 4 dolu tüpe ~3 boş tüp gerekir
-  (Ito et al., FUN 2022).
-
-  **Karar — algoritma: DFS + budama + kanonik durum önbelleği.**
-  *Güncelleme (23 Tem 2026, mentör kararı):* arama ilk çözümde durmaz;
-  erişilebilir uzayı tüketir ve çözüme düşen kenarları sayar
-  (`SolutionCount` — zorluk metriği). İlk bulunan yol örnek olarak
-  raporlanır, metrik değildir. Ayrıntı: `Docs/SOLVER.md`. Dayanaklar
-  (Ito et al., arXiv:2202.09495):
-  - Çözülebilirlik kararı **NP-tam** → budama tercih değil, zorunluluk.
-  - **Ball sort ↔ water sort eşdeğer** (Corollary 4): ball-sort solver
-    literatürü kısmi-dökme mekaniğine aynen uygulanır. (Teorem başlangıç
-    konfigürasyonları için; oyun ortası kısmi tüplü tahtalar formal
-    kapsam dışı.)
-  - Her çözülebilir tahtanın **polinom uzunlukta çözümü** kanıtlı →
-    sınıra kadar arayıp bulamamak doğru bir "çözülemez" kararıdır.
-
-  **Uygulama detayları:**
-  - **Kanonikleştirme** — asıl kazanç buradan: durum hash'lenmeden önce
-    tüpler kanonik sıraya sokulur; tüp sırası permütasyonları ve eşdeğer
-    boş tüpler tek duruma iner.
-  - Budama: tamamlanmış tüpten dökme yok, tek renkli tüpü boş tüpe
-    taşıma yok, kaynak başına yalnız bir boş hedef. (Ters hamle ve
-    döngüler kanonik önbellek tarafından zaten elenir.)
-  - **Bütçe loglaması:** düğüm bütçesi aşılırsa sonuç "bilinmiyor"dur,
-    "çözülemez" değil — ikisi ayrı raporlanır. Yoksa zayıf doğrulayıcı
-    level havuzunu sessizce kolaya yamultur (Murase 1996 dersi).
-
-  **Elenen alternatifler:** BFS (çözülebilirlik/sayım için gereksiz bellek;
-  ama **en kısa çözüm uzunluğu** metriği için build-time'da kanonik graf
-  üzerinde BFS kullanılacak — uzay zaten tüketiliyor, ek maliyet sınıfı
-  yok), naif DFS (durum tekrarı), Bidirectional BFS (geriye hamle üretme
-  karmaşıklığı), boş tüp garantisi (oyun tasarımını bozar). **A\*/IDA\***
-  ancak tahta boyutları BFS'i aşarsa gündeme gelir; "color break"
-  heuristiği (farklı renk üstüne oturan renk geçişi sayısı) hazır fikir
-  olarak duruyor. Tüm çözüm *yollarını* saymak/saklamak da elendi:
-  sıralama kombinasyonlarıyla katlanarak büyür (#P), önbelleği geçersiz
-  kılar — ölçümü ve gerekçesi `Docs/SOLVER.md`'de.
-
-- **Son katman dökme artefaktı — çözüldü:** Shader'da surface-based
-  `survivalScore` ile son ~1 birim sıvıda ağız tarafına doğru çekilme
-  uygulandı. Sadece eğik tüplerde etkin (`tiltAmount`), dik hedef tüpler
-  etkilenmiyor.
-
-### Device Simulator sınırlamaları
-
-- **Hızlı tıklamada donma:** Device Simulator'da art arda hızlı tıklayınca
-  Input System dokunuş "bırakma" olayını kaybedebiliyor; `isPressed` true'da
-  takılı kalıyor ve yeni basış algılanmıyor. Game penceresinde ve gerçek
-  cihazda bu sorun **yok**. Oyunun hatası değil, simülatörün bilinen sınırı.
-  **Uyarı (23 Tem 2026):** geçmişte simülatöre atfedilen donmaların bir
-  kısmı aslında dökme animasyonu kilidiymiş (kapasite >= 5 tüplerde
-  sıvı-ağızda formülünün kelepçe hatası; gerçek geometriyle düzeltildi,
-  bkz. `TiltedEdgeLevel` ve `PourFreezeTests`). Simülatörde donma görülürse
-  önce Console'a bakılmalı: watchdog LogError'u varsa oyun hatasıdır.
-
-### Kod okuma sırası
-
-Basit görsel (adım 2) sonrasını anlamak için aşağıdan yukarı:
-
-1. `Assets/Scripts/Core/Tube.cs` — tüpün veri modeli (tazeleme)
-2. `Assets/Scripts/Core/Board.cs` — hamle kuralları (tazeleme)
-3. `Assets/Scripts/Core/PourResult.cs` — hamle raporu (tazeleme)
-4. **`Assets/Resources/TubeShape.hlsl`** — sıvının şekil matematiği (SDF)
-5. **`Assets/Resources/Liquid.shader`** — sıvı, katmanlar, 2.5D yüzey + halkalar
-6. **`Assets/Resources/Sprites/`** — cam/yaka/tıpa görselleri (import
-   ayarları önemli: PPU, pivot, 9-slice border)
-7. **`Assets/Scripts/Game/ColorPalette.cs`** — int renk → ekran rengi
-8. **`Assets/Scripts/Game/TubeView.cs`** — Core → görünüm köprüsü (sprite
-   katmanları + sıvı MPB)
-9. **`Assets/Scripts/Game/StreamView.cs`** — dökme akış görseli
-10. **`Assets/Scripts/Game/BoardView.cs`** — tahta, dokunuş, yerleşim
-11. `Assets/Tests/EditMode/` — Core testleri
-12. `Assets/Tests/PlayMode/` — görsel testler
-
-### Dökme animasyonu — tamamlandı
-
-Üç fazlı coroutine (`AnimatePour`): kayma+eğilme+dökme (eş zamanlı) →
-doğrulma+geri dönüş (eş zamanlı).
-
-**Eş zamanlı kayma+eğilme (çakışma çözümü):**
-- Ayrı kayma fazı yok. Kayma ve eğilme aynı anda başlar: tüp hedefe
-  kaydıkça eğilir, pivot offset tabanı kaldırır → hedef tüple çakışma olmaz.
-- `pourPos` her kare güncel `currentAngle`'a göre yeniden hesaplanır
-  (`CalculatePourPosition`): ağız her açıda hedefin üstüne düşer.
-- Stream kaynağı her zaman lip'ten (`CalculateSourceMouth`), sıvı
-  yüzeyinden değil. Pour hızı açıya bağlı: fill düşürülmeden önce açının
-  sıvıyı lip'te tutmaya yetip yetmediği kontrol edilir.
-
-**Tek açı sistemi (SmoothDamp):**
-- Açı her zaman `CalculatePourAngle`'dan gelir, `SmoothDamp` ile pürüzsüz
-  takip edilir. Sıvı ağza ulaşınca (`HasLiquidReachedMouth`) dökme başlar.
-- `_TiltAngle` uniform'u Liquid.shader'a geçer; sıvı yüzeyi ve katman
-  sınırları dünya uzayında yatay kalır (`sin/cos` oranı, ±0.2 clamp).
-- Transform döner, pivot telafisi ile ağızdan dönme illüzyonu sağlanır.
-- Eğim açısı sıvı miktarına göre dinamik: dolu tüp 60°, boş tüp 100°
-  (`CalculatePourAngle`).
-- Fill interpolasyonu lineer (SmoothStep ortada hızlanıyordu).
-
-**Denenen ve reddedilen açı sistemleri:** (1) İki fazlı interpolasyon +
-CalculatePourAngle — geçiş anında sıçrama, çok birim döküldüğünde hızlanma.
-(2) fillFade ile açıyı sıfıra indirmek — sıvı dibe çöküyor. (3) Üstel
-yumuşatma (Lerp dt*8) — geçişi yumuşatıyor ama kök nedeni çözmüyor.
-
-**Katman güncelleme zamanlaması:**
-
-| | Kaynak tüp | Hedef tüp |
-|---|---|---|
-| Katmanlar | Doğrulma sonrası `Refresh()` | Dökme öncesi `Refresh()` |
-| Seviye | Eski yerden kademeli düşer | Eski yerden kademeli yükselir |
-
-**Akış görseli (Stream.shader + StreamView):**
-
-SDF Bezier eğrisi: tek quad üzerinde kuadratik Bezier, 10 doğru parçasıyla
-yaklaşık hesaplanır. Kaynakta geniş, hedefte daralır (taper). Akış yönünde
-kayan parlaklık dalgası hareket hissi verir. Bitiş noktası her kare hedef
-tüpün sıvı seviyesiyle güncellenir (saydam tüpte sıvıya kadar uzanır).
-
-**Son katman drain (Liquid.shader):**
-Fill < 0.2 ve tüp eğikken (`tiltAmount`) etkin. `survivalScore = surface /
-maxSurface`: ağız tarafı (yüksek score) kalır, kapalı uç önce kaybolur.
-Dik tüplerde (hedef) etki yok. Denenen ve reddedilen drain yaklaşımları:
-(1) Yatay floor — üçgen artefakt. (2) Orantılı floor — merkez şerit
-tabana bağlı kalıyor. (3) Cam SDF wallProximity — çapraz daralma, yanlış
-yön. (4) İkisinin karışımı (proportional+constant lerp) — karmaşık, hâlâ
-yapay. Surface-based score en doğal sonucu verdi.
-
-**Denenen ve reddedilen:** LineRenderer akış — yapay göründüğü için reddedildi.
+1. `Assets/Scripts/Core/Tube.cs` — tüpün veri modeli
+2. `Assets/Scripts/Core/Board.cs` — hamle kuralları + `PourResult`
+3. `Assets/Scripts/Core/Solver.cs` — çözülebilirlik + sayım (bkz. `Docs/SOLVER.md`)
+4. `Assets/Resources/TubeShape.hlsl` — sıvının şekil matematiği (SDF)
+5. `Assets/Resources/Liquid.shader` — sıvı, katmanlar, 2.5D yüzey + halkalar
+6. `Assets/Resources/Sprites/` — cam/yaka/tıpa görselleri (import ayarları: PPU, pivot, 9-slice)
+7. `Assets/Scripts/Game/ColorPalette.cs` — int renk → ekran rengi
+8. `Assets/Scripts/Game/TubeView.cs` — Core → görünüm köprüsü
+9. `Assets/Scripts/Game/StreamView.cs` — dökme akış görseli
+10. `Assets/Scripts/Game/LevelLibrary.cs` — JSON → tahta
+11. `Assets/Scripts/Game/BoardView.cs` — tahta, dokunuş, yerleşim, HUD, animasyon
+12. `Assets/Tests/EditMode/` — Core testleri
+13. `Assets/Tests/PlayMode/` — görsel testler

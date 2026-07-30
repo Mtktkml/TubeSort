@@ -12,7 +12,6 @@ namespace TubeSort.Core
     {
         private readonly Stack<PourResult> moves = new Stack<PourResult>();
 
-        public int Count => moves.Count;
         public bool IsEmpty => moves.Count == 0;
 
         /// <summary>Başarılı hamleyi geçmişe ekler; başarısız hamleyi yok sayar.</summary>
