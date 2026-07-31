@@ -47,6 +47,38 @@ namespace TubeSort.Game
         // Video glifi koyu kahve: rozetin krem merkezinde beyaz glif okunmuyordu.
         private static readonly Color VideoIconTint = new Color(0.42f, 0.30f, 0.19f, 1f);
 
+        // Kutlama (festive) modu: kazanma pop-up'ı çıkmazdan daha CANLI olsun
+        // (kullanıcı isteği) — yıldız bandı + zıplamalı belirme + sürekli nabız
+        // + gösterim anında konfeti patlaması.
+        // Bant büyüdükçe mesaj/butonlar ContentTop üzerinden orantılı kayar.
+        private const float StarBandHeight = 1.1f;
+        private static readonly Color StarTint = new Color(1f, 0.84f, 0.25f, 1f);
+        // Kazanılmamış yıldız: soluk silüet (yıldız sayısı skora bağlı olacak).
+        private static readonly Color DimStarTint = new Color(0.55f, 0.50f, 0.44f, 0.9f);
+
+        // İstatistik satırı (hamle/süre çipleri): yıldız bandı ile mesaj
+        // arasındaki boşluğu doldurur; metinler SetResults ile yazılır.
+        // Zemin: stat_chip (checkbox_beige_empty) — İNCE kahve halkalı, doğal
+        // SICAK krem dolgulu yuvarlak plaka. Önceki progress görselinin dolgusu
+        // mavimsi griydi (207,211,219): çarpımsal tint ne yapsa gri kalıyordu.
+        // Bu dolgu (255,241,210) neredeyse beyaz-sıcak → tint rengi birebir
+        // uygular. Buton görselinden farklı: tıklanabilir sanılmasın.
+        private const float StatsRowHeight = 0.7f;
+        private const float StatsGapAbove = 0.05f;
+        private static readonly Color StatChipTint = new Color(0.97f, 0.88f, 0.70f, 1f);
+
+        // Konfeti: panel üstünden savrulan renkli pullar (koddan üretilir,
+        // asset yok). Renkler oyunun parlak toon ailesinden.
+        private const int ConfettiCount = 30;
+        private const int ConfettiOrder = 206;   // pop-up'taki her şeyin önünde
+        private const float ConfettiGravity = 9f;
+        private static readonly Color[] ConfettiColors =
+        {
+            new Color(0.92f, 0.30f, 0.26f), new Color(0.98f, 0.62f, 0.22f),
+            new Color(0.99f, 0.85f, 0.30f), new Color(0.42f, 0.80f, 0.40f),
+            new Color(0.36f, 0.62f, 0.92f), new Color(0.65f, 0.48f, 0.85f),
+        };
+
         // Yerleşim ölçüleri (dünya birimi). Panel genişliği kameradan hesaplanır;
         // buton/pay ölçüleri sabit — telefon dikey ekranda okunaklı boylar.
         private const float MaxPanelWidth = 6f;
@@ -75,8 +107,37 @@ namespace TubeSort.Game
             public Color BaseColor;
         }
 
+        // Kutlama yıldızı: taban ölçek/eğim StarDance koreografisinde kullanılır;
+        // Renderer, kazanıldı/soluk boyaması için (SetResults).
+        private struct StarDeco
+        {
+            public Transform Star;
+            public SpriteRenderer Renderer;
+            public float BaseScale;
+            public float BaseTilt;
+        }
+
+        // Konfeti pulu: hız/dönüş/ömür her patlamada yeniden zarlanır.
+        private struct ConfettiPiece
+        {
+            public Transform T;
+            public SpriteRenderer R;
+            public Vector2 Vel;
+            public float Spin;
+            public float Age;
+            public float Life;
+        }
+
         private readonly List<ButtonHit> buttons = new List<ButtonHit>();
+        private readonly List<StarDeco> stars = new List<StarDeco>();
+        private ConfettiPiece[] confetti;
+        private TextMeshPro statLeft;    // "Hamle: X" çipi (kutlama)
+        private TextMeshPro statRight;   // "Süre: X" çipi (kutlama)
+        private bool festive;
+        private float panelHalfHeight;
         private Coroutine appearRoutine;
+        private Coroutine starRoutine;
+        private Coroutine confettiRoutine;
 
         /// <summary>Pop-up ekranda mı? BoardView dokunuş yönlendirmesi buna bakar.</summary>
         public bool Visible => gameObject.activeSelf;
@@ -86,13 +147,21 @@ namespace TubeSort.Game
         /// yüklenir; eksik asset parlak pembe yer tutucuyla belli olur (sessiz
         /// bozulma yerine — ColorPalette ile aynı felsefe).
         /// </summary>
+        /// <param name="titleDrop">Başlığın banner merkezine göre DÜŞEY ofseti
+        /// (banner yüksekliği oranı, + = aşağı). Kırmızı bandın merkezi görselden
+        /// görsele değişir; piksel ölçümüyle bulunur: banner_hanging +0.043
+        /// (bant 19-120, merkez 69.5 vs 64), banner_ribbon -0.035 (bant 13-106,
+        /// merkez 59.5 vs 64).</param>
         public void Initialize(Camera camera, string title, string message,
-            IReadOnlyList<PopupAction> actions)
+            IReadOnlyList<PopupAction> actions,
+            string bannerPath = "UI/banner_hanging", bool festive = false,
+            float titleDrop = 0.043f)
         {
             viewCamera = camera;
+            this.festive = festive;
 
             Sprite panelSprite = LoadSprite("UI/panel_brown");
-            Sprite bannerSprite = LoadSprite("UI/banner_hanging");
+            Sprite bannerSprite = LoadSprite(bannerPath);
             Sprite buttonSprite = LoadSprite("UI/button_brown");
             Sprite badgeSprite = LoadSprite("UI/round_brown");
             Sprite videoSprite = LoadSprite("UI/icon_video");
@@ -100,20 +169,37 @@ namespace TubeSort.Game
             float panelWidth = Mathf.Min(MaxPanelWidth,
                 CameraViewSize().x * PanelWidthFraction);
             float buttonWidth = panelWidth - 2f * SidePadding;
-            float panelHeight = TopPadding + MessageHeight + ButtonGap
+            float panelHeight = ContentTop + MessageHeight + ButtonGap
                 + actions.Count * ButtonHeight
                 + Mathf.Max(0, actions.Count - 1) * ButtonGap
                 + BottomPadding;
 
+            panelHalfHeight = panelHeight * 0.5f;
+
             BuildOverlay();
             BuildPanel(panelSprite, panelWidth, panelHeight);
-            BuildBanner(bannerSprite, title, panelWidth, panelHeight);
+            BuildBanner(bannerSprite, title, panelWidth, panelHeight, titleDrop);
+            if (festive)
+            {
+                BuildStars(panelHeight);
+                BuildStats(panelWidth, panelHeight);
+                BuildConfetti();   // overlaySprite'ı kullanır: BuildOverlay sonrası
+            }
             BuildMessage(message, panelWidth, panelHeight);
             BuildButtons(buttonSprite, badgeSprite, videoSprite,
                 actions, buttonWidth, panelHeight);
 
             gameObject.SetActive(false);   // yalnız Show ile görünür
         }
+
+        /// <summary>Panelin üst kenarından içeriğin (mesajın) başladığı yere
+        /// kadarki pay. Kutlamada: yıldız bandı + istatistik satırı + ButtonGap —
+        /// böylece mesajın üstündeki boşluk (ButtonGap) altındakiyle EŞİT olur,
+        /// mesaj istatistiklerle Sonraki butonunun tam ortasında durur.</summary>
+        private float ContentTop => festive
+            ? TopPadding * 0.5f + StarBandHeight + StatsGapAbove + StatsRowHeight
+                + ButtonGap
+            : TopPadding;
 
         /// <summary>Pop-up'ı kameranın ortasında gösterir (küçük büyüme animasyonuyla).</summary>
         public void Show()
@@ -134,6 +220,15 @@ namespace TubeSort.Game
             gameObject.SetActive(true);
             if (appearRoutine != null) StopCoroutine(appearRoutine);
             appearRoutine = StartCoroutine(AppearPunch());
+
+            // Kutlama koreografisi her gösterimde baştan oynar (taze kutlama).
+            if (festive)
+            {
+                if (starRoutine != null) StopCoroutine(starRoutine);
+                starRoutine = StartCoroutine(StarDance());
+                if (confettiRoutine != null) StopCoroutine(confettiRoutine);
+                confettiRoutine = StartCoroutine(ConfettiBurst());
+            }
         }
 
         public void Hide()
@@ -143,6 +238,19 @@ namespace TubeSort.Game
                 StopCoroutine(appearRoutine);
                 appearRoutine = null;
             }
+            if (starRoutine != null)
+            {
+                StopCoroutine(starRoutine);
+                starRoutine = null;
+            }
+            if (confettiRoutine != null)
+            {
+                StopCoroutine(confettiRoutine);
+                confettiRoutine = null;
+            }
+            if (confetti != null)
+                foreach (ConfettiPiece piece in confetti)
+                    if (piece.T != null) piece.T.gameObject.SetActive(false);
             transform.localScale = Vector3.one;
             gameObject.SetActive(false);
         }
@@ -167,22 +275,150 @@ namespace TubeSort.Game
             }
         }
 
-        /// <summary>Belirme: hafif küçükten tam boya yumuşak büyüme (toon dokunuşu).</summary>
+        /// <summary>Belirme. Normal: hafif küçükten tam boya yumuşak büyüme.
+        /// Kutlama: daha küçükten TAŞARAK zıplama (ease-out-back) — kazanma
+        /// anı çıkmazdan daha coşkulu okunsun.</summary>
         private IEnumerator AppearPunch()
         {
-            const float duration = 0.15f;
+            float duration = festive ? 0.24f : 0.15f;
+            float from = festive ? 0.6f : 0.85f;
             float elapsed = 0f;
 
             while (elapsed < duration)
             {
                 elapsed += Time.deltaTime;
-                float t = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(elapsed / duration));
-                transform.localScale = Vector3.one * Mathf.Lerp(0.85f, 1f, t);
+                float t = Mathf.Clamp01(elapsed / duration);
+                float eased = festive ? EaseOutBack(t) : Mathf.SmoothStep(0f, 1f, t);
+                transform.localScale = Vector3.one * Mathf.LerpUnclamped(from, 1f, eased);
                 yield return null;
             }
 
             transform.localScale = Vector3.one;
             appearRoutine = null;
+        }
+
+        /// <summary>Sonuna doğru hafif taşıp (tepe ~1.1) geri oturan yay
+        /// eğrisi, 0→1. Zıplamalı belirme ve yıldız popları bunu kullanır.</summary>
+        private static float EaseOutBack(float t)
+        {
+            const float c1 = 1.70158f;
+            const float c3 = c1 + 1f;
+            float u = t - 1f;
+            return 1f + c3 * u * u * u + c1 * u * u;
+        }
+
+        /// <summary>Yıldız koreografisi: soldan sağa sırayla zıplayarak belirme,
+        /// ardından süresiz nazik nabız + salınım (fazlar yıldız başına kayık,
+        /// mekanik durmasın). Pop-up kapanınca Hide durdurur.</summary>
+        private IEnumerator StarDance()
+        {
+            const float startDelay = 0.1f;   // panel otursun, sonra yıldızlar
+            const float stagger = 0.12f;     // yıldızlar arası gecikme
+            const float pop = 0.28f;         // tek yıldızın belirme süresi
+            float elapsed = 0f;
+
+            while (true)
+            {
+                elapsed += Time.deltaTime;
+
+                for (int i = 0; i < stars.Count; i++)
+                {
+                    StarDeco deco = stars[i];
+                    float local = elapsed - startDelay - i * stagger;
+
+                    float scale;
+                    float tiltDeg = deco.BaseTilt;   // taç eğimi hep korunur
+                    if (local <= 0f)
+                    {
+                        scale = 0f;   // sırası gelmedi: görünmez
+                    }
+                    else if (local < pop)
+                    {
+                        scale = EaseOutBack(local / pop);
+                    }
+                    else
+                    {
+                        scale = 1f + 0.06f * Mathf.Sin(elapsed * 2.8f + i * 2.1f);
+                        tiltDeg += 7f * Mathf.Sin(elapsed * 1.9f + i * 1.3f);
+                    }
+
+                    deco.Star.localScale = Vector3.one * (deco.BaseScale * scale);
+                    deco.Star.localRotation = Quaternion.Euler(0f, 0f, tiltDeg);
+                }
+
+                yield return null;
+            }
+        }
+
+        /// <summary>Konfeti patlaması: pullar panelin üst bölgesinden yukarı ve
+        /// yanlara fırlar, yerçekimiyle düşerken döner, ömrünün son üçte
+        /// birinde solup söner. Her gösterimde yeniden zarlanıp savrulur.</summary>
+        private IEnumerator ConfettiBurst()
+        {
+            for (int i = 0; i < confetti.Length; i++)
+            {
+                ConfettiPiece piece = confetti[i];
+                piece.T.localPosition = new Vector3(
+                    UnityEngine.Random.Range(-0.5f, 0.5f),
+                    panelHalfHeight + UnityEngine.Random.Range(-0.2f, 0.3f), 0f);
+                piece.T.localRotation = Quaternion.Euler(0f, 0f,
+                    UnityEngine.Random.Range(0f, 360f));
+                // Dikdörtgen pul: dönerken kağıt konfeti gibi parıldar.
+                piece.T.localScale = new Vector3(
+                    UnityEngine.Random.Range(0.10f, 0.16f),
+                    UnityEngine.Random.Range(0.05f, 0.09f), 1f);
+                piece.Vel = new Vector2(
+                    UnityEngine.Random.Range(-3.4f, 3.4f),
+                    UnityEngine.Random.Range(2.5f, 5.5f));
+                piece.Spin = UnityEngine.Random.Range(-540f, 540f);
+                piece.Age = 0f;
+                piece.Life = UnityEngine.Random.Range(0.9f, 1.5f);
+                piece.R.color = ConfettiColors[
+                    UnityEngine.Random.Range(0, ConfettiColors.Length)];
+                piece.T.gameObject.SetActive(true);
+                confetti[i] = piece;
+            }
+
+            bool anyAlive = true;
+            while (anyAlive)
+            {
+                anyAlive = false;
+                float dt = Time.deltaTime;
+
+                for (int i = 0; i < confetti.Length; i++)
+                {
+                    ConfettiPiece piece = confetti[i];
+                    if (!piece.T.gameObject.activeSelf) continue;
+
+                    piece.Age += dt;
+                    if (piece.Age >= piece.Life)
+                    {
+                        piece.T.gameObject.SetActive(false);
+                        confetti[i] = piece;
+                        continue;
+                    }
+
+                    piece.Vel.y -= ConfettiGravity * dt;
+                    piece.T.localPosition +=
+                        new Vector3(piece.Vel.x, piece.Vel.y, 0f) * dt;
+                    piece.T.localRotation = Quaternion.Euler(0f, 0f,
+                        piece.T.localRotation.eulerAngles.z + piece.Spin * dt);
+
+                    // Ömrün son ~üçte birinde sol.
+                    float fade = Mathf.Clamp01(
+                        (piece.Life - piece.Age) / (piece.Life * 0.35f));
+                    Color c = piece.R.color;
+                    c.a = fade;
+                    piece.R.color = c;
+
+                    confetti[i] = piece;
+                    anyAlive = true;
+                }
+
+                yield return null;
+            }
+
+            confettiRoutine = null;
         }
 
         /// <summary>Basış geri bildirimi: buton kısaca koyulaşır (basılı görsel
@@ -232,7 +468,7 @@ namespace TubeSort.Game
         }
 
         private void BuildBanner(Sprite bannerSprite, string title,
-            float panelWidth, float panelHeight)
+            float panelWidth, float panelHeight, float titleDrop)
         {
             // Banner panelin üst kenarına biner: merkez üst kenarın hafif üstünde.
             float bannerWidth = panelWidth * 0.82f;
@@ -254,10 +490,9 @@ namespace TubeSort.Game
             var textGo = new GameObject("Title");
             textGo.transform.SetParent(transform, false);
             // Başlık KIRMIZI BANDIN ortasına oturur, sprite merkezine değil:
-            // görselin üstünde askı pimleri var. Ofset görselden ÖLÇÜLDÜ:
-            // bant orta sütunda 19-120. satırlar, merkezi 69.5; sprite merkezi
-            // 64 → fark 5.5/128 ≈ 0.043 yükseklik. (0.1 denendi: çok aşağı.)
-            textGo.transform.localPosition = new Vector3(0f, y - bannerHeight * 0.043f, 0f);
+            // bandın merkezi görselden görsele değişir (askı pimi / kıvrım payı).
+            // titleDrop banner başına piksel ölçümüyle verilir (bkz. Initialize).
+            textGo.transform.localPosition = new Vector3(0f, y - bannerHeight * titleDrop, 0f);
 
             var tmp = textGo.AddComponent<TextMeshPro>();
             tmp.text = title;
@@ -269,11 +504,129 @@ namespace TubeSort.Game
             tmp.sortingOrder = TextOrder;
         }
 
+        /// <summary>Kutlama yıldız bandı: banner ile mesaj arasında üç altın
+        /// yıldız, SIKI taç dizilimi — yanlar ortadakine neredeyse üst üste
+        /// binecek kadar sokulu, hafif aşağıda ve dışa yatık (kullanıcı isteği).
+        /// Görünür hâle gelmeleri StarDance'te — burada yalnız kurulur.</summary>
+        private void BuildStars(float panelHeight)
+        {
+            Sprite starSprite = LoadSprite("UI/icon_star");
+            // Bant banner'a sokulur (üst payın yarısı): yıldızlar yukarıda dursun.
+            float bandY = panelHeight * 0.5f - TopPadding * 0.5f - StarBandHeight * 0.5f;
+
+            for (int i = 0; i < 3; i++)
+            {
+                float x = (i - 1) * 0.72f;                 // sokulu (binme korunur)
+                float baseScale = i == 1 ? 2.8f : 2.05f;   // orta yıldız büyük
+                float yOffset = i == 1 ? 0.12f : -0.1f;    // yanlar hafif aşağıda
+                float baseTilt = (1 - i) * 14f;            // sol +14°, sağ -14° dışa yatık
+
+                var go = new GameObject($"Star_{i}");
+                go.transform.SetParent(transform, false);
+                go.transform.localPosition = new Vector3(x, bandY + yOffset, 0f);
+                go.transform.localScale = Vector3.zero;    // StarDance büyütür
+
+                var renderer = go.AddComponent<SpriteRenderer>();
+                renderer.sprite = starSprite;
+                renderer.color = StarTint;
+                // Orta yıldız önde: binen kanatlar onun altına girer.
+                renderer.sortingOrder = i == 1 ? IconOrder + 1 : IconOrder;
+
+                stars.Add(new StarDeco
+                {
+                    Star = go.transform, Renderer = renderer,
+                    BaseScale = baseScale, BaseTilt = baseTilt,
+                });
+            }
+        }
+
+        /// <summary>İstatistik çipleri: yıldız bandının altında yan yana iki
+        /// küçük plaka (hamle / süre) — pop-up'ın ortası boş kalmasın ve skor
+        /// bilgisine yer açılsın diye. Metinler SetResults ile yazılır.</summary>
+        private void BuildStats(float panelWidth, float panelHeight)
+        {
+            Sprite chipSprite = LoadSprite("UI/stat_chip");
+            float rowY = panelHeight * 0.5f - TopPadding * 0.5f - StarBandHeight
+                - StatsGapAbove - StatsRowHeight * 0.5f;
+            const float chipGap = 0.25f;
+            float chipWidth = (panelWidth - 2f * SidePadding - chipGap) * 0.5f;
+
+            statLeft = BuildStatChip(chipSprite, "Hamle: -",
+                new Vector3(-(chipWidth + chipGap) * 0.5f, rowY, 0f), chipWidth);
+            statRight = BuildStatChip(chipSprite, "Süre: -",
+                new Vector3((chipWidth + chipGap) * 0.5f, rowY, 0f), chipWidth);
+        }
+
+        private TextMeshPro BuildStatChip(Sprite chipSprite, string text,
+            Vector3 position, float width)
+        {
+            var go = new GameObject("StatChip");
+            go.transform.SetParent(transform, false);
+            go.transform.localPosition = position;
+
+            var bg = go.AddComponent<SpriteRenderer>();
+            bg.sprite = chipSprite;
+            bg.drawMode = SpriteDrawMode.Sliced;
+            bg.size = new Vector2(width, StatsRowHeight);
+            bg.color = StatChipTint;   // butonlardan açık: tıklanabilir sanılmasın
+            bg.sortingOrder = ButtonOrder;
+
+            var textGo = new GameObject("Text");
+            textGo.transform.SetParent(go.transform, false);
+
+            var tmp = textGo.AddComponent<TextMeshPro>();
+            tmp.text = text;
+            tmp.fontSize = 2.3f;
+            tmp.fontStyle = FontStyles.Bold;
+            tmp.color = new Color(0.36f, 0.26f, 0.16f, 1f);   // koyu kahve
+            tmp.alignment = TextAlignmentOptions.Center;
+            tmp.rectTransform.sizeDelta = new Vector2(width - 0.2f, StatsRowHeight);
+            tmp.sortingOrder = TextOrder;
+            return tmp;
+        }
+
+        /// <summary>Kutlama sonuçlarını yazar (gösterimden ÖNCE çağrılır):
+        /// kazanılan yıldız sayısı (0-3; kalanlar soluk silüet — soldan sağa
+        /// dolar) ve istatistik metinleri. Yıldız sayısı ileride hamle/süre
+        /// skorundan türeyecek; şimdilik çağıran yer tutucu vererek yerleşimi
+        /// doğrular.</summary>
+        public void SetResults(int earnedStars, string leftStat, string rightStat)
+        {
+            for (int i = 0; i < stars.Count; i++)
+            {
+                StarDeco deco = stars[i];
+                if (deco.Renderer != null)
+                    deco.Renderer.color = i < earnedStars ? StarTint : DimStarTint;
+            }
+
+            if (statLeft != null) statLeft.text = leftStat;
+            if (statRight != null) statRight.text = rightStat;
+        }
+
+        /// <summary>Konfeti pullarını kurar (gizli): 1×1 beyaz sprite, tint ile
+        /// renklenir. Savrulma değerleri her patlamada ConfettiBurst'te zarlanır.</summary>
+        private void BuildConfetti()
+        {
+            confetti = new ConfettiPiece[ConfettiCount];
+            for (int i = 0; i < ConfettiCount; i++)
+            {
+                var go = new GameObject($"Confetti_{i}");
+                go.transform.SetParent(transform, false);
+
+                var renderer = go.AddComponent<SpriteRenderer>();
+                renderer.sprite = overlaySprite;
+                renderer.sortingOrder = ConfettiOrder;
+
+                go.SetActive(false);
+                confetti[i] = new ConfettiPiece { T = go.transform, R = renderer };
+            }
+        }
+
         private void BuildMessage(string message, float panelWidth, float panelHeight)
         {
             var go = new GameObject("Message");
             go.transform.SetParent(transform, false);
-            float y = panelHeight * 0.5f - TopPadding - MessageHeight * 0.5f;
+            float y = panelHeight * 0.5f - ContentTop - MessageHeight * 0.5f;
             go.transform.localPosition = new Vector3(0f, y, 0f);
 
             var tmp = go.AddComponent<TextMeshPro>();
@@ -290,7 +643,7 @@ namespace TubeSort.Game
             Sprite videoSprite, IReadOnlyList<PopupAction> actions,
             float buttonWidth, float panelHeight)
         {
-            float firstY = panelHeight * 0.5f - TopPadding - MessageHeight
+            float firstY = panelHeight * 0.5f - ContentTop - MessageHeight
                 - ButtonGap - ButtonHeight * 0.5f;
 
             for (int i = 0; i < actions.Count; i++)

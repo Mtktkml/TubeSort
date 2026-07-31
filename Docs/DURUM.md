@@ -36,18 +36,37 @@ garantili kurtarır. Metinlerde ğ/İ/Ş yok (fontta gömülü değil). ÖNEMLİ
 test tahtaları ÇÖZÜLEBİLİR kurulmalı (renk toplamları kapasiteyi doldurmalı),
 yoksa kilit testi baştan engeller.
 
-## Sıradaki iş: kazanma pop-up'ı
+## Kapanan iş: kazanma pop-up'ı ✅
 
-PopupView hazır: banner_ribbon + icon_star/trophy asset'leri de Resources'ta.
-İş büyük ölçüde içerik + akış: çözülünce AutoAdvance yerine/öncesinde pop-up
-("Tebrikler" yerine ğ/İ/Ş içermeyen metin!), sonraki level butonu.
+Kutlama stili (kullanıcı A tasarımını seçti; "kupa vitrini" alternatifi B
+silindi): kurdele banner "Tebrikler!", SIKI yıldız tacı (3 yıldız, yanlar
+binik, soldan sağa dolar — kazanılmayan SOLUK silüet), istatistik çipleri
+(Hamle/Süre — `stat_chip` = checkbox_beige_empty, doğal sıcak krem; progress
+görseli mavimsi gri dolgusu yüzünden elendi), "Bölüm tamamlandı" çip-buton
+tam ortasında, konfeti patlaması + zıplamalı belirme + yıldız koreografisi.
+Çözülünce 0.7 sn sonra pop-up (OTO-GEÇİŞ YOK artık), "Sonraki" ilerletir.
+
+**DİKKAT — YER TUTUCU:** hamle/süre/yıldız değerleri şu an RASTGELE
+(`BoardView.ShowWinPopupAfterDelay`, açıkça yorumlanmış). Gerçek sayaçlar
+ayrı işte yapılacak (aşağıda).
+
+## SIRADAKİ OTURUM: önce mentör feedback'i 📌
+
+Kullanıcı mentöründen feedback aldı; **sonraki oturumda anlatacak** — yeni
+işe başlamadan ÖNCE bunu dinle, öncelikleri ona göre kur.
+
+Bekleyen bilinen işler (mentör feedback'i öncelikleri değiştirebilir):
+1. **Sayaçlar + yıldız kuralı** (ayrı branch): hamle sayacı (undo düşülür mü?
+   karar), kronometre, 1-3 yıldız türetme (aday: pilot_levels.json'daki
+   `shortest` değerine yakınlık). Pop-up'a `SetResults` kapısı hazır.
+2. Reklam SDK entegrasyonu (çıkmaz pop-up rozetleri stub).
+3. Telefon performansı / ses-ikon / build (CLAUDE.md "Bilinen eksikler").
 
 ## Büyük yol haritası (mentör — 4 iş)
 
 1. **Level içeriği: hep 2 boş + zorluk** ✅ (master'da)
-2. **Kazanma pop-up'ı** ("Tebrikler, sonraki level") ← tıklama işinden sonra
-3. **Çıkmaz pop-up'ı + hamle kilidi + "reklam izle"** (undo/+tüp/refresh) — pop-up
-   altyapısını 2'den yeniden kullanır
+2. **Kazanma pop-up'ı** ✅ (master'da; sayaçlar yer tutucu)
+3. **Çıkmaz pop-up'ı + hamle kilidi** ✅ (master'da; "reklam izle" stub)
 4. **(Park) Yeni asset entegrasyonu** — asset gelince görsel katman yenilenir
 
 ## Notlar

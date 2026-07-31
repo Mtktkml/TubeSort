@@ -149,12 +149,21 @@ her zaman 2 boş (rastgele üretim tek boşta çöker). Her tier'dan 2 tahta ekr
 
 ## Oynanış akışı
 
-- **Level geçişi:** çözülünce kısa gecikmeyle sonraki; skip/önceki navigasyonu;
-  restart (yüklemedeki `pristineBoard` kopyasından); +tüp (`Board.AddTube` + görünüm
+- **Level geçişi:** çözülünce kısa gecikmeyle KAZANMA pop-up'ı (kutlama stili;
+  "Sonraki" ilerletir — oto-geçiş yok artık); skip/önceki navigasyonu; restart
+  (yüklemedeki `pristineBoard` kopyasından); +tüp (`Board.AddTube` + görünüm
   yeniden kurma).
-- **Çıkmaz tespiti:** her hamleden sonra `Solver.IsSolvable` (ilk çözümde duran ucuz
-  kontrol). Çözülemez duruma düşülünce "Çıkmaz!" banner'ı çıkar ve undo/restart/+tüp
-  butonları yanıp sönerek yönlendirir.
+- **Çıkmaz tespiti:** çözülebilirlik HAMLE ANINDA hesaplanıp cache'lenir
+  (`boardUnsolvable`; `Solver.IsSolvable` ilk çözümde durur, hamle başına tek
+  çağrı). Çıkmaz veride yeni hamle ve tüp seçimi KİLİTLİ (Geri Al bu yüzden
+  garantili kurtarır); animasyon bitince çıkmaz pop-up'ı açılır, kurtarma:
+  Geri Al / +1 Tüp / Baştan Al (reklam rozetleri şimdilik stub).
+- **Pop-up'lar (`PopupView`):** Kenney asset'lerinden (`Resources/UI`, CC0)
+  kurulan genel bileşen — "her şey koddan çizilir" kuralının bilinçli istisnası
+  (kullanıcı kararı). Açıkken TÜM dokunuşları yutar. Kutlama (festive) modu:
+  kurdele banner + yıldız koreografisi + zıplamalı belirme. UI metinlerinde
+  **ğ/İ/Ş kullanılmaz** (fontta gömülü değil). Test tahtaları ÇÖZÜLEBİLİR
+  kurulmalı (renk toplamları kapasiteleri doldurmalı) — hamle kilidi yüzünden.
 
 **Dökme animasyonu** — `AnimatePour` coroutine'i, kayma + eğilme + dökme eş zamanlı,
 sonra doğrulma + geri dönüş eş zamanlı. Model: **fiziksel eğim + zamanlayıcılı boşalma**.
