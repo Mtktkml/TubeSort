@@ -157,16 +157,27 @@ her zaman 2 boş (rastgele üretim tek boşta çöker). Her tier'dan 2 tahta ekr
   butonları yanıp sönerek yönlendirir.
 
 **Dökme animasyonu** — `AnimatePour` coroutine'i, kayma + eğilme + dökme eş zamanlı,
-sonra doğrulma + geri dönüş eş zamanlı:
+sonra doğrulma + geri dönüş eş zamanlı. Model: **fiziksel eğim + zamanlayıcılı boşalma**.
 
-- Tek açı sistemi: açı `CalculatePourAngle`'dan gelir, `SmoothDamp` ile pürüzsüz
-  takip edilir (`_TiltAngle` uniform'u shader'a geçer; sıvı yüzeyi dünya uzayında
-  yatay kalır). Eğim sıvı miktarına bağlı dinamik: dolu tüp ~60°, boş tüp ~100°.
-- Ağız her karede hedefin üstüne konumlanır (`CalculatePourPosition`); stream kaynağı
-  her zaman lip'ten (`CalculateSourceMouth`), sıvı yüzeyinden değil.
-- Görsel yüzey fiziksel modele demirlenir (`AnchorLiquidToLip`, `_SurfaceLift`):
-  kolon sıvıya yapışık kalır. Ağza sabit kilit denendi, kötü sonuç verdi — tekrar
-  denenmesin.
+- Fiziksel eğim: tüp, sıvıyı döken kenarda dudağın biraz ÜSTÜNE (normalize **1.05**)
+  taşıyacak kadar eğilir (`CalculatePourAngle` → `AngleForLiquidAtLip`); sıvı
+  azaldıkça açı artar (dolu ~50°, son birim ~83-88°). Tavan `MaxPourAngle` = 88°,
+  shader'daki eğim kelepçesiyle (`max(|cos|,0.03)` ≈ 88.3°) **twin sabit**.
+  1.05 payı ŞART: dökme kapısı kenarın 1.0'ı geçmesini bekler ve `SmoothDamp`
+  kritik sönümlü olduğundan hedefini asla aşmaz — pay tam 1.0 olursa asimptot
+  donması yaşanır (yaşandı; `PourFreezeTests`'te regresyon testi var).
+- Açı, dökme başlayana dek `SmoothDamp` ile yükselir; başladıktan sonra güncel
+  fill'in dudak açısını **birebir** izler (`MoveTowards`, gecikme yok) — SmoothDamp
+  gecikmesi (~6°) sıvıyı dudaktan düşürüp akış kolonundan koparıyordu.
+- Boşalma **zamanlayıcıyla** ilerler (dudak-gating YOK): akışla birlikte tam biter,
+  donma imkânsız. Watchdog yalnız emniyet.
+- Ağız her karede hedefin üstüne konumlanır (`CalculatePourPosition`); stream
+  kaynağı lip ile görünen sıvı kenarının yükseği (`CalculateStreamSource`,
+  `TiltedEdgeLevel`'a demirli — kolon sıvıya yapışık kalır).
+- Shader'da yüzey VE katman sınırları **hacim-korumalı** çizilir (az sıvıda/dik
+  açıda düz kayma hacmi şişirir ve alt katmanları iplik gibi inceltirdi): taban
+  `V >= halfRise ? V : sqrt(2·|k|·V) − halfRise`. `_SurfaceLift` bu modelde
+  pratikte 0 (anchor mantığı yine de duruyor).
 - Katman güncelleme zamanlaması: **kaynak** tüp doğrulma sonrası `Refresh`, **hedef**
   tüp dökme öncesi `Refresh`; seviyeler kademeli akar (ışınlanma yok, undo dahil).
 
