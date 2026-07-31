@@ -48,9 +48,22 @@ namespace TubeSort.Game
         private static readonly Color VideoIconTint = new Color(0.42f, 0.30f, 0.19f, 1f);
 
         // Kutlama (festive) modu: kazanma pop-up'ı çıkmazdan daha CANLI olsun
-        // (kullanıcı isteği) — yıldız bandı + zıplamalı belirme + sürekli nabız.
+        // (kullanıcı isteği) — yıldız bandı + zıplamalı belirme + sürekli nabız
+        // + gösterim anında konfeti patlaması.
         private const float StarBandHeight = 0.9f;
         private static readonly Color StarTint = new Color(1f, 0.84f, 0.25f, 1f);
+
+        // Konfeti: panel üstünden savrulan renkli pullar (koddan üretilir,
+        // asset yok). Renkler oyunun parlak toon ailesinden.
+        private const int ConfettiCount = 30;
+        private const int ConfettiOrder = 206;   // pop-up'taki her şeyin önünde
+        private const float ConfettiGravity = 9f;
+        private static readonly Color[] ConfettiColors =
+        {
+            new Color(0.92f, 0.30f, 0.26f), new Color(0.98f, 0.62f, 0.22f),
+            new Color(0.99f, 0.85f, 0.30f), new Color(0.42f, 0.80f, 0.40f),
+            new Color(0.36f, 0.62f, 0.92f), new Color(0.65f, 0.48f, 0.85f),
+        };
 
         // Yerleşim ölçüleri (dünya birimi). Panel genişliği kameradan hesaplanır;
         // buton/pay ölçüleri sabit — telefon dikey ekranda okunaklı boylar.
@@ -80,18 +93,33 @@ namespace TubeSort.Game
             public Color BaseColor;
         }
 
-        // Kutlama yıldızı: taban ölçek StarDance koreografisinde çarpan olur.
+        // Kutlama yıldızı: taban ölçek/eğim StarDance koreografisinde kullanılır.
         private struct StarDeco
         {
             public Transform Star;
             public float BaseScale;
+            public float BaseTilt;
+        }
+
+        // Konfeti pulu: hız/dönüş/ömür her patlamada yeniden zarlanır.
+        private struct ConfettiPiece
+        {
+            public Transform T;
+            public SpriteRenderer R;
+            public Vector2 Vel;
+            public float Spin;
+            public float Age;
+            public float Life;
         }
 
         private readonly List<ButtonHit> buttons = new List<ButtonHit>();
         private readonly List<StarDeco> stars = new List<StarDeco>();
+        private ConfettiPiece[] confetti;
         private bool festive;
+        private float panelHalfHeight;
         private Coroutine appearRoutine;
         private Coroutine starRoutine;
+        private Coroutine confettiRoutine;
 
         /// <summary>Pop-up ekranda mı? BoardView dokunuş yönlendirmesi buna bakar.</summary>
         public bool Visible => gameObject.activeSelf;
@@ -122,10 +150,16 @@ namespace TubeSort.Game
                 + Mathf.Max(0, actions.Count - 1) * ButtonGap
                 + BottomPadding;
 
+            panelHalfHeight = panelHeight * 0.5f;
+
             BuildOverlay();
             BuildPanel(panelSprite, panelWidth, panelHeight);
             BuildBanner(bannerSprite, title, panelWidth, panelHeight);
-            if (festive) BuildStars(panelWidth, panelHeight);
+            if (festive)
+            {
+                BuildStars(panelHeight);
+                BuildConfetti();   // overlaySprite'ı kullanır: BuildOverlay sonrası
+            }
             BuildMessage(message, panelWidth, panelHeight);
             BuildButtons(buttonSprite, badgeSprite, videoSprite,
                 actions, buttonWidth, panelHeight);
@@ -162,6 +196,8 @@ namespace TubeSort.Game
             {
                 if (starRoutine != null) StopCoroutine(starRoutine);
                 starRoutine = StartCoroutine(StarDance());
+                if (confettiRoutine != null) StopCoroutine(confettiRoutine);
+                confettiRoutine = StartCoroutine(ConfettiBurst());
             }
         }
 
@@ -177,6 +213,14 @@ namespace TubeSort.Game
                 StopCoroutine(starRoutine);
                 starRoutine = null;
             }
+            if (confettiRoutine != null)
+            {
+                StopCoroutine(confettiRoutine);
+                confettiRoutine = null;
+            }
+            if (confetti != null)
+                foreach (ConfettiPiece piece in confetti)
+                    if (piece.T != null) piece.T.gameObject.SetActive(false);
             transform.localScale = Vector3.one;
             gameObject.SetActive(false);
         }
@@ -253,7 +297,7 @@ namespace TubeSort.Game
                     float local = elapsed - startDelay - i * stagger;
 
                     float scale;
-                    float tiltDeg = 0f;
+                    float tiltDeg = deco.BaseTilt;   // taç eğimi hep korunur
                     if (local <= 0f)
                     {
                         scale = 0f;   // sırası gelmedi: görünmez
@@ -265,7 +309,7 @@ namespace TubeSort.Game
                     else
                     {
                         scale = 1f + 0.06f * Mathf.Sin(elapsed * 2.8f + i * 2.1f);
-                        tiltDeg = 7f * Mathf.Sin(elapsed * 1.9f + i * 1.3f);
+                        tiltDeg += 7f * Mathf.Sin(elapsed * 1.9f + i * 1.3f);
                     }
 
                     deco.Star.localScale = Vector3.one * (deco.BaseScale * scale);
@@ -274,6 +318,77 @@ namespace TubeSort.Game
 
                 yield return null;
             }
+        }
+
+        /// <summary>Konfeti patlaması: pullar panelin üst bölgesinden yukarı ve
+        /// yanlara fırlar, yerçekimiyle düşerken döner, ömrünün son üçte
+        /// birinde solup söner. Her gösterimde yeniden zarlanıp savrulur.</summary>
+        private IEnumerator ConfettiBurst()
+        {
+            for (int i = 0; i < confetti.Length; i++)
+            {
+                ConfettiPiece piece = confetti[i];
+                piece.T.localPosition = new Vector3(
+                    UnityEngine.Random.Range(-0.5f, 0.5f),
+                    panelHalfHeight + UnityEngine.Random.Range(-0.2f, 0.3f), 0f);
+                piece.T.localRotation = Quaternion.Euler(0f, 0f,
+                    UnityEngine.Random.Range(0f, 360f));
+                // Dikdörtgen pul: dönerken kağıt konfeti gibi parıldar.
+                piece.T.localScale = new Vector3(
+                    UnityEngine.Random.Range(0.10f, 0.16f),
+                    UnityEngine.Random.Range(0.05f, 0.09f), 1f);
+                piece.Vel = new Vector2(
+                    UnityEngine.Random.Range(-3.4f, 3.4f),
+                    UnityEngine.Random.Range(2.5f, 5.5f));
+                piece.Spin = UnityEngine.Random.Range(-540f, 540f);
+                piece.Age = 0f;
+                piece.Life = UnityEngine.Random.Range(0.9f, 1.5f);
+                piece.R.color = ConfettiColors[
+                    UnityEngine.Random.Range(0, ConfettiColors.Length)];
+                piece.T.gameObject.SetActive(true);
+                confetti[i] = piece;
+            }
+
+            bool anyAlive = true;
+            while (anyAlive)
+            {
+                anyAlive = false;
+                float dt = Time.deltaTime;
+
+                for (int i = 0; i < confetti.Length; i++)
+                {
+                    ConfettiPiece piece = confetti[i];
+                    if (!piece.T.gameObject.activeSelf) continue;
+
+                    piece.Age += dt;
+                    if (piece.Age >= piece.Life)
+                    {
+                        piece.T.gameObject.SetActive(false);
+                        confetti[i] = piece;
+                        continue;
+                    }
+
+                    piece.Vel.y -= ConfettiGravity * dt;
+                    piece.T.localPosition +=
+                        new Vector3(piece.Vel.x, piece.Vel.y, 0f) * dt;
+                    piece.T.localRotation = Quaternion.Euler(0f, 0f,
+                        piece.T.localRotation.eulerAngles.z + piece.Spin * dt);
+
+                    // Ömrün son ~üçte birinde sol.
+                    float fade = Mathf.Clamp01(
+                        (piece.Life - piece.Age) / (piece.Life * 0.35f));
+                    Color c = piece.R.color;
+                    c.a = fade;
+                    piece.R.color = c;
+
+                    confetti[i] = piece;
+                    anyAlive = true;
+                }
+
+                yield return null;
+            }
+
+            confettiRoutine = null;
         }
 
         /// <summary>Basış geri bildirimi: buton kısaca koyulaşır (basılı görsel
@@ -361,31 +476,55 @@ namespace TubeSort.Game
         }
 
         /// <summary>Kutlama yıldız bandı: banner ile mesaj arasında üç altın
-        /// yıldız, klasik taç dizilimi (ortadaki büyük ve hafif yukarıda).
+        /// yıldız, SIKI taç dizilimi — yanlar ortadakine neredeyse üst üste
+        /// binecek kadar sokulu, hafif aşağıda ve dışa yatık (kullanıcı isteği).
         /// Görünür hâle gelmeleri StarDance'te — burada yalnız kurulur.</summary>
-        private void BuildStars(float panelWidth, float panelHeight)
+        private void BuildStars(float panelHeight)
         {
             Sprite starSprite = LoadSprite("UI/icon_star");
             float bandY = panelHeight * 0.5f - TopPadding - StarBandHeight * 0.5f;
 
             for (int i = 0; i < 3; i++)
             {
-                float xFrac = (i - 1) * 0.24f;             // -0.24, 0, +0.24
+                float x = (i - 1) * 0.6f;                  // -0.6, 0, +0.6: sokulu
                 float baseScale = i == 1 ? 2.2f : 1.6f;    // orta yıldız büyük
-                float yOffset = i == 1 ? 0.08f : -0.06f;   // yanlar hafif aşağıda
+                float yOffset = i == 1 ? 0.1f : -0.08f;    // yanlar hafif aşağıda
+                float baseTilt = (1 - i) * 14f;            // sol +14°, sağ -14° dışa yatık
 
                 var go = new GameObject($"Star_{i}");
                 go.transform.SetParent(transform, false);
-                go.transform.localPosition = new Vector3(
-                    panelWidth * xFrac, bandY + yOffset, 0f);
+                go.transform.localPosition = new Vector3(x, bandY + yOffset, 0f);
                 go.transform.localScale = Vector3.zero;    // StarDance büyütür
 
                 var renderer = go.AddComponent<SpriteRenderer>();
                 renderer.sprite = starSprite;
                 renderer.color = StarTint;
-                renderer.sortingOrder = IconOrder;
+                // Orta yıldız önde: binen kanatlar onun altına girer.
+                renderer.sortingOrder = i == 1 ? IconOrder + 1 : IconOrder;
 
-                stars.Add(new StarDeco { Star = go.transform, BaseScale = baseScale });
+                stars.Add(new StarDeco
+                {
+                    Star = go.transform, BaseScale = baseScale, BaseTilt = baseTilt,
+                });
+            }
+        }
+
+        /// <summary>Konfeti pullarını kurar (gizli): 1×1 beyaz sprite, tint ile
+        /// renklenir. Savrulma değerleri her patlamada ConfettiBurst'te zarlanır.</summary>
+        private void BuildConfetti()
+        {
+            confetti = new ConfettiPiece[ConfettiCount];
+            for (int i = 0; i < ConfettiCount; i++)
+            {
+                var go = new GameObject($"Confetti_{i}");
+                go.transform.SetParent(transform, false);
+
+                var renderer = go.AddComponent<SpriteRenderer>();
+                renderer.sprite = overlaySprite;
+                renderer.sortingOrder = ConfettiOrder;
+
+                go.SetActive(false);
+                confetti[i] = new ConfettiPiece { T = go.transform, R = renderer };
             }
         }
 

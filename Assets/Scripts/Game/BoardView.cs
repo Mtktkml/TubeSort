@@ -348,7 +348,7 @@ namespace TubeSort.Game
         {
             var go = new GameObject("WinPopup");
             winPopup = go.AddComponent<PopupView>();
-            winPopup.Initialize(mainCamera, "Tebrikler!", "Bölüm tamamlandı!",
+            winPopup.Initialize(mainCamera, "Tebrikler!", "Bölüm tamamlandı",
                 new[]
                 {
                     new PopupView.PopupAction
