@@ -451,29 +451,9 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// Pilot önizlemede ok tuşlarıyla (← →) leveller arasında gezer;
-        /// 1..pilotCount arasında sarar. Bir geçiş yaptıysa true döner (o kare
-        /// tıklama işlenmesin). Klavye yoksa (telefon) sessizce false — dokunuş
-        /// akışı bozulmaz.
-        /// </summary>
-        private bool HandlePilotBrowse()
-        {
-            Keyboard keyboard = Keyboard.current;
-            if (keyboard == null || pilotCount <= 0) return false;
-
-            int step = 0;
-            if (keyboard.rightArrowKey.wasPressedThisFrame) step = 1;
-            else if (keyboard.leftArrowKey.wasPressedThisFrame) step = -1;
-            if (step == 0) return false;
-
-            StepPilot(step);
-            return true;
-        }
-
-        /// <summary>
         /// Pilot levelleri arasında verilen adım kadar ilerler (ör. +1 sonraki)
-        /// ve 1..pilotCount arasında sarar. Ok tuşları, skip ve önceki butonları
-        /// aynı kapıyı kullanır.
+        /// ve 1..pilotCount arasında sarar. Skip ve önceki butonları aynı
+        /// kapıyı kullanır.
         /// </summary>
         private void StepPilot(int step)
         {
@@ -947,11 +927,6 @@ namespace TubeSort.Game
         {
             RefitIfViewChanged();
 
-            // Ok tuşlarıyla level gezme. Geçiş yapıldıysa bu kare tıklama
-            // işlenmez (yeni tahta zaten kuruldu).
-            if (!AnyAnimating && HandlePilotBrowse())
-                return;
-
             // Pointer, Mouse ve Touchscreen'in ortak atasıdır: masaüstünde fare,
             // telefonda (ve Device Simulator'da) parmak aynı kodla okunur.
             Pointer pointer = Pointer.current;
@@ -1028,6 +1003,11 @@ namespace TubeSort.Game
 
         private void HandleTubeClick(int index)
         {
+            // Çıkmaza girildiyse tüp SEÇİMİ de kilitli (yalnız dökme değil):
+            // çıkmaza sokan hamlenin animasyonu sürerken — pop-up daha
+            // açılmadan — tüpler tıklamaya tepki vermesin.
+            if (boardUnsolvable) return;
+
             // Henüz seçim yok: boş tüpten dökme yapılamaz, tıpalı (complete)
             // tüp kilitlidir — ikisi de seçtirilmez (yukarı kalkmaz).
             if (selectedIndex == -1)

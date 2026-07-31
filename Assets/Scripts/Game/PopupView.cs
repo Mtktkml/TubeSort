@@ -254,9 +254,10 @@ namespace TubeSort.Game
             var textGo = new GameObject("Title");
             textGo.transform.SetParent(transform, false);
             // Başlık KIRMIZI BANDIN ortasına oturur, sprite merkezine değil:
-            // görselin üstünde askı pimleri var, bandın merkezi sprite
-            // merkezinin altında kalıyor — merkeze konunca yazı yukarı kaçıyordu.
-            textGo.transform.localPosition = new Vector3(0f, y - bannerHeight * 0.1f, 0f);
+            // görselin üstünde askı pimleri var. Ofset görselden ÖLÇÜLDÜ:
+            // bant orta sütunda 19-120. satırlar, merkezi 69.5; sprite merkezi
+            // 64 → fark 5.5/128 ≈ 0.043 yükseklik. (0.1 denendi: çok aşağı.)
+            textGo.transform.localPosition = new Vector3(0f, y - bannerHeight * 0.043f, 0f);
 
             var tmp = textGo.AddComponent<TextMeshPro>();
             tmp.text = title;
@@ -277,8 +278,9 @@ namespace TubeSort.Game
 
             var tmp = go.AddComponent<TextMeshPro>();
             tmp.text = message;
-            tmp.fontSize = 2.6f;
-            tmp.color = new Color(0.36f, 0.26f, 0.16f, 1f);   // krem panelde koyu kahve
+            tmp.fontSize = 3f;
+            tmp.fontStyle = FontStyles.Bold;   // krem panelde silik kalmasın
+            tmp.color = new Color(0.36f, 0.26f, 0.16f, 1f);   // koyu kahve
             tmp.alignment = TextAlignmentOptions.Center;
             tmp.rectTransform.sizeDelta = new Vector2(panelWidth - 2f * SidePadding, MessageHeight);
             tmp.sortingOrder = TextOrder;
