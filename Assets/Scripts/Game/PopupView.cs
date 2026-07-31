@@ -53,6 +53,14 @@ namespace TubeSort.Game
         // Bant büyüdükçe mesaj/butonlar ContentTop üzerinden orantılı kayar.
         private const float StarBandHeight = 1.1f;
         private static readonly Color StarTint = new Color(1f, 0.84f, 0.25f, 1f);
+        // Kazanılmamış yıldız: soluk silüet (yıldız sayısı skora bağlı olacak).
+        private static readonly Color DimStarTint = new Color(0.55f, 0.50f, 0.44f, 0.9f);
+
+        // İstatistik satırı (hamle/süre çipleri): yıldız bandı ile mesaj
+        // arasındaki boşluğu doldurur; metinler SetResults ile yazılır.
+        private const float StatsRowHeight = 0.7f;
+        private const float StatsGapAbove = 0.05f;
+        private static readonly Color StatChipTint = new Color(0.86f, 0.72f, 0.55f, 1f);
 
         // Konfeti: panel üstünden savrulan renkli pullar (koddan üretilir,
         // asset yok). Renkler oyunun parlak toon ailesinden.
@@ -94,10 +102,12 @@ namespace TubeSort.Game
             public Color BaseColor;
         }
 
-        // Kutlama yıldızı: taban ölçek/eğim StarDance koreografisinde kullanılır.
+        // Kutlama yıldızı: taban ölçek/eğim StarDance koreografisinde kullanılır;
+        // Renderer, kazanıldı/soluk boyaması için (SetResults).
         private struct StarDeco
         {
             public Transform Star;
+            public SpriteRenderer Renderer;
             public float BaseScale;
             public float BaseTilt;
         }
@@ -116,6 +126,8 @@ namespace TubeSort.Game
         private readonly List<ButtonHit> buttons = new List<ButtonHit>();
         private readonly List<StarDeco> stars = new List<StarDeco>();
         private ConfettiPiece[] confetti;
+        private TextMeshPro statLeft;    // "Hamle: X" çipi (kutlama)
+        private TextMeshPro statRight;   // "Süre: X" çipi (kutlama)
         private bool festive;
         private float panelHalfHeight;
         private Coroutine appearRoutine;
@@ -165,6 +177,7 @@ namespace TubeSort.Game
             if (festive)
             {
                 BuildStars(panelHeight);
+                BuildStats(buttonSprite, panelWidth, panelHeight);
                 BuildConfetti();   // overlaySprite'ı kullanır: BuildOverlay sonrası
             }
             BuildMessage(message, panelWidth, panelHeight);
@@ -175,8 +188,9 @@ namespace TubeSort.Game
         }
 
         /// <summary>Panelin üst kenarından içeriğin (mesajın) başladığı yere
-        /// kadarki pay: kutlamada araya yıldız bandı girer.</summary>
-        private float ContentTop => TopPadding + (festive ? StarBandHeight : 0f);
+        /// kadarki pay: kutlamada araya yıldız bandı + istatistik satırı girer.</summary>
+        private float ContentTop => TopPadding
+            + (festive ? StarBandHeight + StatsGapAbove + StatsRowHeight : 0f);
 
         /// <summary>Pop-up'ı kameranın ortasında gösterir (küçük büyüme animasyonuyla).</summary>
         public void Show()
@@ -511,9 +525,72 @@ namespace TubeSort.Game
 
                 stars.Add(new StarDeco
                 {
-                    Star = go.transform, BaseScale = baseScale, BaseTilt = baseTilt,
+                    Star = go.transform, Renderer = renderer,
+                    BaseScale = baseScale, BaseTilt = baseTilt,
                 });
             }
+        }
+
+        /// <summary>İstatistik çipleri: yıldız bandının altında yan yana iki
+        /// küçük plaka (hamle / süre) — pop-up'ın ortası boş kalmasın ve skor
+        /// bilgisine yer açılsın diye. Metinler SetResults ile yazılır.</summary>
+        private void BuildStats(Sprite chipSprite, float panelWidth, float panelHeight)
+        {
+            float rowY = panelHeight * 0.5f - TopPadding * 0.5f - StarBandHeight
+                - StatsGapAbove - StatsRowHeight * 0.5f;
+            const float chipGap = 0.25f;
+            float chipWidth = (panelWidth - 2f * SidePadding - chipGap) * 0.5f;
+
+            statLeft = BuildStatChip(chipSprite, "Hamle: -",
+                new Vector3(-(chipWidth + chipGap) * 0.5f, rowY, 0f), chipWidth);
+            statRight = BuildStatChip(chipSprite, "Süre: -",
+                new Vector3((chipWidth + chipGap) * 0.5f, rowY, 0f), chipWidth);
+        }
+
+        private TextMeshPro BuildStatChip(Sprite chipSprite, string text,
+            Vector3 position, float width)
+        {
+            var go = new GameObject("StatChip");
+            go.transform.SetParent(transform, false);
+            go.transform.localPosition = position;
+
+            var bg = go.AddComponent<SpriteRenderer>();
+            bg.sprite = chipSprite;
+            bg.drawMode = SpriteDrawMode.Sliced;
+            bg.size = new Vector2(width, StatsRowHeight);
+            bg.color = StatChipTint;   // butonlardan açık: tıklanabilir sanılmasın
+            bg.sortingOrder = ButtonOrder;
+
+            var textGo = new GameObject("Text");
+            textGo.transform.SetParent(go.transform, false);
+
+            var tmp = textGo.AddComponent<TextMeshPro>();
+            tmp.text = text;
+            tmp.fontSize = 2.3f;
+            tmp.fontStyle = FontStyles.Bold;
+            tmp.color = new Color(0.36f, 0.26f, 0.16f, 1f);   // koyu kahve
+            tmp.alignment = TextAlignmentOptions.Center;
+            tmp.rectTransform.sizeDelta = new Vector2(width - 0.2f, StatsRowHeight);
+            tmp.sortingOrder = TextOrder;
+            return tmp;
+        }
+
+        /// <summary>Kutlama sonuçlarını yazar (gösterimden ÖNCE çağrılır):
+        /// kazanılan yıldız sayısı (0-3; kalanlar soluk silüet — soldan sağa
+        /// dolar) ve istatistik metinleri. Yıldız sayısı ileride hamle/süre
+        /// skorundan türeyecek; şimdilik çağıran yer tutucu vererek yerleşimi
+        /// doğrular.</summary>
+        public void SetResults(int earnedStars, string leftStat, string rightStat)
+        {
+            for (int i = 0; i < stars.Count; i++)
+            {
+                StarDeco deco = stars[i];
+                if (deco.Renderer != null)
+                    deco.Renderer.color = i < earnedStars ? StarTint : DimStarTint;
+            }
+
+            if (statLeft != null) statLeft.text = leftStat;
+            if (statRight != null) statRight.text = rightStat;
         }
 
         /// <summary>Konfeti pullarını kurar (gizli): 1×1 beyaz sprite, tint ile

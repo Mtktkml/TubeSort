@@ -1167,7 +1167,20 @@ namespace TubeSort.Game
         private IEnumerator ShowWinPopupAfterDelay()
         {
             yield return new WaitForSeconds(WinPopupDelay);
-            if (winPopup != null && !winPopup.Visible) winPopup.Show();
+            if (winPopup == null || winPopup.Visible) yield break;
+
+            // YER TUTUCU (bilinçli): hamle/süre henüz sayılmıyor — rastgele
+            // değerlerle yerleşim ve değişken yıldız yapısı doğrulanıyor.
+            // Gerçek sayaçlar + yıldız kuralı (değerlerden 1-3 yıldız türetme)
+            // ayrı iş olarak gelecek.
+            int stars = Random.Range(1, 4);
+            int moves = Random.Range(12, 46);
+            int seconds = Random.Range(35, 200);
+            winPopup.SetResults(stars,
+                $"Hamle: {moves}",
+                $"Süre: {seconds / 60}:{seconds % 60:00}");
+
+            winPopup.Show();
         }
 
         /// <summary>
