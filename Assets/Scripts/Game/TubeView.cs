@@ -503,13 +503,19 @@ namespace TubeSort.Game
             properties.SetFloat(BottomRadiusId, BottomRadius);
         }
 
-        /// <summary>Tıklamayı yakalayacak görünmez alan. Cam gövdenin tamamını kaplar.</summary>
+        /// <summary>
+        /// Tıklamayı yakalayacak görünmez alan. Kutu KABA elemedir: cam gövde +
+        /// yakayı birlikte kapsar; asıl karar ContainsPoint'teki SDF'te verilir
+        /// (gövde ∪ yaka) — kutunun görselden taşan kısımları orada elenir.
+        /// </summary>
         private void CreateClickArea()
         {
             var box = gameObject.AddComponent<BoxCollider2D>();
 
-            box.size = new Vector2(QuadWidth, QuadHeight);
-            box.offset = new Vector2(0f, QuadHeight * 0.5f);
+            // Üst kenar yakanın tepesi, genişlik yakanın tam genişliği.
+            float top = BodyHeight + CollarCenterY + CollarSpriteHeight * 0.5f;
+            box.size = new Vector2(FullWidth, top);
+            box.offset = new Vector2(0f, top * 0.5f);
         }
 
         /// <summary>
@@ -844,7 +850,24 @@ namespace TubeSort.Game
             // Dörtgenin merkezi (0, QuadHeight/2) yerel konumunda; noktayı oraya taşı.
             Vector2 p = new Vector2(local.x, local.y - QuadHeight * 0.5f);
 
-            return SdTube(p) <= 0f;
+            if (SdTube(p) <= 0f) return true;
+
+            // Yaka da tıklanabilir: gövdeyle birleşim. Görselden taşma yok —
+            // stadyum, yaka sprite'ının görünür silüetini izler.
+            return SdCollar(local) <= 0f;
+        }
+
+        // Yaka tıklama şekli: FullWidth × CollarSpriteHeight boyutlu STADYUM
+        // (köşe yarıçapı = yarı yükseklik, uçlar tam yuvarlak), merkezi gövde
+        // tepesinin CollarCenterY üstünde. Sprite sınırlarının köşeleri şeffaf;
+        // stadyum o köşeleri dışarıda bırakır, tıklama görünür yakadan taşmaz.
+        // Tıpa bilerek DAHİL DEĞİL (tıpalı tüp zaten kilitli).
+        private float SdCollar(Vector3 local)
+        {
+            Vector2 center = new Vector2(0f, BodyHeight + CollarCenterY);
+            Vector2 half = new Vector2(CollarRx, CollarSpriteHeight * 0.5f);
+            return SdRoundedBox(new Vector2(local.x, local.y) - center, half,
+                half.y, half.y);
         }
 
         // Düz tüp: shader'daki SdTube ile aynı — yalnızca gövde kutusu, ağız
