@@ -1234,12 +1234,14 @@ namespace TubeSort.Game
                 float moveT = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(moveElapsed / slideDuration));
                 Vector3 currentBase = Vector3.Lerp(startPos, pourPos, moveT);
 
-                // Eğim her kare SmoothDamp ile hedefi izler. Hedef, sıvıyı
-                // dudağın 0.05 ÜSTÜNDE tutacak açı (AngleForLiquidAtLip):
-                // takipteki ufak gecikmede bile kenar 1.0'ın altına inmez,
-                // sıvı-akış teması korunur (taşan pay yaka arkasında gizli).
-                currentAngle = Mathf.SmoothDamp(
-                    currentAngle, targetAngle, ref angleVelocity, angleSmoothTime);
+                // Eğim, dökme BAŞLAYANA dek SmoothDamp ile hedefe yükselir.
+                // Dökme başladıktan sonra açı drain bloğunda fill'i birebir
+                // izler: SmoothDamp'in rampa takip gecikmesi (~6°) dudak payının
+                // açı karşılığını (0.05 ≈ 0.6-2.6°) aştığından sıvı dudaktan
+                // geri düşüyor, akış kolonundan görünür biçimde KOPUYORDU.
+                if (!pourStarted)
+                    currentAngle = Mathf.SmoothDamp(
+                        currentAngle, targetAngle, ref angleVelocity, angleSmoothTime);
 
                 // Dökme başlangıcı: tüp yerine kayıp SIVI DÖKEN KENARDA AĞZA
                 // ULAŞINCA başlar. Tüp eğildikçe sıvı yükselir; ağza değince akış
@@ -1256,15 +1258,25 @@ namespace TubeSort.Game
 
                 // Dökme ZAMANLAYICIYLA ilerler (gating YOK): seviye pürüzsüz
                 // düşüp akışla birlikte TAM biter (donma/sürünme imkânsız).
-                // fill düştükçe targetAngle kendiliğinden dikleşir (yukarıda),
-                // tüp sıvıyı dudakta tutarak eğilmeye devam eder. Son kırıntıda
-                // açı MaxPourAngle'da kelepçelenir; sıvı dudaktan geri çekilse
-                // de kolon sıvı yüzeyine demirli kalır (CalculateStreamSource).
+                // Tüp, sıvıyı dudakta tutarak eğilmeye devam eder (aşağıda).
+                // Son kırıntıda açı MaxPourAngle'da kelepçelenir; sıvı dudaktan
+                // geri çekilse de kolon sıvı yüzeyine demirli kalır
+                // (CalculateStreamSource).
                 if (pourStarted)
                 {
                     pourElapsed += dt;
                     float pourT = Mathf.Clamp01(pourElapsed / pourDuration);
                     fromView.SetFillLevel(Mathf.Lerp(fromStart, fromTarget, pourT));
+
+                    // Açı, GÜNCEL fill'in dudak açısını birebir izler (gecikme
+                    // sıfır): sıvı kenarı her karede 1.05'te, akış koluna bitişik.
+                    // MoveTowards yalnız kapı anındaki küçük farkı (kapı 1.0'da
+                    // açılır, hedef 1.05) birkaç karede kapatır; sonrasında hız
+                    // tavanına hiç dokunmadan birebir takip eder (drain süpürmesi
+                    // en dik yerde ~100°/sn'yi geçmez).
+                    const float catchUp = 360f * Mathf.Deg2Rad;
+                    currentAngle = Mathf.MoveTowards(currentAngle,
+                        -CalculatePourAngle(fromView) * direction, catchUp * dt);
 
                     // Hedef: bu dökmenin bu kareki katkı ARTIŞINI ekle (toplamalı).
                     // İki gelen aynı hedefi kendi payınca yükseltir; biri erken

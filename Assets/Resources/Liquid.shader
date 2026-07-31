@@ -184,11 +184,11 @@ Shader "TubeSort/Liquid"
                 // şekilde alçaltıyoruz: edge = sqrt(2·|k|·fill). Böylece son
                 // birim ağızda düzgün toplanıp biter. Dik/boş tüpte k=0 →
                 // taban = _FillLevel (değişmez; hedef tüp etkilenmez).
-                float k = tiltSlope * (_BodySize.x / _BodySize.y);
-                float halfRise = 0.5 * abs(k);
+                float slopeUV = tiltSlope * (_BodySize.x / _BodySize.y);
+                float halfRise = 0.5 * abs(slopeUV);
                 float surfaceBase = (_FillLevel >= halfRise)
                     ? _FillLevel
-                    : sqrt(2.0 * abs(k) * _FillLevel) - halfRise;
+                    : sqrt(2.0 * abs(slopeUV) * _FillLevel) - halfRise;
 
                 // _SurfaceLift: eski dudak demirlemesi. Hacim-korumalı taban +
                 // gerçek eğim (kelepçe 0.03) sıvıyı zaten doğru kenara/dudağa
@@ -271,16 +271,27 @@ Shader "TubeSort/Liquid"
 
                 // Bu piksel hangi katmanda? Katman sınırları dipten yukarı sıralı,
                 // o yüzden "üstünde kaldığım son sınır" katman indeksini verir.
-                // Tüp eğildiğinde katman sınırları da yüzeyle aynı açıda eğilir:
-                // yerçekimi tüm sıvılara eşit etki eder.
+                // Sınırlar yüzeyle AYNI hacim-korumalı tabanla çizilir: sınır_j,
+                // altında kalan toplam hacmi (_LayerTops[j]) koruyan yükseklikte.
+                // Düz kayma (sabit tiltOffset) dik açılarda sınır düzlemlerini
+                // tüp dibinin altına taşırıyor, alt katmanlar iplik gibi incelip
+                // hacimlerini kaybediyordu; üst katman dökülürken inen yüzey de
+                // alttakilerin bölgesini kesip onları "dökülüyor" gösteriyordu.
+                // Hacim-korumalı sınırla her katman eğik tüpte de gerçek payını
+                // kaplar (az hacimde ağız köşesinde iç içe kamalar) ve üst katman
+                // dökülürken yüzey hiçbir zaman alt sınırın altına inmez.
                 int layerIndex = 0;
-                for (int k = 0; k < MAX_LAYERS; k++)
+                for (int i = 0; i < MAX_LAYERS; i++)
                 {
+                    float top = _LayerTops[i];
+                    float topBase = (top >= halfRise)
+                        ? top
+                        : sqrt(2.0 * abs(slopeUV) * top) - halfRise;
                     // Sınır, 2.5D diskin ön yayı gibi ortada ellipseDepth kadar
                     // aşağı kavisli (üstten bakışta kesitin ön kenarı alçak görünür).
-                    if (k < _LayerCount && uv.y >= _LayerTops[k] + tiltOffset
+                    if (i < _LayerCount && uv.y >= topBase + tiltOffset
                         - ellipseDepth * arc)
-                        layerIndex = k + 1;
+                        layerIndex = i + 1;
                 }
                 layerIndex = clamp(layerIndex, 0, _LayerCount - 1);
 
