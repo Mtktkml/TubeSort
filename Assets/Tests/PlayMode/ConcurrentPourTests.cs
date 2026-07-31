@@ -48,7 +48,9 @@ namespace TubeSort.Tests.PlayMode
         {
             // 0->1 (kırmızı) ve 2->3 (sarı) ayrık çiftler; aynı anda dökülebilmeli.
             // 4->1 board açısından geçerli (kırmızı üstüne kırmızı, yer var) ama
-            // hedef (1) meşgul olduğu için reddedilmeli.
+            // hedef (1) meşgul olduğu için reddedilmeli. 6. tüp (sarı) yalnız
+            // renk toplamını kapasiteye tamamlar: çözümsüz tahtada TryPour
+            // yeni-hamle kilidiyle reddedilir, test hiç başlayamazdı.
             const int Red = 0, Yellow = 1;
             var view = BuildBoard(new Board(new List<Tube>
             {
@@ -57,6 +59,7 @@ namespace TubeSort.Tests.PlayMode
                 new Tube(4, Yellow, Yellow),
                 new Tube(4),
                 new Tube(4, Red, Red),
+                new Tube(4, Yellow, Yellow),
             }));
             yield return null; // Start çalışsın
 
@@ -97,12 +100,14 @@ namespace TubeSort.Tests.PlayMode
         {
             // Üç kırmızı kaynak, bir boş hedef (kapasite 4). İlk iki dökme hedefe
             // kabul edilmeli (karşı taraflardan); hedef 2 gelenle dolunca üçüncü
-            // reddedilmeli.
+            // reddedilmeli. 5. tüp yalnız renk toplamını 8'e (2 tam tüp)
+            // tamamlar: tahta çözülebilir kalsın (yeni-hamle kilidi).
             const int Red = 0;
             var view = BuildBoard(new Board(new List<Tube>
             {
                 new Tube(4, Red, Red),
                 new Tube(4),
+                new Tube(4, Red, Red),
                 new Tube(4, Red, Red),
                 new Tube(4, Red, Red),
             }));
