@@ -70,10 +70,13 @@ namespace TubeSort.Tests.PlayMode
         [UnityTest]
         public IEnumerator UndoLastMove_RestoresBoardAndVisuals()
         {
+            // 3. tüp yalnız kırmızı toplamını 4'e tamamlar: çözümsüz tahtada
+            // TryPour yeni-hamle kilidiyle reddedilir, hamle hiç başlayamazdı.
             yield return BuildBoard(new Board(new[]
             {
                 new Tube(4, Red, Red),
-                new Tube(4)
+                new Tube(4),
+                new Tube(4, Red, Red)
             }));
 
             Assert.IsTrue(view.TryPour(0, 1), "Test kurgusu: hamle geçerli olmalı");
@@ -133,10 +136,13 @@ namespace TubeSort.Tests.PlayMode
         [UnityTest]
         public IEnumerator LoadBoard_ClearsHistory()
         {
+            // 3. tüp renk toplamını 4'e tamamlar (yeni-hamle kilidi; yukarıdaki
+            // testle aynı sebep).
             yield return BuildBoard(new Board(new[]
             {
                 new Tube(4, Red, Red),
-                new Tube(4)
+                new Tube(4),
+                new Tube(4, Red, Red)
             }));
 
             Assert.IsTrue(view.TryPour(0, 1));

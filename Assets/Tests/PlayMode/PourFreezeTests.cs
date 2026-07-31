@@ -17,6 +17,10 @@ namespace TubeSort.Tests.PlayMode
     /// dokunuşlar yutulur). Bu testler donduran kombinasyonların makul
     /// sürede tamamlandığını doğrular; watchdog tetiklenirse LogError
     /// testi zaten kırmızıya düşürür.
+    ///
+    /// DİKKAT: test tahtaları ÇÖZÜLEBİLİR kurulmalı (renk toplamları
+    /// kapasiteleri tam doldurmalı) — çıkmaz veride TryPour yeni-hamle
+    /// kilidiyle reddedilir (çıkmaz pop-up kuralı), test hiç başlayamaz.
     /// </summary>
     public class PourFreezeTests
     {
@@ -97,7 +101,7 @@ namespace TubeSort.Tests.PlayMode
             var board = new Board(new List<Tube>
             {
                 new Tube(5, 0),
-                new Tube(5, 0, 0),
+                new Tube(5, 0, 0, 0, 0),   // toplam 5 birim: tahta çözülebilir
                 new Tube(5),
             });
 
@@ -112,7 +116,7 @@ namespace TubeSort.Tests.PlayMode
             var board = new Board(new List<Tube>
             {
                 new Tube(7, 0),
-                new Tube(7, 0, 0),
+                new Tube(7, 0, 0, 0, 0, 0, 0),   // toplam 7: tahta çözülebilir
                 new Tube(7),
             });
 
@@ -122,12 +126,12 @@ namespace TubeSort.Tests.PlayMode
         [UnityTest]
         public IEnumerator Pour_EmptyingCapacity7TubeCompletely_Completes()
         {
-            // Kaynak tamamen boşalır: fill 0'a inerken açı 90°'yi aşar;
-            // 90° ve ötesi "koşulsuz ağızda" kuralını da sınar.
+            // Kaynak tamamen boşalır: fill 0'a inerken açı MaxPourAngle
+            // tavanına dayanır; son kırıntının zamanlayıcıyla bitişini sınar.
             var board = new Board(new List<Tube>
             {
                 new Tube(7, 0, 0, 0),
-                new Tube(7, 0),
+                new Tube(7, 0, 0, 0, 0),   // toplam 7: tahta çözülebilir
                 new Tube(7),
             });
 
@@ -145,6 +149,7 @@ namespace TubeSort.Tests.PlayMode
             {
                 new Tube(8, 0, 0, 0, 0, 0),   // 5 birim renk 0 (mid-fill, kilit aralık)
                 new Tube(8),
+                new Tube(8, 0, 0, 0),   // toplam 8: tahta çözülebilir
             });
 
             yield return AssertPourCompletes(board, 0, 1, "kapasite 8 / mid-fill");
