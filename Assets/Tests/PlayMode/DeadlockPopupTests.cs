@@ -98,6 +98,28 @@ namespace TubeSort.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator Deadlock_BlocksNewMoves()
+        {
+            // Çözülemez ama hamlesi OLAN tahta: renk 1'den 3 birim var (kap 2
+            // tüpleri asla tam dolduramaz -> çözümsüz), yine de 0->2 dökmesi
+            // board kurallarınca geçerli. Çıkmaz kilidi bu hamleyi reddetmeli:
+            // çıkmaza girdikten sonra oyuncu yeni hamle yapamaz (bayrak hamle
+            // ANINDA güncellendiği için animasyon arasına sıkışan hamle dahil).
+            var view = BuildBoard(new Board(new List<Tube>
+            {
+                new Tube(2, 0, 1),
+                new Tube(2, 1, 0),
+                new Tube(2, 1),
+            }));
+            yield return null;
+            Assert.IsTrue(view.DeadlockPopupVisible, "Ön koşul: pop-up açık olmalı");
+
+            Assert.IsFalse(view.TryPour(0, 2),
+                "Çıkmazda yeni hamle reddedilmeli (kural olarak geçerli olsa da)");
+            Assert.AreEqual(2, view.Board[0].Count, "Tahta değişmemiş olmalı");
+        }
+
+        [UnityTest]
         public IEnumerator Restart_StillUnsolvable_PopupStays()
         {
             var view = BuildBoard(UnsolvableBoard());

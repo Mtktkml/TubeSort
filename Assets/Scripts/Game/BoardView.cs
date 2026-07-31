@@ -74,6 +74,11 @@ namespace TubeSort.Game
         private ButtonView restartButton;   // leveli baştan
         private ButtonView addTubeButton;   // +boş tüp
         private PopupView deadlockPopup;    // çıkmaz pop-up'ı (gizli başlar)
+        // Tahta VERİSİNİN çözülebilirliği (cache): her veri değişiminde
+        // RecomputeSolvability tazeler. TryPour'daki yeni-hamle kilidi ve
+        // pop-up kararı (RefreshDeadlockPopup) bunu okur — solver hamle başına
+        // bir kez koşar.
+        private bool boardUnsolvable;
         private TextMeshPro levelTitle;     // üst-orta "LEVEL x.y"
         private Board pristineBoard;         // mevcut levelin bozulmamış kopyası (restart için)
 
@@ -251,7 +256,8 @@ namespace TubeSort.Game
             ApplyLayout();
             UpdateLevelTitle();
             initialized = true;
-            // İlk tahta da çıkmaz olabilir (test/uç durum): uyarı baştan doğru.
+            // İlk tahta da çıkmaz olabilir (test/uç durum): durum baştan doğru.
+            RecomputeSolvability();
             RefreshDeadlockPopup();
         }
 
@@ -489,6 +495,11 @@ namespace TubeSort.Game
         /// </summary>
         public bool TryPour(int fromIndex, int toIndex)
         {
+            // Çıkmaza girildiyse YENİ hamle yok: bayrak hamle ANINDA güncellenir
+            // (aşağıda), pop-up ise animasyon bitince açılır. Böylece çıkmaza
+            // sokan hamlenin animasyonu sürerken araya sıkıştırılan ikinci hamle
+            // de reddedilir — pop-up'taki Geri Al hep çıkmaza sokan hamleyi alır.
+            if (boardUnsolvable) return false;
             // Kaynak tamamen serbest olmalı (ne boşalıyor ne dolduruluyor).
             if (IsBusy(fromIndex)) return false;
             // Hedef başka bir dökmenin kaynağı olamaz (boşalan tüpe dökülmez).
@@ -503,6 +514,12 @@ namespace TubeSort.Game
             PourResult result = board.Pour(fromIndex, toIndex);
             if (!result.Success) return false;
             float fillAmount = tubeViews[toIndex].TargetFillLevel - fillBefore;
+
+            // Çözülebilirlik hamle ANINDA hesaplanır (veri değişti): yeni hamle
+            // kilidi ve animasyon sonundaki pop-up kararı bu cache'i okur.
+            // Maliyet eskisiyle aynı — solver çağrısı animasyon sonundan buraya
+            // taşındı, hamle başına yine tek çağrı.
+            RecomputeSolvability();
 
             history.Record(result);
             var job = new PourJob
@@ -531,10 +548,10 @@ namespace TubeSort.Game
             if (!history.TryUndo(board, out PourResult undone)) return;
 
             ClearSelection();
-            // Çıkmaz uyarısını KOŞULLU güncelle (koşulsuz gizleme değil):
-            // eşzamanlı dökmede çıkmaza iki hamle birlikte sokmuş olabilir, tek
-            // geri alma yetmeyebilir. Pop-up yalnız tahta gerçekten çözülebilir
-            // hâle dönünce kapanır; hâlâ çıkmazsa kalır (undo verisi hemen işlendi).
+            // Veri geri alındı: çözülebilirliği tazele ve uyarıyı KOŞULLU
+            // güncelle (koşulsuz gizleme değil). Pop-up yalnız tahta gerçekten
+            // çözülebilir hâle dönünce kapanır; hâlâ çıkmazsa kalır.
+            RecomputeSolvability();
             RefreshDeadlockPopup();
             StartCoroutine(AnimateUndo(undone));
         }
@@ -629,7 +646,8 @@ namespace TubeSort.Game
             ApplyLayout();
 
             // Yeni tahta da çıkmaz olabilir (level geçişi / LoadBoard ile dış
-            // tahta / +tüp yetmedi): uyarı durumu her kurulumda tazelenir.
+            // tahta / +tüp yetmedi): çözülebilirlik ve uyarı her kurulumda tazelenir.
+            RecomputeSolvability();
             RefreshDeadlockPopup();
         }
 
@@ -1074,14 +1092,22 @@ namespace TubeSort.Game
             RefreshDeadlockPopup();
         }
 
-        /// <summary>Çıkmaz pop-up'ını tahtanın çözülebilirliğine göre günceller:
+        /// <summary>Tahta verisi her değiştiğinde çağrılır (hamle, geri alma,
+        /// +tüp, yükleme): çözülebilirlik cache'ini tazeler. Varlık kontrolü
+        /// ucuz (ilk çözümde durur); hamle başına bir kez koşar.</summary>
+        private void RecomputeSolvability()
+        {
+            boardUnsolvable = !Solver.IsSolvable(board);
+        }
+
+        /// <summary>Çıkmaz pop-up'ını cache'lenmiş çözülebilirliğe göre günceller:
         /// çözülemezse gösterir, çözülebilirse gizler. Hem dökme sonrası
         /// (ReportBoardState) hem geri alma sonrası çağrılır — bu yüzden pop-up
         /// yalnız gerçekten çıkmazdan çıkınca kapanır, her undo'da körü körüne
-        /// değil. Varlık kontrolü ucuz (ilk çözümde durur).</summary>
+        /// değil.</summary>
         private void RefreshDeadlockPopup()
         {
-            if (!Solver.IsSolvable(board))
+            if (boardUnsolvable)
             {
                 Debug.Log("<color=orange>Çıkmaz: bu tahtadan kazanılamaz.</color>");
                 ShowDeadlock();

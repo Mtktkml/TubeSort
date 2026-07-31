@@ -39,6 +39,14 @@ namespace TubeSort.Game
         private const int BadgeIconOrder = 204;
         private const int TextOrder = 205;
 
+        // Buton zemini krem sprite'a sıcak kahve tint: panel de krem olduğundan
+        // tintsiz buton panelde kayboluyordu (krem üstüne krem etiket okunmuyordu).
+        private static readonly Color ButtonTint = new Color(0.63f, 0.475f, 0.345f, 1f);
+        // Basış geri bildirimi: tabanın koyulaştırılmışı (basılı görsel asset'te yok).
+        private const float PressDarken = 0.75f;
+        // Video glifi koyu kahve: rozetin krem merkezinde beyaz glif okunmuyordu.
+        private static readonly Color VideoIconTint = new Color(0.42f, 0.30f, 0.19f, 1f);
+
         // Yerleşim ölçüleri (dünya birimi). Panel genişliği kameradan hesaplanır;
         // buton/pay ölçüleri sabit — telefon dikey ekranda okunaklı boylar.
         private const float MaxPanelWidth = 6f;
@@ -55,12 +63,16 @@ namespace TubeSort.Game
         private Texture2D overlayTexture;
         private Sprite overlaySprite;
 
-        // Buton vuruş testi: yerel dikdörtgen + iş + basış geri bildirimi için görsel.
+        // Buton vuruş testi: yerel dikdörtgen + iş + basış geri bildirimi için
+        // görsel. BaseColor kurulumda saklanır: basış rengi HEP bu tabandan
+        // türetilip HEP buna döner — basış anındaki renk taban alınsaydı hızlı
+        // basışlar kararmayı üst üste biriktirirdi (yaşandı).
         private struct ButtonHit
         {
             public Rect LocalRect;
             public Action OnClick;
             public SpriteRenderer Background;
+            public Color BaseColor;
         }
 
         private readonly List<ButtonHit> buttons = new List<ButtonHit>();
@@ -84,7 +96,6 @@ namespace TubeSort.Game
             Sprite buttonSprite = LoadSprite("UI/button_brown");
             Sprite badgeSprite = LoadSprite("UI/round_brown");
             Sprite videoSprite = LoadSprite("UI/icon_video");
-            Sprite exclaimSprite = LoadSprite("UI/icon_exclamation");
 
             float panelWidth = Mathf.Min(MaxPanelWidth,
                 CameraViewSize().x * PanelWidthFraction);
@@ -96,7 +107,7 @@ namespace TubeSort.Game
 
             BuildOverlay();
             BuildPanel(panelSprite, panelWidth, panelHeight);
-            BuildBanner(bannerSprite, exclaimSprite, title, panelWidth, panelHeight);
+            BuildBanner(bannerSprite, title, panelWidth, panelHeight);
             BuildMessage(message, panelWidth, panelHeight);
             BuildButtons(buttonSprite, badgeSprite, videoSprite,
                 actions, buttonWidth, panelHeight);
@@ -114,6 +125,11 @@ namespace TubeSort.Game
             // değişmiş olabilir — editörde pencere, cihazda döndürme).
             Vector2 view = CameraViewSize();
             overlay.transform.localScale = new Vector3(view.x + 2f, view.y + 2f, 1f);
+
+            // Her gösterim temiz sayfa: basış karartması kalmış olabilir
+            // (basış coroutine'i pop-up kapanınca yarıda ölür).
+            foreach (ButtonHit hit in buttons)
+                if (hit.Background != null) hit.Background.color = hit.BaseColor;
 
             gameObject.SetActive(true);
             if (appearRoutine != null) StopCoroutine(appearRoutine);
@@ -145,7 +161,7 @@ namespace TubeSort.Game
             {
                 if (!hit.LocalRect.Contains(local)) continue;
 
-                StartCoroutine(PressFlash(hit.Background));
+                StartCoroutine(PressFlash(hit));
                 hit.OnClick?.Invoke();
                 return;
             }
@@ -170,16 +186,18 @@ namespace TubeSort.Game
         }
 
         /// <summary>Basış geri bildirimi: buton kısaca koyulaşır (basılı görsel
-        /// varyantı asset'te yok; karartma onun yerini tutar).</summary>
-        private IEnumerator PressFlash(SpriteRenderer background)
+        /// varyantı asset'te yok; karartma onun yerini tutar). Renkler hep
+        /// SAKLI tabandan türetilir/tabana döner: anlık renkten türetmek, üst
+        /// üste basışlarda kararmayı biriktiriyordu.</summary>
+        private IEnumerator PressFlash(ButtonHit hit)
         {
-            if (background == null) yield break;
+            if (hit.Background == null) yield break;
 
-            Color baseColor = background.color;
-            background.color = new Color(
-                baseColor.r * 0.78f, baseColor.g * 0.78f, baseColor.b * 0.78f, baseColor.a);
+            Color baseColor = hit.BaseColor;
+            hit.Background.color = new Color(baseColor.r * PressDarken,
+                baseColor.g * PressDarken, baseColor.b * PressDarken, baseColor.a);
             yield return new WaitForSeconds(0.08f);
-            if (background != null) background.color = baseColor;
+            if (hit.Background != null) hit.Background.color = baseColor;
         }
 
         // ── Kurulum parçaları ──────────────────────────────────────────────
@@ -213,13 +231,15 @@ namespace TubeSort.Game
             renderer.sortingOrder = PanelOrder;
         }
 
-        private void BuildBanner(Sprite bannerSprite, Sprite iconSprite,
-            string title, float panelWidth, float panelHeight)
+        private void BuildBanner(Sprite bannerSprite, string title,
+            float panelWidth, float panelHeight)
         {
             // Banner panelin üst kenarına biner: merkez üst kenarın hafif üstünde.
             float bannerWidth = panelWidth * 0.82f;
             float scale = bannerSprite != null
                 ? bannerWidth / bannerSprite.bounds.size.x : 1f;
+            float bannerHeight = bannerSprite != null
+                ? bannerSprite.bounds.size.y * scale : 1f;
             float y = panelHeight * 0.5f + 0.12f;
 
             var go = new GameObject("Banner");
@@ -231,23 +251,12 @@ namespace TubeSort.Game
             renderer.sprite = bannerSprite;
             renderer.sortingOrder = BannerOrder;
 
-            // Ünlem ikonu: başlığın solunda, şeridin kırmızı bandı üstünde.
-            if (iconSprite != null)
-            {
-                var iconGo = new GameObject("BannerIcon");
-                iconGo.transform.SetParent(transform, false);
-                iconGo.transform.localPosition = new Vector3(-bannerWidth * 0.31f, y, 0f);
-                iconGo.transform.localScale = Vector3.one * 1.1f;
-
-                var iconRenderer = iconGo.AddComponent<SpriteRenderer>();
-                iconRenderer.sprite = iconSprite;
-                iconRenderer.color = new Color(1f, 0.96f, 0.88f, 1f);
-                iconRenderer.sortingOrder = TextOrder;
-            }
-
             var textGo = new GameObject("Title");
             textGo.transform.SetParent(transform, false);
-            textGo.transform.localPosition = new Vector3(0f, y, 0f);
+            // Başlık KIRMIZI BANDIN ortasına oturur, sprite merkezine değil:
+            // görselin üstünde askı pimleri var, bandın merkezi sprite
+            // merkezinin altında kalıyor — merkeze konunca yazı yukarı kaçıyordu.
+            textGo.transform.localPosition = new Vector3(0f, y - bannerHeight * 0.1f, 0f);
 
             var tmp = textGo.AddComponent<TextMeshPro>();
             tmp.text = title;
@@ -295,6 +304,7 @@ namespace TubeSort.Game
                 bg.sprite = buttonSprite;
                 bg.drawMode = SpriteDrawMode.Sliced;
                 bg.size = new Vector2(buttonWidth, ButtonHeight);
+                bg.color = ButtonTint;   // krem panelden ayrışsın, etiket okunsun
                 bg.sortingOrder = ButtonOrder;
 
                 // Sol: aksiyon ikonu (beyaz Kenney glifi).
@@ -345,6 +355,7 @@ namespace TubeSort.Game
 
                     var video = videoGo.AddComponent<SpriteRenderer>();
                     video.sprite = videoSprite;
+                    video.color = VideoIconTint;   // krem rozet merkezinde okunsun
                     video.sortingOrder = BadgeIconOrder;
                 }
 
@@ -354,6 +365,7 @@ namespace TubeSort.Game
                         buttonWidth, ButtonHeight),
                     OnClick = action.OnClick,
                     Background = bg,
+                    BaseColor = ButtonTint,
                 });
             }
         }
