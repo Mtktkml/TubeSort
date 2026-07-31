@@ -315,7 +315,7 @@ namespace TubeSort.Game
         {
             var go = new GameObject("DeadlockPopup");
             deadlockPopup = go.AddComponent<PopupView>();
-            deadlockPopup.Initialize(mainCamera, "Çıkmaz", "Tüm yollar kapandı!",
+            deadlockPopup.Initialize(mainCamera, "Çıkmaz", "Tüh :( Çözüm yolu kalmadı!",
                 new[]
                 {
                     new PopupView.PopupAction
