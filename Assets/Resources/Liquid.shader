@@ -156,10 +156,13 @@ Shader "TubeSort/Liquid"
                 // Tüp döndüğünde sıvı yüzeyi dünya uzayında yatay kalmalı.
                 // UV uzayında bunu sağlamak için yüzeyi eğim açısına göre
                 // ters yöne eğiyoruz. sin/cos oranı (tan) geometrik olarak doğru
-                // eğimi verir. cos küçüldükçe oran büyür; 0.2'nin altına inmemesi
-                // yüzeyin tüp dışına taşmasını önler. sin'in işareti her açıda
-                // doğru yönü korur (tan 90°'de işaret değiştirir, bu formül değiştirmez).
-                float tiltSlope = sin(_TiltAngle) / max(abs(cos(_TiltAngle)), 0.2);
+                // eğimi verir. Kelepçe 0.03 (~88.3°): fiziksel eğim yaklaşımında
+                // tüp sıvıyı ağza ulaştırmak için ~87°'ye kadar eğilir; kelepçe
+                // 0.2 (~78.7°) olsaydı yüzey orada fazla SIĞ kalıp sıvı dudağa
+                // ulaşamazdı. Aşağı sınır yalnız 90°'de bölme patlamasını önler
+                // (BoardView.MaxPourAngle ile eş; twin sabit). sin'in işareti her
+                // açıda doğru yönü korur.
+                float tiltSlope = sin(_TiltAngle) / max(abs(cos(_TiltAngle)), 0.03);
                 float tiltOffset = (0.5 - uv.x) * tiltSlope
                     * (_BodySize.x / _BodySize.y);
 
@@ -187,9 +190,10 @@ Shader "TubeSort/Liquid"
                     ? _FillLevel
                     : sqrt(2.0 * abs(k) * _FillLevel) - halfRise;
 
-                // _SurfaceLift: dökme sırasında dudak demirlemesi. Eğim tavanı
-                // ~65°'de tutulduğu için (bkz. CalculatePourAngle) pratikte 0;
-                // anchor mantığı bozulmasın diye yine de eklenir.
+                // _SurfaceLift: eski dudak demirlemesi. Hacim-korumalı taban +
+                // gerçek eğim (kelepçe 0.03) sıvıyı zaten doğru kenara/dudağa
+                // getirdiği için pratikte ≈0 (bkz. AnchorLiquidToLip); anchor
+                // mantığı bozulmasın diye yine de eklenir.
                 float surface = surfaceBase + tiltOffset + _SurfaceLift;
 
                 // ── 2.5D: hafif üstten bakış. Yüzey, üstten görünen ELİPS bir

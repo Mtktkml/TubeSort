@@ -40,6 +40,11 @@ namespace TubeSort.Game
                  "Süreler play mode'da yavaşlatıldığında bunu da büyütmen gerekebilir.")]
         [SerializeField] private float watchdogSeconds = 6f;
 
+        /// <summary>Dökme eğiminin üst sınırı. Shader'ın dik yüzeyi çizebildiği
+        /// kelepçenin (Liquid.shader, max(|cos|,0.03) → ~88.3°) altında; bu açıda
+        /// bile ulaşamayan son kırıntı koşulsuz boşalır (AnimatePour fullyTilted).</summary>
+        private const float MaxPourAngle = 87f * Mathf.Deg2Rad;
+
         private Board board;
         private readonly MoveHistory history = new MoveHistory();
         private ColorPalette palette;
@@ -1229,23 +1234,31 @@ namespace TubeSort.Game
                 currentAngle = Mathf.SmoothDamp(
                     currentAngle, targetAngle, ref angleVelocity, angleSmoothTime);
 
-                // Dökme başlangıcı: tüp yerine kayıp hedef eğimin ~%90'ına
-                // ulaşınca başlar. Fiziksel dudak-teması ARANMAZ — kap>=5'te az
-                // sıvı dudağa ancak ~90° (yatay) eğimde ulaşıyordu. Zamanlayıcılı
-                // boşalma bu yüzden eğim tavanını düşük tutabiliyor.
+                // Dökme başlangıcı: tüp yerine kayıp SIVI DÖKEN KENARDA AĞZA
+                // ULAŞINCA başlar. Tüp eğildikçe sıvı yükselir; ağza değince akış
+                // başlar (fiziksel his). Az sıvıda bu daha çok eğilme ister.
+                // İstisna: son kırıntı MaxPourAngle'da bile ağza tam ulaşamaz;
+                // tüp tam eğik olunca (fullyTilted) yine de başlatılır (donmasın).
                 if (!pourStarted
                     && moveElapsed >= slideDuration
-                    && Mathf.Abs(currentAngle) >= Mathf.Abs(targetAngle) * 0.9f)
+                    && (HasLiquidReachedMouth(fromView, currentAngle)
+                        || Mathf.Abs(currentAngle) >= MaxPourAngle * 0.98f))
                     pourStarted = true;
 
-                // Dökme ZAMANLAYICIYLA ilerler (fiziksel dudak-gating YOK): tüp
-                // eğik ve yerinde olduğu sürece seviye pürüzsüz düşer. Eski
-                // gating (sıvı lip'te mi?) kap>=5'te tüpü yataya devirtip
-                // takılmalara/ani boşalmalara yol açıyordu. Sıvının döken kenarda
-                // toplanma görseli artık shader'ın hacim-korumalı yüzeyinden gelir.
+                // Dökme YALNIZ sıvı döken kenarda dudağa ulaştıysa ilerler: tüp
+                // eğildikçe dipteki sıvı ağza gelir, dökme onunla senkron akar
+                // ("tüp bunu ağza ulaştırana kadar eğilmeli"). İstisna: tüp tam
+                // eğime (MaxPourAngle) ulaşıp daha fazla eğilemiyorsa son kırıntı
+                // koşulsuz boşalır — aksi halde ağza hiç ulaşamayıp donardı.
+                // Kolon sıvıya CalculateStreamSource ile demirli kaldığından
+                // bağlantı dökme boyunca kopmaz.
                 if (pourStarted)
                 {
-                    pourElapsed += dt;
+                    bool liquidAtLip = TiltedEdgeLevel(
+                        fromView.CurrentFill, currentAngle, fromView.Height) >= 0.95f;
+                    bool fullyTilted = Mathf.Abs(currentAngle) >= MaxPourAngle * 0.98f;
+                    if (liquidAtLip || fullyTilted)
+                        pourElapsed += dt;
 
                     float pourT = Mathf.Clamp01(pourElapsed / pourDuration);
                     fromView.SetFillLevel(Mathf.Lerp(fromStart, fromTarget, pourT));
@@ -1391,24 +1404,43 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// Tüpteki sıvı miktarına göre eğim açısını hesaplar: dolu tüp ~55°,
-        /// boş tüp ~65°. Üst sınır 65°'de tutulur — shader'ın eğik yüzeyi
-        /// temsil edebildiği aralıkta (eğim kelepçesi ~78.7°) ve YATAYDAN uzak.
-        ///
-        /// Eskiden boş tüpte 100°'ye + yükseklik-farkında geometrik bir alt
-        /// sınıra çıkıyordu; amaç sıvıyı fiziksel olarak döken kenardaki dudağa
-        /// taşımaktı (dökme dudak-temasına bağlıydı). Bu, kap>=5'te tüpü
-        /// neredeyse YATAY deviriyor, sıvı ince şeride dönüşüp "boşalmıyormuş"
-        /// gibi görünüyordu. Dökme artık zamanlayıcıya bağlı (bkz. AnimatePour),
-        /// o yüzden yüksek açıya gerek yok.
+        /// FİZİKSEL EĞİM yaklaşımı: tüp, sıvıyı döken kenarda ağza (normalize
+        /// 1.0) ulaştıracak kadar eğilir. Sıvı azaldıkça bu açı ARTAR — dolu
+        /// tüp ~48°, dipte tek birim kalınca ~85°+. Üst sınır MaxPourAngle
+        /// (shader'ın dik yüzeyi çizebildiği ~88° kelepçesinin altı); bunun
+        /// ötesinde son kırıntı için sonsuz eğim gerekir, orada tüp tam eğik
+        /// kabul edilip kalan koşulsuz boşalır (bkz. AnimatePour fullyTilted).
         /// </summary>
         private static float CalculatePourAngle(TubeView fromView)
         {
-            const float minAngle = 55f * Mathf.Deg2Rad;   // dolu tüp
-            const float maxAngle = 65f * Mathf.Deg2Rad;    // boş tüp
+            const float minAngle = 48f * Mathf.Deg2Rad;
+            float needed = AngleForLiquidAtLip(fromView.CurrentFill, fromView.Height);
+            return Mathf.Clamp(needed, minAngle, MaxPourAngle);
+        }
 
-            float fillRatio = Mathf.Clamp01(fromView.CurrentFill / fromView.MaxFill);
-            return Mathf.Lerp(maxAngle, minAngle, fillRatio);
+        /// <summary>
+        /// Sıvının döken kenarda ağza (normalize 1.0) tam ulaşması için gereken
+        /// eğim açısı — TiltedEdgeLevel'in tersi. İki rejim: yüzey iki duvarı da
+        /// kesiyorsa (fill>=0.5) tan = 2·(1-fill)·(H/W); az sıvıda üçgen rejimi
+        /// tan = (H/W)/(2·fill). fill→0'da tan→∞ (dikleşir); çağıran taraf
+        /// MaxPourAngle'da kelepçeler.
+        /// </summary>
+        private static float AngleForLiquidAtLip(float fill, float height)
+        {
+            float aspect = height / TubeView.Width;
+            float tan = (fill >= 0.5f)
+                ? 2f * (1f - fill) * aspect
+                : aspect / (2f * Mathf.Max(fill, 1e-4f));
+            return Mathf.Atan(tan);
+        }
+
+        /// <summary>
+        /// Verilen eğim açısında sıvının döken kenarda tüpün ağzına (normalize
+        /// 1.0) ulaşıp ulaşmadığı. Dökmenin başlaması için sıvı ağza değmeli.
+        /// </summary>
+        private static bool HasLiquidReachedMouth(TubeView view, float angle)
+        {
+            return TiltedEdgeLevel(view.CurrentFill, angle, view.Height) >= 1f;
         }
 
         /// <summary>
@@ -1452,8 +1484,11 @@ namespace TubeSort.Game
         /// </summary>
         private static void AnchorLiquidToLip(TubeView fromView, float signedAngle)
         {
+            // Kelepçe 0.03: Liquid.shader'daki eğim kelepçesiyle EŞ (twin sabit).
+            // Hacim-korumalı yüzeyle _SurfaceLift her rejimde ≈0 çıkar (görünen
+            // kenar zaten TiltedEdgeLevel'da); yine de tutarlılık için eşlenir.
             float tiltSlope = Mathf.Sin(signedAngle)
-                / Mathf.Max(Mathf.Abs(Mathf.Cos(signedAngle)), 0.2f);
+                / Mathf.Max(Mathf.Abs(Mathf.Cos(signedAngle)), 0.03f);
             float shearEdge = fromView.CurrentFill
                 + Mathf.Abs(0.5f * tiltSlope * (TubeView.Width / fromView.Height));
             float physicalEdge = Mathf.Min(1.05f, TiltedEdgeLevel(
@@ -1491,21 +1526,13 @@ namespace TubeSort.Game
         {
             float lipSide = -Mathf.Sign(signedAngle);
 
-            // Eğik sıvı yüzeyinin döken kenardaki yüksekliği (normalize, 0-1).
-            // Shader'ın düzlem kaydırması ile fiziksel modelin (TiltedEdgeLevel)
-            // BÜYÜĞÜ: AnchorLiquidToLip görseli fiziksel modele kaldırdığı için
-            // ekranda görünen kenar ikisinin maksimumudur — kolonun çapası da
-            // aynı gerçeğe bakmalı ki sıvıya yapışık kalsın.
-            float tiltSlope = Mathf.Sin(signedAngle)
-                / Mathf.Max(Mathf.Abs(Mathf.Cos(signedAngle)), 0.2f);
-            float shearEdge = fromView.CurrentFill
-                + Mathf.Abs(0.5f * tiltSlope * (TubeView.Width / fromView.Height));
-            float physicalEdge = Mathf.Min(1.05f, TiltedEdgeLevel(
+            // Görünen sıvı kenarı artık shader'ın HACİM-KORUMALI yüzeyinden
+            // gelir: döken kenardaki yükseklik = TiltedEdgeLevel (fiziksel, hacim
+            // korunumlu), tepede 1.0'da kırpılır. Akış kolonu buraya demirlenir;
+            // sıvı ağza tam ulaşmasa da (son kırıntı) kolon sıvının gerçek
+            // yüzeyine bağlı kalır → dökme boyunca bağlantı kopmaz.
+            float surfaceNorm = Mathf.Clamp01(TiltedEdgeLevel(
                 fromView.CurrentFill, signedAngle, fromView.Height));
-            float surfaceNorm = Mathf.Max(shearEdge, physicalEdge);
-
-            // Tüp tepesini (1.0) aşamaz, tabandan (0) inemez.
-            surfaceNorm = Mathf.Clamp(surfaceNorm, 0f, 1f);
 
             Vector3 localPos = new Vector3(
                 TubeView.Width * 0.5f * lipSide,
