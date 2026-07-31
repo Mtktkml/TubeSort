@@ -40,10 +40,13 @@ namespace TubeSort.Game
                  "Süreler play mode'da yavaşlatıldığında bunu da büyütmen gerekebilir.")]
         [SerializeField] private float watchdogSeconds = 6f;
 
-        /// <summary>Dökme eğiminin üst sınırı. Shader'ın dik yüzeyi çizebildiği
-        /// kelepçenin (Liquid.shader, max(|cos|,0.03) → ~88.3°) altında; bu açıda
-        /// bile ulaşamayan son kırıntı koşulsuz boşalır (AnimatePour fullyTilted).</summary>
-        private const float MaxPourAngle = 87f * Mathf.Deg2Rad;
+        /// <summary>Dökme eğiminin üst sınırı (~yatay). Shader'ın dik yüzeyi
+        /// çizebildiği kelepçenin (Liquid.shader, max(|cos|,0.03) → ~88.3°)
+        /// hemen altında: bu açıda cos88≈0.035 > 0.03 olduğundan yüzey gerçek
+        /// eğimle çizilir ve fill≈0.05'e kadar sıvı döken kenarda dudağa ulaşır.
+        /// Ötesinde (90°'ye doğru) düzlem-yüzey modeli geçersizleşir; son kırıntı
+        /// burada zamanlayıcıyla yine de biter (AnimatePour).</summary>
+        private const float MaxPourAngle = 88f * Mathf.Deg2Rad;
 
         private Board board;
         private readonly MoveHistory history = new MoveHistory();
@@ -1231,8 +1234,13 @@ namespace TubeSort.Game
                 float moveT = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(moveElapsed / slideDuration));
                 Vector3 currentBase = Vector3.Lerp(startPos, pourPos, moveT);
 
-                currentAngle = Mathf.SmoothDamp(
-                    currentAngle, targetAngle, ref angleVelocity, angleSmoothTime);
+                // Eğim: dökme BAŞLAMADAN önce SmoothDamp ile pürüzsüz yükselir.
+                // Dökme başlayınca açı doğrudan fill'e KİLİTLENİR (drain bloğunda)
+                // — SmoothDamp gecikmesi olmasın ki sıvı her karede dudakta kalıp
+                // akış koluna bitişik dursun.
+                if (!pourStarted)
+                    currentAngle = Mathf.SmoothDamp(
+                        currentAngle, targetAngle, ref angleVelocity, angleSmoothTime);
 
                 // Dökme başlangıcı: tüp yerine kayıp SIVI DÖKEN KENARDA AĞZA
                 // ULAŞINCA başlar. Tüp eğildikçe sıvı yükselir; ağza değince akış
@@ -1245,23 +1253,21 @@ namespace TubeSort.Game
                         || Mathf.Abs(currentAngle) >= MaxPourAngle * 0.98f))
                     pourStarted = true;
 
-                // Dökme YALNIZ sıvı döken kenarda dudağa ulaştıysa ilerler: tüp
-                // eğildikçe dipteki sıvı ağza gelir, dökme onunla senkron akar
-                // ("tüp bunu ağza ulaştırana kadar eğilmeli"). İstisna: tüp tam
-                // eğime (MaxPourAngle) ulaşıp daha fazla eğilemiyorsa son kırıntı
-                // koşulsuz boşalır — aksi halde ağza hiç ulaşamayıp donardı.
-                // Kolon sıvıya CalculateStreamSource ile demirli kaldığından
-                // bağlantı dökme boyunca kopmaz.
+                // Dökme ZAMANLAYICIYLA ilerler (gating YOK): tüp eğik ve yerinde
+                // olduğu sürece seviye pürüzsüz düşüp akışla birlikte TAM biter
+                // (donma/sürünme yok). Açı her karede fill'e KİLİTLİ: sıvıyı döken
+                // kenarda dudakta (edge=1.0) tutacak açı = CalculatePourAngle(fill).
+                // fill pürüzsüz düştüğü için tüp de pürüzsüz eğilir; SmoothDamp
+                // gecikmesi olmadığından sıvı akış koluna DÖKME BOYUNCA bitişik
+                // kalır. Son kırıntıda açı MaxPourAngle'da kelepçelenir (sıvı biraz
+                // dudağın altında kalabilir; kolon yine sıvı yüzeyine demirli).
                 if (pourStarted)
                 {
-                    bool liquidAtLip = TiltedEdgeLevel(
-                        fromView.CurrentFill, currentAngle, fromView.Height) >= 0.95f;
-                    bool fullyTilted = Mathf.Abs(currentAngle) >= MaxPourAngle * 0.98f;
-                    if (liquidAtLip || fullyTilted)
-                        pourElapsed += dt;
-
+                    pourElapsed += dt;
                     float pourT = Mathf.Clamp01(pourElapsed / pourDuration);
                     fromView.SetFillLevel(Mathf.Lerp(fromStart, fromTarget, pourT));
+                    currentAngle = -CalculatePourAngle(fromView) * direction;
+
                     // Hedef: bu dökmenin bu kareki katkı ARTIŞINI ekle (toplamalı).
                     // İki gelen aynı hedefi kendi payınca yükseltir; biri erken
                     // bitse de kalan dökmenin artışı sürer. Tek dökmede toplam
