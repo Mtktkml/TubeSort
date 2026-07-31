@@ -58,9 +58,12 @@ namespace TubeSort.Game
 
         // İstatistik satırı (hamle/süre çipleri): yıldız bandı ile mesaj
         // arasındaki boşluğu doldurur; metinler SetResults ile yazılır.
+        // Zemin: stat_chip (progress_white_border) — yumuşak köşeli açık
+        // plaka; buton görselinden bilerek farklı (tıklanabilir sanılmasın,
+        // kullanıcı kahverengi tabela hâlini beğenmedi).
         private const float StatsRowHeight = 0.7f;
         private const float StatsGapAbove = 0.05f;
-        private static readonly Color StatChipTint = new Color(0.86f, 0.72f, 0.55f, 1f);
+        private static readonly Color StatChipTint = new Color(1f, 0.97f, 0.90f, 1f);
 
         // Konfeti: panel üstünden savrulan renkli pullar (koddan üretilir,
         // asset yok). Renkler oyunun parlak toon ailesinden.
@@ -177,7 +180,7 @@ namespace TubeSort.Game
             if (festive)
             {
                 BuildStars(panelHeight);
-                BuildStats(buttonSprite, panelWidth, panelHeight);
+                BuildStats(panelWidth, panelHeight);
                 BuildConfetti();   // overlaySprite'ı kullanır: BuildOverlay sonrası
             }
             BuildMessage(message, panelWidth, panelHeight);
@@ -188,9 +191,13 @@ namespace TubeSort.Game
         }
 
         /// <summary>Panelin üst kenarından içeriğin (mesajın) başladığı yere
-        /// kadarki pay: kutlamada araya yıldız bandı + istatistik satırı girer.</summary>
-        private float ContentTop => TopPadding
-            + (festive ? StarBandHeight + StatsGapAbove + StatsRowHeight : 0f);
+        /// kadarki pay. Kutlamada: yıldız bandı + istatistik satırı + ButtonGap —
+        /// böylece mesajın üstündeki boşluk (ButtonGap) altındakiyle EŞİT olur,
+        /// mesaj istatistiklerle Sonraki butonunun tam ortasında durur.</summary>
+        private float ContentTop => festive
+            ? TopPadding * 0.5f + StarBandHeight + StatsGapAbove + StatsRowHeight
+                + ButtonGap
+            : TopPadding;
 
         /// <summary>Pop-up'ı kameranın ortasında gösterir (küçük büyüme animasyonuyla).</summary>
         public void Show()
@@ -534,8 +541,9 @@ namespace TubeSort.Game
         /// <summary>İstatistik çipleri: yıldız bandının altında yan yana iki
         /// küçük plaka (hamle / süre) — pop-up'ın ortası boş kalmasın ve skor
         /// bilgisine yer açılsın diye. Metinler SetResults ile yazılır.</summary>
-        private void BuildStats(Sprite chipSprite, float panelWidth, float panelHeight)
+        private void BuildStats(float panelWidth, float panelHeight)
         {
+            Sprite chipSprite = LoadSprite("UI/stat_chip");
             float rowY = panelHeight * 0.5f - TopPadding * 0.5f - StarBandHeight
                 - StatsGapAbove - StatsRowHeight * 0.5f;
             const float chipGap = 0.25f;
