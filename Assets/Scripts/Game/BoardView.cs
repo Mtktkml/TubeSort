@@ -74,6 +74,7 @@ namespace TubeSort.Game
         private ButtonView restartButton;   // leveli baştan
         private ButtonView addTubeButton;   // +boş tüp
         private PopupView deadlockPopup;    // çıkmaz pop-up'ı (gizli başlar)
+        private PopupView winPopup;         // kazanma pop-up'ı (gizli başlar)
         // Tahta VERİSİNİN çözülebilirliği (cache): her veri değişiminde
         // RecomputeSolvability tazeler. TryPour'daki yeni-hamle kilidi ve
         // pop-up kararı (RefreshDeadlockPopup) bunu okur — solver hamle başına
@@ -252,6 +253,7 @@ namespace TubeSort.Game
             BuildPilotNextButton();
             BuildPrevButton();
             BuildDeadlockPopup();
+            BuildWinPopup();
             BuildLevelTitle();
             ApplyLayout();
             UpdateLevelTitle();
@@ -337,6 +339,36 @@ namespace TubeSort.Game
         }
 
         /// <summary>
+        /// Kazanma pop-up'ını kurar (gizli başlar): kutlama stili — kurdele
+        /// banner, yıldız bandı, zıplamalı belirme (festive; çıkmazdan daha
+        /// canlı, kullanıcı isteği). Tek aksiyon: sonraki bölüm; reklam yok.
+        /// Metinlerde ğ/İ/Ş kullanılmaz (fontta gömülü değiller).
+        /// </summary>
+        private void BuildWinPopup()
+        {
+            var go = new GameObject("WinPopup");
+            winPopup = go.AddComponent<PopupView>();
+            winPopup.Initialize(mainCamera, "Tebrikler!", "Bölüm tamamlandı!",
+                new[]
+                {
+                    new PopupView.PopupAction
+                    {
+                        Label = "Sonraki", IconPath = "UI/icon_next",
+                        AdBadge = false, OnClick = AdvanceToNextLevel,
+                    },
+                },
+                bannerPath: "UI/banner_ribbon", festive: true);
+        }
+
+        /// <summary>Kazanma pop-up'ındaki Sonraki: pop-up kapanır, sıradaki
+        /// pilot level yüklenir.</summary>
+        private void AdvanceToNextLevel()
+        {
+            if (winPopup != null) winPopup.Hide();
+            StepPilot(1);
+        }
+
+        /// <summary>
         /// Üst-orta level başlığını kurar (TMP). Metin UpdateLevelTitle ile her
         /// level değişiminde tazelenir.
         /// </summary>
@@ -411,6 +443,9 @@ namespace TubeSort.Game
 
         /// <summary>Çıkmaz pop-up'ı ekranda mı? Testlerin durum sorgusu için.</summary>
         public bool DeadlockPopupVisible => deadlockPopup != null && deadlockPopup.Visible;
+
+        /// <summary>Kazanma pop-up'ı ekranda mı? Testlerin durum sorgusu için.</summary>
+        public bool WinPopupVisible => winPopup != null && winPopup.Visible;
 
         /// <summary>
         /// Dışarıdan tahta yükler: level üreticinin ve testlerin giriş kapısı.
@@ -614,6 +649,8 @@ namespace TubeSort.Game
             activeJobs.Clear();
             selectedIndex = -1;
             HideDeadlock();   // restart/+tüp/level geçişi çıkmaz uyarısını sıfırlar
+            // Kazanma pop-up'ı da sıfırlanır (skip ile araya girilmiş olabilir).
+            if (winPopup != null && winPopup.Visible) winPopup.Hide();
             foreach (StreamView stream in streamPool)
                 stream.Hide();
             streamsInUse.Clear();
@@ -955,12 +992,17 @@ namespace TubeSort.Game
         {
             Vector3 worldPoint = mainCamera.ScreenToWorldPoint(screenPosition);
 
-            // Pop-up açıkken TÜM dokunuşlar ona gider: butona denk gelmeyen
-            // dokunuş yutulur. Hamle kilidi budur — tüpler, HUD butonları ve
-            // level gezinme pop-up kapanana dek dokunuşla erişilemez.
-            if (deadlockPopup != null && deadlockPopup.Visible)
+            // Pop-up (çıkmaz ya da kazanma) açıkken TÜM dokunuşlar ona gider:
+            // butona denk gelmeyen dokunuş yutulur. Hamle kilidi budur — tüpler,
+            // HUD butonları ve level gezinme pop-up kapanana dek erişilemez.
+            // İkisi aynı anda açık olamaz (çözülmüş tahta çıkmaz olamaz).
+            PopupView activePopup =
+                winPopup != null && winPopup.Visible ? winPopup
+                : deadlockPopup != null && deadlockPopup.Visible ? deadlockPopup
+                : null;
+            if (activePopup != null)
             {
-                deadlockPopup.HandleClick(worldPoint);
+                activePopup.HandleClick(worldPoint);
                 return;
             }
 
@@ -1055,8 +1097,9 @@ namespace TubeSort.Game
             selectedIndex = -1;
         }
 
-        /// <summary>Level tamamlanınca oto-geçişten önceki bekleme (sn).</summary>
-        private const float AutoAdvanceDelay = 0.7f;
+        /// <summary>Level tamamlanınca kazanma pop-up'ından önceki bekleme (sn):
+        /// oyuncu tamamlanan tahtayı ve damla halkası patlamasını görsün.</summary>
+        private const float WinPopupDelay = 0.7f;
 
         private void ReportBoardState()
         {
@@ -1065,7 +1108,7 @@ namespace TubeSort.Game
                 HideDeadlock();
                 Debug.Log("<color=lime>Tahta çözüldü!</color>");
                 if (pilotCount > 0)
-                    StartCoroutine(AutoAdvanceToNext());
+                    StartCoroutine(ShowWinPopupAfterDelay());
                 return;
             }
 
@@ -1113,15 +1156,16 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// Level tamamlanınca kısa bir bekleme sonrası sonraki levele geçer.
-        /// Bekleme oyuncunun tamamlanan tahtayı görmesi için (tebrik pop-up'ı
-        /// 1B'de / ertelendi). Oyuncu bu arada skip/undo ile araya girerse
-        /// StepPilot'un RebuildViews'i StopAllCoroutines ile bunu iptal eder.
+        /// Level tamamlanınca kısa bekleme sonrası KAZANMA POP-UP'ı gösterilir
+        /// (eski oto-geçişin yerine): oyuncu Sonraki ile kendi ilerler. Oyuncu
+        /// bekleme sırasında skip ile araya girerse StepPilot'un RebuildViews'i
+        /// StopAllCoroutines ile bunu iptal eder. Eşzamanlı dökmede her biten
+        /// dökme ReportBoardState çağırır: Visible kontrolü çifte Show'u önler.
         /// </summary>
-        private IEnumerator AutoAdvanceToNext()
+        private IEnumerator ShowWinPopupAfterDelay()
         {
-            yield return new WaitForSeconds(AutoAdvanceDelay);
-            StepPilot(1);
+            yield return new WaitForSeconds(WinPopupDelay);
+            if (winPopup != null && !winPopup.Visible) winPopup.Show();
         }
 
         /// <summary>
