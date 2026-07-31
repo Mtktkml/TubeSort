@@ -156,10 +156,13 @@ Shader "TubeSort/Liquid"
                 // Tüp döndüğünde sıvı yüzeyi dünya uzayında yatay kalmalı.
                 // UV uzayında bunu sağlamak için yüzeyi eğim açısına göre
                 // ters yöne eğiyoruz. sin/cos oranı (tan) geometrik olarak doğru
-                // eğimi verir. cos küçüldükçe oran büyür; 0.2'nin altına inmemesi
-                // yüzeyin tüp dışına taşmasını önler. sin'in işareti her açıda
-                // doğru yönü korur (tan 90°'de işaret değiştirir, bu formül değiştirmez).
-                float tiltSlope = sin(_TiltAngle) / max(abs(cos(_TiltAngle)), 0.2);
+                // eğimi verir. Kelepçe 0.03 (~88.3°): fiziksel eğim yaklaşımında
+                // tüp sıvıyı ağza ulaştırmak için ~88°'ye kadar eğilir; kelepçe
+                // 0.2 (~78.7°) olsaydı yüzey orada fazla SIĞ kalıp sıvı dudağa
+                // ulaşamazdı. Aşağı sınır yalnız 90°'de bölme patlamasını önler
+                // (BoardView.MaxPourAngle ile eş; twin sabit). sin'in işareti her
+                // açıda doğru yönü korur.
+                float tiltSlope = sin(_TiltAngle) / max(abs(cos(_TiltAngle)), 0.03);
                 float tiltOffset = (0.5 - uv.x) * tiltSlope
                     * (_BodySize.x / _BodySize.y);
 
@@ -170,8 +173,28 @@ Shader "TubeSort/Liquid"
 
                 // Yüzey boşta DURGUN: sürekli dalga yok, hareket yalnız dökme
                 // sırasındaki damla halkalarından gelir.
-                // _SurfaceLift: dökme sırasında dudak demirlemesi (yukarıda).
-                float surface = _FillLevel + tiltOffset + _SurfaceLift;
+                //
+                // HACİM KORUMALI TABAN. Eğik tüpte düz "shear" yüzeyi
+                // (_FillLevel + eğim) yalnız yüzey iki duvarı da kesiyorken
+                // (bol sıvı) doğru hacmi verir. Sıvı azken kapalı uçtaki yüzey
+                // tüp dibinin ALTINA taşar; alttan kırpılınca çizilen hacim
+                // _FillLevel'i AŞAR (sıvı boşalmıyormuş gibi görünür — kap>=5'te
+                // son 1-2 birimde belirgindi). Onun yerine az sıvıda tabanı,
+                // döken kenarda hacmi tam _FillLevel olan bir ÜÇGEN verecek
+                // şekilde alçaltıyoruz: edge = sqrt(2·|k|·fill). Böylece son
+                // birim ağızda düzgün toplanıp biter. Dik/boş tüpte k=0 →
+                // taban = _FillLevel (değişmez; hedef tüp etkilenmez).
+                float slopeUV = tiltSlope * (_BodySize.x / _BodySize.y);
+                float halfRise = 0.5 * abs(slopeUV);
+                float surfaceBase = (_FillLevel >= halfRise)
+                    ? _FillLevel
+                    : sqrt(2.0 * abs(slopeUV) * _FillLevel) - halfRise;
+
+                // _SurfaceLift: eski dudak demirlemesi. Hacim-korumalı taban +
+                // gerçek eğim (kelepçe 0.03) sıvıyı zaten doğru kenara/dudağa
+                // getirdiği için pratikte ≈0 (bkz. AnchorLiquidToLip); anchor
+                // mantığı bozulmasın diye yine de eklenir.
+                float surface = surfaceBase + tiltOffset + _SurfaceLift;
 
                 // ── 2.5D: hafif üstten bakış. Yüzey, üstten görünen ELİPS bir
                 // disk; katman sınırları da diskin ÖN yayı gibi aşağı kavisli.
@@ -238,37 +261,37 @@ Shader "TubeSort/Liquid"
                 if (inside <= 0.001 && splash <= 0.001)
                     discard;
 
-                // Son ~1 birim sıvıda, ağız tarafına doğru çekilme.
-                // Eğik yüzey zaten pour tarafında yüksek, kapalı uçta düşük.
-                // Surface'ı normalize edip score olarak kullanırsak: yüksek
-                // score (ağız) kalır, düşük score (kapalı uç) önce kaybolur.
-                // Sadece eğik tüplerde etkin; dik tüplerde (hedef) sıfır.
-                float tiltAmount = smoothstep(0.0, 0.3, abs(_TiltAngle));
-                float drainProgress = (1.0 - saturate(_FillLevel / 0.2)) * tiltAmount;
-                if (drainProgress > 0.001)
-                {
-                    float maxSurface = _FillLevel + _SurfaceLift
-                        + abs(0.5 * tiltSlope * (_BodySize.x / _BodySize.y));
-                    float survivalScore = saturate(surface / max(maxSurface, 0.001));
-                    float drainClip = smoothstep(drainProgress - 0.05,
-                                                 drainProgress + 0.05, survivalScore);
-                    inside *= drainClip;
-                    if (inside <= 0.001 && splash <= 0.001)
-                        discard;
-                }
+                // (Eskiden burada "son ~1 birim ağıza çekilme" için heuristik
+                // bir drain-clip vardı: _FillLevel<0.2 iken kapalı uçtaki düşük
+                // score'lu pikselleri siliyordu. KALDIRILDI — yüzey artık gerçek
+                // eğimle çizildiği için (yukarıda _SurfaceLift * mouthDir) sıvı
+                // doğru hacimde küçülüp döken kenarda kendiliğinden üçgen olarak
+                // toplanıyor. O clip artık gereksiz ve kap>=5'te (birim < 0.2)
+                // doğru üçgeni fazladan siliyordu.)
 
                 // Bu piksel hangi katmanda? Katman sınırları dipten yukarı sıralı,
                 // o yüzden "üstünde kaldığım son sınır" katman indeksini verir.
-                // Tüp eğildiğinde katman sınırları da yüzeyle aynı açıda eğilir:
-                // yerçekimi tüm sıvılara eşit etki eder.
+                // Sınırlar yüzeyle AYNI hacim-korumalı tabanla çizilir: sınır_j,
+                // altında kalan toplam hacmi (_LayerTops[j]) koruyan yükseklikte.
+                // Düz kayma (sabit tiltOffset) dik açılarda sınır düzlemlerini
+                // tüp dibinin altına taşırıyor, alt katmanlar iplik gibi incelip
+                // hacimlerini kaybediyordu; üst katman dökülürken inen yüzey de
+                // alttakilerin bölgesini kesip onları "dökülüyor" gösteriyordu.
+                // Hacim-korumalı sınırla her katman eğik tüpte de gerçek payını
+                // kaplar (az hacimde ağız köşesinde iç içe kamalar) ve üst katman
+                // dökülürken yüzey hiçbir zaman alt sınırın altına inmez.
                 int layerIndex = 0;
-                for (int k = 0; k < MAX_LAYERS; k++)
+                for (int i = 0; i < MAX_LAYERS; i++)
                 {
+                    float top = _LayerTops[i];
+                    float topBase = (top >= halfRise)
+                        ? top
+                        : sqrt(2.0 * abs(slopeUV) * top) - halfRise;
                     // Sınır, 2.5D diskin ön yayı gibi ortada ellipseDepth kadar
                     // aşağı kavisli (üstten bakışta kesitin ön kenarı alçak görünür).
-                    if (k < _LayerCount && uv.y >= _LayerTops[k] + tiltOffset
+                    if (i < _LayerCount && uv.y >= topBase + tiltOffset
                         - ellipseDepth * arc)
-                        layerIndex = k + 1;
+                        layerIndex = i + 1;
                 }
                 layerIndex = clamp(layerIndex, 0, _LayerCount - 1);
 
