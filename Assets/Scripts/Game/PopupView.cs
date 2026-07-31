@@ -63,7 +63,7 @@ namespace TubeSort.Game
         // kullanıcı kahverengi tabela hâlini beğenmedi).
         private const float StatsRowHeight = 0.7f;
         private const float StatsGapAbove = 0.05f;
-        private static readonly Color StatChipTint = new Color(1f, 0.97f, 0.90f, 1f);
+        private static readonly Color StatChipTint = new Color(0.96f, 0.88f, 0.74f, 1f);
 
         // Konfeti: panel üstünden savrulan renkli pullar (koddan üretilir,
         // asset yok). Renkler oyunun parlak toon ailesinden.
