@@ -775,6 +775,10 @@ namespace TubeSort.Game
         /// <summary>Shader'a en son gönderilen doluluk seviyesi.</summary>
         public float CurrentFill => currentFill;
 
+        /// <summary>Tam dolu tüpün doluluk seviyesi (normalize). CurrentFill/MaxFill
+        /// = doluluk oranı; eğim açısı bundan türer.</summary>
+        public float MaxFill => FillSpan;
+
         /// <summary>
         /// Sıvı seviyesini mevcut değerden hedef değere pürüzsüz kaydırır.
         /// Katman güncellemeyi (Refresh) kendisi yapmaz; çağıran taraf

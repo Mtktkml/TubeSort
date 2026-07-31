@@ -1229,31 +1229,23 @@ namespace TubeSort.Game
                 currentAngle = Mathf.SmoothDamp(
                     currentAngle, targetAngle, ref angleVelocity, angleSmoothTime);
 
-                // Sıvı ağza ulaştığında dökmeyi başlat.
-                if (!pourStarted)
-                {
-                    if (HasLiquidReachedMouth(fromView, currentAngle))
-                        pourStarted = true;
-                }
+                // Dökme başlangıcı: tüp yerine kayıp hedef eğimin ~%90'ına
+                // ulaşınca başlar. Fiziksel dudak-teması ARANMAZ — kap>=5'te az
+                // sıvı dudağa ancak ~90° (yatay) eğimde ulaşıyordu. Zamanlayıcılı
+                // boşalma bu yüzden eğim tavanını düşük tutabiliyor.
+                if (!pourStarted
+                    && moveElapsed >= slideDuration
+                    && Mathf.Abs(currentAngle) >= Mathf.Abs(targetAngle) * 0.9f)
+                    pourStarted = true;
 
-                // Dökme: sıvı ağza ulaştıysa seviyeler güncellenir.
-                // Dökme hızı açıya bağlı: fill düşürülmeden önce açının
-                // sıvıyı lip'te tutmaya yetip yetmediği kontrol edilir.
-                // Yetersizse dökme duraklar, açı büyüyünce devam eder.
+                // Dökme ZAMANLAYICIYLA ilerler (fiziksel dudak-gating YOK): tüp
+                // eğik ve yerinde olduğu sürece seviye pürüzsüz düşer. Eski
+                // gating (sıvı lip'te mi?) kap>=5'te tüpü yataya devirtip
+                // takılmalara/ani boşalmalara yol açıyordu. Sıvının döken kenarda
+                // toplanma görseli artık shader'ın hacim-korumalı yüzeyinden gelir.
                 if (pourStarted)
                 {
-                    float nextElapsed = pourElapsed + dt;
-                    float nextT = Mathf.Clamp01(nextElapsed / pourDuration);
-                    float nextFill = Mathf.Lerp(fromStart, fromTarget, nextT);
-
-                    // Bu fill'de sıvı lip'e ulaşıyor mu? (gerçek geometri —
-                    // açı 90°'yi aşınca koşulsuz evet, bekleme sonlu kalır)
-                    bool liquidAtLip =
-                        TiltedEdgeLevel(nextFill, currentAngle, fromView.Height) >= 0.95f;
-
-                    // Pour ilerlesin: sıvı lip'te VEYA pour tamamlanmak üzere.
-                    if (liquidAtLip || nextT >= 0.98f)
-                        pourElapsed = nextElapsed;
+                    pourElapsed += dt;
 
                     float pourT = Mathf.Clamp01(pourElapsed / pourDuration);
                     fromView.SetFillLevel(Mathf.Lerp(fromStart, fromTarget, pourT));
@@ -1399,43 +1391,24 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// Tüpteki sıvı miktarına göre eğim açısını hesaplar. Az sıvıda sıvının
-        /// ağza ulaşması için daha fazla eğilme gerekir. İki bileşenin büyüğü:
-        /// (1) sezgisel doluluk→açı aralığı (dolu 60°, boş 100°); (2) yükseklik-
-        /// farkında GEOMETRİK alt sınır — sıvının döken kenarda ağza ulaşması
-        /// için gereken açı. (2) uzun tüpler (kap 8) için şart: sabit aralık
-        /// oralarda mid-fill'de yetmiyor, dökme hiç başlamıyordu (watchdog).
+        /// Tüpteki sıvı miktarına göre eğim açısını hesaplar: dolu tüp ~55°,
+        /// boş tüp ~65°. Üst sınır 65°'de tutulur — shader'ın eğik yüzeyi
+        /// temsil edebildiği aralıkta (eğim kelepçesi ~78.7°) ve YATAYDAN uzak.
+        ///
+        /// Eskiden boş tüpte 100°'ye + yükseklik-farkında geometrik bir alt
+        /// sınıra çıkıyordu; amaç sıvıyı fiziksel olarak döken kenardaki dudağa
+        /// taşımaktı (dökme dudak-temasına bağlıydı). Bu, kap>=5'te tüpü
+        /// neredeyse YATAY deviriyor, sıvı ince şeride dönüşüp "boşalmıyormuş"
+        /// gibi görünüyordu. Dökme artık zamanlayıcıya bağlı (bkz. AnimatePour),
+        /// o yüzden yüksek açıya gerek yok.
         /// </summary>
         private static float CalculatePourAngle(TubeView fromView)
         {
-            const float minAngle = 60f * Mathf.Deg2Rad;
-            const float maxAngle = 100f * Mathf.Deg2Rad;
+            const float minAngle = 55f * Mathf.Deg2Rad;   // dolu tüp
+            const float maxAngle = 65f * Mathf.Deg2Rad;    // boş tüp
 
-            // (1) Sezgisel: doluluk oranıyla açı (dolu az, boş çok eğilir).
-            float fillSpan = 1f - 0.2f / fromView.Height; // FillHeadroom = 0.2
-            float fillRatio = Mathf.Clamp01(fromView.CurrentFill / fillSpan);
-            float heuristic = Mathf.Lerp(maxAngle, minAngle, fillRatio);
-
-            // (2) Geometrik alt sınır: eğik yüzeyin döken kenarı ağza (1.05, küçük
-            // pay) ulaşsın diye gereken açı = atan(2·(1.05-fill)·yükseklik/genişlik).
-            // Kısa tüplerde sezgisel bunu zaten aşar (max() etkisiz), uzun tüplerde
-            // devreye girip dökmenin başlamasını garantiler.
-            float needed = Mathf.Atan2(
-                2f * (1.05f - fromView.CurrentFill) * fromView.Height, TubeView.Width);
-
-            return Mathf.Max(heuristic, needed);
-        }
-
-        /// <summary>
-        /// Verilen eğim açısında sıvının tüpün ağzına ulaşıp ulaşmadığını kontrol eder.
-        /// Shader'daki tiltOffset formülünün C# karşılığı: eğik taraftaki
-        /// sıvı yüzeyi FillSpan'e ulaştıysa sıvı ağızdan taşmaya hazır demektir.
-        /// </summary>
-        private static bool HasLiquidReachedMouth(TubeView view, float angle)
-        {
-            // Eşik FillSpan değil 1.0: sıvı tüpün fiziksel ağız ucuna (genişleyen
-            // kısmın en tepesine) ulaşmalı, FillHeadroom sınırına değil.
-            return TiltedEdgeLevel(view.CurrentFill, angle, view.Height) >= 1f;
+            float fillRatio = Mathf.Clamp01(fromView.CurrentFill / fromView.MaxFill);
+            return Mathf.Lerp(maxAngle, minAngle, fillRatio);
         }
 
         /// <summary>

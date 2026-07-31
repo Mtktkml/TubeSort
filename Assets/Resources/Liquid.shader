@@ -170,8 +170,27 @@ Shader "TubeSort/Liquid"
 
                 // Yüzey boşta DURGUN: sürekli dalga yok, hareket yalnız dökme
                 // sırasındaki damla halkalarından gelir.
-                // _SurfaceLift: dökme sırasında dudak demirlemesi (yukarıda).
-                float surface = _FillLevel + tiltOffset + _SurfaceLift;
+                //
+                // HACİM KORUMALI TABAN. Eğik tüpte düz "shear" yüzeyi
+                // (_FillLevel + eğim) yalnız yüzey iki duvarı da kesiyorken
+                // (bol sıvı) doğru hacmi verir. Sıvı azken kapalı uçtaki yüzey
+                // tüp dibinin ALTINA taşar; alttan kırpılınca çizilen hacim
+                // _FillLevel'i AŞAR (sıvı boşalmıyormuş gibi görünür — kap>=5'te
+                // son 1-2 birimde belirgindi). Onun yerine az sıvıda tabanı,
+                // döken kenarda hacmi tam _FillLevel olan bir ÜÇGEN verecek
+                // şekilde alçaltıyoruz: edge = sqrt(2·|k|·fill). Böylece son
+                // birim ağızda düzgün toplanıp biter. Dik/boş tüpte k=0 →
+                // taban = _FillLevel (değişmez; hedef tüp etkilenmez).
+                float k = tiltSlope * (_BodySize.x / _BodySize.y);
+                float halfRise = 0.5 * abs(k);
+                float surfaceBase = (_FillLevel >= halfRise)
+                    ? _FillLevel
+                    : sqrt(2.0 * abs(k) * _FillLevel) - halfRise;
+
+                // _SurfaceLift: dökme sırasında dudak demirlemesi. Eğim tavanı
+                // ~65°'de tutulduğu için (bkz. CalculatePourAngle) pratikte 0;
+                // anchor mantığı bozulmasın diye yine de eklenir.
+                float surface = surfaceBase + tiltOffset + _SurfaceLift;
 
                 // ── 2.5D: hafif üstten bakış. Yüzey, üstten görünen ELİPS bir
                 // disk; katman sınırları da diskin ÖN yayı gibi aşağı kavisli.
@@ -238,24 +257,13 @@ Shader "TubeSort/Liquid"
                 if (inside <= 0.001 && splash <= 0.001)
                     discard;
 
-                // Son ~1 birim sıvıda, ağız tarafına doğru çekilme.
-                // Eğik yüzey zaten pour tarafında yüksek, kapalı uçta düşük.
-                // Surface'ı normalize edip score olarak kullanırsak: yüksek
-                // score (ağız) kalır, düşük score (kapalı uç) önce kaybolur.
-                // Sadece eğik tüplerde etkin; dik tüplerde (hedef) sıfır.
-                float tiltAmount = smoothstep(0.0, 0.3, abs(_TiltAngle));
-                float drainProgress = (1.0 - saturate(_FillLevel / 0.2)) * tiltAmount;
-                if (drainProgress > 0.001)
-                {
-                    float maxSurface = _FillLevel + _SurfaceLift
-                        + abs(0.5 * tiltSlope * (_BodySize.x / _BodySize.y));
-                    float survivalScore = saturate(surface / max(maxSurface, 0.001));
-                    float drainClip = smoothstep(drainProgress - 0.05,
-                                                 drainProgress + 0.05, survivalScore);
-                    inside *= drainClip;
-                    if (inside <= 0.001 && splash <= 0.001)
-                        discard;
-                }
+                // (Eskiden burada "son ~1 birim ağıza çekilme" için heuristik
+                // bir drain-clip vardı: _FillLevel<0.2 iken kapalı uçtaki düşük
+                // score'lu pikselleri siliyordu. KALDIRILDI — yüzey artık gerçek
+                // eğimle çizildiği için (yukarıda _SurfaceLift * mouthDir) sıvı
+                // doğru hacimde küçülüp döken kenarda kendiliğinden üçgen olarak
+                // toplanıyor. O clip artık gereksiz ve kap>=5'te (birim < 0.2)
+                // doğru üçgeni fazladan siliyordu.)
 
                 // Bu piksel hangi katmanda? Katman sınırları dipten yukarı sıralı,
                 // o yüzden "üstünde kaldığım son sınır" katman indeksini verir.
