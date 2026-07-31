@@ -952,7 +952,8 @@ namespace TubeSort.Game
         /// <summary>
         /// Ekran koordinatındaki dokunuşu ilgili hedefe yönlendirir: geri al
         /// butonu ya da tüp. Tüplerde BoxCollider2D hızlı eleme yapar; ardından
-        /// SDF ile dokunuşun gerçekten tüp şekli içinde olduğu doğrulanır.
+        /// SDF ile dokunuşun gerçekten tüp şekli (cam gövde ∪ yaka) içinde
+        /// olduğu doğrulanır.
         ///
         /// Tek bir OverlapPoint yetmez: dökme sırasında kaynak tüp hedefin
         /// ÜSTÜNE asılır, collider'ları çakışır. Tüm collider'lara bakıp gerçek
