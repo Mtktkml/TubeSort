@@ -58,12 +58,14 @@ namespace TubeSort.Game
 
         // İstatistik satırı (hamle/süre çipleri): yıldız bandı ile mesaj
         // arasındaki boşluğu doldurur; metinler SetResults ile yazılır.
-        // Zemin: stat_chip (progress_white_border) — yumuşak köşeli açık
-        // plaka; buton görselinden bilerek farklı (tıklanabilir sanılmasın,
-        // kullanıcı kahverengi tabela hâlini beğenmedi).
+        // Zemin: stat_chip (checkbox_beige_empty) — İNCE kahve halkalı, doğal
+        // SICAK krem dolgulu yuvarlak plaka. Önceki progress görselinin dolgusu
+        // mavimsi griydi (207,211,219): çarpımsal tint ne yapsa gri kalıyordu.
+        // Bu dolgu (255,241,210) neredeyse beyaz-sıcak → tint rengi birebir
+        // uygular. Buton görselinden farklı: tıklanabilir sanılmasın.
         private const float StatsRowHeight = 0.7f;
         private const float StatsGapAbove = 0.05f;
-        private static readonly Color StatChipTint = new Color(0.96f, 0.88f, 0.74f, 1f);
+        private static readonly Color StatChipTint = new Color(0.97f, 0.88f, 0.70f, 1f);
 
         // Konfeti: panel üstünden savrulan renkli pullar (koddan üretilir,
         // asset yok). Renkler oyunun parlak toon ailesinden.
