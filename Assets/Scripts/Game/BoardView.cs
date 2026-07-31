@@ -357,7 +357,9 @@ namespace TubeSort.Game
                         AdBadge = false, OnClick = AdvanceToNextLevel,
                     },
                 },
-                bannerPath: "UI/banner_ribbon", festive: true);
+                // titleDrop kurdele için piksel ölçümü: bant merkezi sprite
+                // merkezinin 4.5px ÜSTÜNDE (59.5 vs 64) → -0.035.
+                bannerPath: "UI/banner_ribbon", festive: true, titleDrop: -0.035f);
         }
 
         /// <summary>Kazanma pop-up'ındaki Sonraki: pop-up kapanır, sıradaki

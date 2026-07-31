@@ -50,7 +50,8 @@ namespace TubeSort.Game
         // Kutlama (festive) modu: kazanma pop-up'ı çıkmazdan daha CANLI olsun
         // (kullanıcı isteği) — yıldız bandı + zıplamalı belirme + sürekli nabız
         // + gösterim anında konfeti patlaması.
-        private const float StarBandHeight = 0.9f;
+        // Bant büyüdükçe mesaj/butonlar ContentTop üzerinden orantılı kayar.
+        private const float StarBandHeight = 1.1f;
         private static readonly Color StarTint = new Color(1f, 0.84f, 0.25f, 1f);
 
         // Konfeti: panel üstünden savrulan renkli pullar (koddan üretilir,
@@ -129,9 +130,15 @@ namespace TubeSort.Game
         /// yüklenir; eksik asset parlak pembe yer tutucuyla belli olur (sessiz
         /// bozulma yerine — ColorPalette ile aynı felsefe).
         /// </summary>
+        /// <param name="titleDrop">Başlığın banner merkezine göre DÜŞEY ofseti
+        /// (banner yüksekliği oranı, + = aşağı). Kırmızı bandın merkezi görselden
+        /// görsele değişir; piksel ölçümüyle bulunur: banner_hanging +0.043
+        /// (bant 19-120, merkez 69.5 vs 64), banner_ribbon -0.035 (bant 13-106,
+        /// merkez 59.5 vs 64).</param>
         public void Initialize(Camera camera, string title, string message,
             IReadOnlyList<PopupAction> actions,
-            string bannerPath = "UI/banner_hanging", bool festive = false)
+            string bannerPath = "UI/banner_hanging", bool festive = false,
+            float titleDrop = 0.043f)
         {
             viewCamera = camera;
             this.festive = festive;
@@ -154,7 +161,7 @@ namespace TubeSort.Game
 
             BuildOverlay();
             BuildPanel(panelSprite, panelWidth, panelHeight);
-            BuildBanner(bannerSprite, title, panelWidth, panelHeight);
+            BuildBanner(bannerSprite, title, panelWidth, panelHeight, titleDrop);
             if (festive)
             {
                 BuildStars(panelHeight);
@@ -438,7 +445,7 @@ namespace TubeSort.Game
         }
 
         private void BuildBanner(Sprite bannerSprite, string title,
-            float panelWidth, float panelHeight)
+            float panelWidth, float panelHeight, float titleDrop)
         {
             // Banner panelin üst kenarına biner: merkez üst kenarın hafif üstünde.
             float bannerWidth = panelWidth * 0.82f;
@@ -460,10 +467,9 @@ namespace TubeSort.Game
             var textGo = new GameObject("Title");
             textGo.transform.SetParent(transform, false);
             // Başlık KIRMIZI BANDIN ortasına oturur, sprite merkezine değil:
-            // görselin üstünde askı pimleri var. Ofset görselden ÖLÇÜLDÜ:
-            // bant orta sütunda 19-120. satırlar, merkezi 69.5; sprite merkezi
-            // 64 → fark 5.5/128 ≈ 0.043 yükseklik. (0.1 denendi: çok aşağı.)
-            textGo.transform.localPosition = new Vector3(0f, y - bannerHeight * 0.043f, 0f);
+            // bandın merkezi görselden görsele değişir (askı pimi / kıvrım payı).
+            // titleDrop banner başına piksel ölçümüyle verilir (bkz. Initialize).
+            textGo.transform.localPosition = new Vector3(0f, y - bannerHeight * titleDrop, 0f);
 
             var tmp = textGo.AddComponent<TextMeshPro>();
             tmp.text = title;
@@ -482,13 +488,14 @@ namespace TubeSort.Game
         private void BuildStars(float panelHeight)
         {
             Sprite starSprite = LoadSprite("UI/icon_star");
-            float bandY = panelHeight * 0.5f - TopPadding - StarBandHeight * 0.5f;
+            // Bant banner'a sokulur (üst payın yarısı): yıldızlar yukarıda dursun.
+            float bandY = panelHeight * 0.5f - TopPadding * 0.5f - StarBandHeight * 0.5f;
 
             for (int i = 0; i < 3; i++)
             {
-                float x = (i - 1) * 0.6f;                  // -0.6, 0, +0.6: sokulu
-                float baseScale = i == 1 ? 2.2f : 1.6f;    // orta yıldız büyük
-                float yOffset = i == 1 ? 0.1f : -0.08f;    // yanlar hafif aşağıda
+                float x = (i - 1) * 0.72f;                 // sokulu (binme korunur)
+                float baseScale = i == 1 ? 2.8f : 2.05f;   // orta yıldız büyük
+                float yOffset = i == 1 ? 0.12f : -0.1f;    // yanlar hafif aşağıda
                 float baseTilt = (1 - i) * 14f;            // sol +14°, sağ -14° dışa yatık
 
                 var go = new GameObject($"Star_{i}");
