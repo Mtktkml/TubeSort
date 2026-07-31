@@ -157,7 +157,7 @@ Shader "TubeSort/Liquid"
                 // UV uzayında bunu sağlamak için yüzeyi eğim açısına göre
                 // ters yöne eğiyoruz. sin/cos oranı (tan) geometrik olarak doğru
                 // eğimi verir. Kelepçe 0.03 (~88.3°): fiziksel eğim yaklaşımında
-                // tüp sıvıyı ağza ulaştırmak için ~87°'ye kadar eğilir; kelepçe
+                // tüp sıvıyı ağza ulaştırmak için ~88°'ye kadar eğilir; kelepçe
                 // 0.2 (~78.7°) olsaydı yüzey orada fazla SIĞ kalıp sıvı dudağa
                 // ulaşamazdı. Aşağı sınır yalnız 90°'de bölme patlamasını önler
                 // (BoardView.MaxPourAngle ile eş; twin sabit). sin'in işareti her

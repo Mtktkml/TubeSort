@@ -70,6 +70,25 @@ namespace TubeSort.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator Pour_PartialFillFromCapacity4Tube_Completes()
+        {
+            // Asimptot regresyonu: hedef açı TAM temas açısına (kenar=1.0)
+            // eşitken SmoothDamp hedefini asla aşamadığı için dökme kapısı hiç
+            // açılmıyor, dolu OLMAYAN kaynaklar donuyordu (dolu tüpte minAngle
+            // tabanı hedefi kazara temasın üstüne ittiğinden yalnız ilk katman
+            // dökülüyordu). Dudak payı (1.05) kapının sonlu sürede aşılmasını
+            // garantiler; kap 4 / 3 birim bu vakanın birebir kendisi.
+            var board = new Board(new List<Tube>
+            {
+                new Tube(4, 0, 0, 0),
+                new Tube(4, 0),
+                new Tube(4),
+            });
+
+            yield return AssertPourCompletes(board, 0, 1, "kapasite 4 / 3 birim");
+        }
+
+        [UnityTest]
         public IEnumerator Pour_SingleUnitFromCapacity5Tube_Completes()
         {
             // Dökme kilidine karşı regresyon: kapasite 5, tek birim. Açı

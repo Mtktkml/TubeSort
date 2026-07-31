@@ -1234,39 +1234,37 @@ namespace TubeSort.Game
                 float moveT = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(moveElapsed / slideDuration));
                 Vector3 currentBase = Vector3.Lerp(startPos, pourPos, moveT);
 
-                // Eğim: dökme BAŞLAMADAN önce SmoothDamp ile pürüzsüz yükselir.
-                // Dökme başlayınca açı doğrudan fill'e KİLİTLENİR (drain bloğunda)
-                // — SmoothDamp gecikmesi olmasın ki sıvı her karede dudakta kalıp
-                // akış koluna bitişik dursun.
-                if (!pourStarted)
-                    currentAngle = Mathf.SmoothDamp(
-                        currentAngle, targetAngle, ref angleVelocity, angleSmoothTime);
+                // Eğim her kare SmoothDamp ile hedefi izler. Hedef, sıvıyı
+                // dudağın 0.05 ÜSTÜNDE tutacak açı (AngleForLiquidAtLip):
+                // takipteki ufak gecikmede bile kenar 1.0'ın altına inmez,
+                // sıvı-akış teması korunur (taşan pay yaka arkasında gizli).
+                currentAngle = Mathf.SmoothDamp(
+                    currentAngle, targetAngle, ref angleVelocity, angleSmoothTime);
 
                 // Dökme başlangıcı: tüp yerine kayıp SIVI DÖKEN KENARDA AĞZA
                 // ULAŞINCA başlar. Tüp eğildikçe sıvı yükselir; ağza değince akış
                 // başlar (fiziksel his). Az sıvıda bu daha çok eğilme ister.
-                // İstisna: son kırıntı MaxPourAngle'da bile ağza tam ulaşamaz;
-                // tüp tam eğik olunca (fullyTilted) yine de başlatılır (donmasın).
+                // Hedef açı (kenar=1.05) temas açısının (kenar=1.0) ÜSTÜNDE
+                // olduğundan kapı sonlu sürede kesin aşılır. İstisna: kap-8 tek
+                // birim gibi uçlarda temas açısı MaxPourAngle'a dayanır; tüp tam
+                // eğime çok yaklaşınca (%99.5) yine de başlatılır (donmasın).
                 if (!pourStarted
                     && moveElapsed >= slideDuration
                     && (HasLiquidReachedMouth(fromView, currentAngle)
-                        || Mathf.Abs(currentAngle) >= MaxPourAngle * 0.98f))
+                        || Mathf.Abs(currentAngle) >= MaxPourAngle * 0.995f))
                     pourStarted = true;
 
-                // Dökme ZAMANLAYICIYLA ilerler (gating YOK): tüp eğik ve yerinde
-                // olduğu sürece seviye pürüzsüz düşüp akışla birlikte TAM biter
-                // (donma/sürünme yok). Açı her karede fill'e KİLİTLİ: sıvıyı döken
-                // kenarda dudakta (edge=1.0) tutacak açı = CalculatePourAngle(fill).
-                // fill pürüzsüz düştüğü için tüp de pürüzsüz eğilir; SmoothDamp
-                // gecikmesi olmadığından sıvı akış koluna DÖKME BOYUNCA bitişik
-                // kalır. Son kırıntıda açı MaxPourAngle'da kelepçelenir (sıvı biraz
-                // dudağın altında kalabilir; kolon yine sıvı yüzeyine demirli).
+                // Dökme ZAMANLAYICIYLA ilerler (gating YOK): seviye pürüzsüz
+                // düşüp akışla birlikte TAM biter (donma/sürünme imkânsız).
+                // fill düştükçe targetAngle kendiliğinden dikleşir (yukarıda),
+                // tüp sıvıyı dudakta tutarak eğilmeye devam eder. Son kırıntıda
+                // açı MaxPourAngle'da kelepçelenir; sıvı dudaktan geri çekilse
+                // de kolon sıvı yüzeyine demirli kalır (CalculateStreamSource).
                 if (pourStarted)
                 {
                     pourElapsed += dt;
                     float pourT = Mathf.Clamp01(pourElapsed / pourDuration);
                     fromView.SetFillLevel(Mathf.Lerp(fromStart, fromTarget, pourT));
-                    currentAngle = -CalculatePourAngle(fromView) * direction;
 
                     // Hedef: bu dökmenin bu kareki katkı ARTIŞINI ekle (toplamalı).
                     // İki gelen aynı hedefi kendi payınca yükseltir; biri erken
@@ -1410,12 +1408,12 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// FİZİKSEL EĞİM yaklaşımı: tüp, sıvıyı döken kenarda ağza (normalize
-        /// 1.0) ulaştıracak kadar eğilir. Sıvı azaldıkça bu açı ARTAR — dolu
-        /// tüp ~48°, dipte tek birim kalınca ~85°+. Üst sınır MaxPourAngle
-        /// (shader'ın dik yüzeyi çizebildiği ~88° kelepçesinin altı); bunun
-        /// ötesinde son kırıntı için sonsuz eğim gerekir, orada tüp tam eğik
-        /// kabul edilip kalan koşulsuz boşalır (bkz. AnimatePour fullyTilted).
+        /// FİZİKSEL EĞİM yaklaşımı: tüp, sıvıyı döken kenarda dudağın biraz
+        /// üstüne (normalize 1.05, bkz. AngleForLiquidAtLip) taşıyacak kadar
+        /// eğilir. Sıvı azaldıkça bu açı ARTAR — dolu tüp ~50°, dipte tek birim
+        /// kalınca ~83°+ (kap büyüdükçe dikleşir). Üst sınır MaxPourAngle
+        /// (shader'ın dik yüzeyi çizebildiği ~88.3° kelepçesinin hemen altı);
+        /// son kırıntı orada zamanlayıcıyla boşalmayı bitirir (bkz. AnimatePour).
         /// </summary>
         private static float CalculatePourAngle(TubeView fromView)
         {
@@ -1425,18 +1423,30 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// Sıvının döken kenarda ağza (normalize 1.0) tam ulaşması için gereken
-        /// eğim açısı — TiltedEdgeLevel'in tersi. İki rejim: yüzey iki duvarı da
-        /// kesiyorsa (fill>=0.5) tan = 2·(1-fill)·(H/W); az sıvıda üçgen rejimi
-        /// tan = (H/W)/(2·fill). fill→0'da tan→∞ (dikleşir); çağıran taraf
-        /// MaxPourAngle'da kelepçeler.
+        /// Sıvının döken kenarda ağzın BİRAZ ÜSTÜNE (normalize 1.05) ulaşması
+        /// için gereken eğim açısı — TiltedEdgeLevel'in tersi. Hedef BİLEREK
+        /// 1.0 değil 1.05: dökme kapısı (HasLiquidReachedMouth) kenarın 1.0'ı
+        /// GEÇMESİNİ bekler ve SmoothDamp kritik sönümlü olduğu için hedefini
+        /// asla aşmaz. Hedef tam 1.0 olsaydı açı asimptotik yaklaşıp kapıyı hiç
+        /// açamaz, dökme donardı (yaşandı: yalnız dolu tüpte minAngle tabanı
+        /// hedefi kazara temas açısının üstüne ittiği için ilk katman dökülüyor,
+        /// sonrakiler 67-82°'de donuyordu). 0.05 pay kapının sonlu sürede
+        /// aşılmasını garantiler; dökme boyunca da sıvıyı dudağa hafif BASTIRIR
+        /// (akış koluyla temas kopmaz; taşan pay yaka arkasında gizli).
+        /// AnchorLiquidToLip'teki 1.05 tavanıyla eş (twin sabit).
+        ///
+        /// İki rejim: yüzey iki duvarı da kesiyorsa (fill >= lip/2)
+        /// tan = 2·(lip-fill)·(H/W); az sıvıda üçgen rejimi
+        /// tan = lip²·(H/W)/(2·fill). fill→0'da tan→∞ (dikleşir); çağıran
+        /// taraf MaxPourAngle'da kelepçeler.
         /// </summary>
         private static float AngleForLiquidAtLip(float fill, float height)
         {
+            const float lip = 1.05f;
             float aspect = height / TubeView.Width;
-            float tan = (fill >= 0.5f)
-                ? 2f * (1f - fill) * aspect
-                : aspect / (2f * Mathf.Max(fill, 1e-4f));
+            float tan = (fill >= lip * 0.5f)
+                ? 2f * (lip - fill) * aspect
+                : lip * lip * aspect / (2f * Mathf.Max(fill, 1e-4f));
             return Mathf.Atan(tan);
         }
 
