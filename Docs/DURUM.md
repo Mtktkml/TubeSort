@@ -19,11 +19,19 @@ Seçilen model (ayrıntı CLAUDE.md "Dökme animasyonu"):
 Level içeriği işi de master'da: hep 2 boş tüp + zorluk (8,7,2)'ye uzatıldı,
 `pilot_levels.json` 30 tahta, skor monoton.
 
-## Aktif iş: tıklama alanına yaka (collar) dahil 🔨
+## Kapanan iş: tıklama alanına yaka dahil ✅
 
-Şu an tüp seçimi yalnız cam gövdeye tıklayınca çalışıyor. Yaka da tıklanabilir
-olmalı; ama tıklama alanı görselin dışına taşmamalı (yalnız yaka + cam).
-Branch: `feature/collar-click-area`.
+Yaka tıklaması master'da (`5d8ca82`): kaba collider + `ContainsPoint`'te
+gövde ∪ yaka stadyum SDF'i, görselden taşmadan.
+
+## Aktif iş: çıkmaz pop-up'ı 🔨 (branch: `feature/deadlock-popup`)
+
+Görseller Kenney asset'lerinden (KODDAN ÇİZİM DEĞİL — kullanıcı kararı;
+`Assets/Resources/UI/`, CC0). `PopupView` genel bileşen: karartma + panel +
+banner + rozetli butonlar; kazanma pop-up'ı da aynısını kullanacak. Çıkmazda
+banner yerine pop-up açılır, TÜM dokunuşlar yutulur (hamle kilidi), kurtarma:
+Geri Al / +1 Tüp / Baştan Al (reklam rozeti şimdilik süs/stub). Metinlerde
+ğ/İ/Ş kullanılmaz (fontta gömülü değil).
 
 ## Büyük yol haritası (mentör — 4 iş)
 

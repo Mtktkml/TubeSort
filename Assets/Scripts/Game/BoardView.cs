@@ -73,8 +73,7 @@ namespace TubeSort.Game
         private ButtonView prevButton;      // önceki level (nav)
         private ButtonView restartButton;   // leveli baştan
         private ButtonView addTubeButton;   // +boş tüp
-        private TextMeshPro deadlockBannerTop;    // çıkmaz uyarısı üst parça (gizli başlar)
-        private TextMeshPro deadlockBannerBottom; // çıkmaz uyarısı alt parça
+        private PopupView deadlockPopup;    // çıkmaz pop-up'ı (gizli başlar)
         private TextMeshPro levelTitle;     // üst-orta "LEVEL x.y"
         private Board pristineBoard;         // mevcut levelin bozulmamış kopyası (restart için)
 
@@ -247,11 +246,13 @@ namespace TubeSort.Game
             BuildAddTubeButton();
             BuildPilotNextButton();
             BuildPrevButton();
-            BuildDeadlockBanner();
+            BuildDeadlockPopup();
             BuildLevelTitle();
             ApplyLayout();
             UpdateLevelTitle();
             initialized = true;
+            // İlk tahta da çıkmaz olabilir (test/uç durum): uyarı baştan doğru.
+            RefreshDeadlockPopup();
         }
 
         /// <summary>
@@ -298,32 +299,35 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// Çıkmaz uyarısını iki TMP parçası olarak kurar (gizli başlar): üst parça
-        /// ekranın üstünde, alt parça altında, ikisi de yatayda ortada. Uzun mesaj
-        /// dar ekrana sığsın diye ikiye bölündü. TMP varsayılan fontunu kullanır
-        /// (TMP Essentials import edilmiş olmalı).
+        /// Çıkmaz pop-up'ını kurar (gizli başlar): karartma + panel + "Çıkmaz!"
+        /// şeridi + üç rozetli kurtarma butonu. Pop-up açıkken tüm dokunuşlar
+        /// ona yönlendirilir (HandleClick) — hamle kilidi budur. Reklam rozeti
+        /// şimdilik süs (stub): buton doğrudan aksiyonu çalıştırır, SDK sonra.
+        /// Metinlerde ğ/İ/Ş kullanılmaz — fontlarda gömülü değiller (CLAUDE.md).
         /// </summary>
-        private void BuildDeadlockBanner()
+        private void BuildDeadlockPopup()
         {
-            // Boyut başlık-tahta bandına göre seçilir: uyarı bandın ortasında,
-            // okunur ve tüplere değmeden durur.
-            deadlockBannerTop = CreateBannerPart("DeadlockBannerTop", "Çıkmaz!", 3.2f);
-            deadlockBannerBottom = CreateBannerPart(
-                "DeadlockBannerBottom", "Geri al, tüp ekle ya da yeniden başla", 2.3f);
-        }
-
-        private TextMeshPro CreateBannerPart(string name, string text, float fontSize)
-        {
-            var go = new GameObject(name);
-            var tmp = go.AddComponent<TextMeshPro>();
-            tmp.text = text;
-            tmp.fontSize = fontSize;
-            tmp.color = new Color(1f, 0.45f, 0.35f, 1f);
-            tmp.alignment = TextAlignmentOptions.Center;
-            tmp.rectTransform.sizeDelta = new Vector2(7.5f, 3f);
-            tmp.sortingOrder = 101;   // tüplerin/butonların üstünde
-            go.SetActive(false);      // yalnız çıkmazda görünür
-            return tmp;
+            var go = new GameObject("DeadlockPopup");
+            deadlockPopup = go.AddComponent<PopupView>();
+            deadlockPopup.Initialize(mainCamera, "Çıkmaz!", "Yapacak hamle kalmadı",
+                new[]
+                {
+                    new PopupView.PopupAction
+                    {
+                        Label = "Geri Al", IconPath = "UI/icon_undo",
+                        AdBadge = true, OnClick = UndoLastMove,
+                    },
+                    new PopupView.PopupAction
+                    {
+                        Label = "+1 Tüp", IconPath = "UI/icon_add_tube",
+                        AdBadge = true, OnClick = AddEmptyTube,
+                    },
+                    new PopupView.PopupAction
+                    {
+                        Label = "Baştan Al", IconPath = "UI/icon_restart",
+                        AdBadge = true, OnClick = RestartLevel,
+                    },
+                });
         }
 
         /// <summary>
@@ -381,20 +385,10 @@ namespace TubeSort.Game
             PlaceButton(prevButton, rightX - gap, topY);
 
             // Level başlığı: üst-orta, buton sırasından biraz boşluklu.
+            // (Çıkmaz pop-up'ı kendini Show sırasında kameraya göre konumlar.)
             float titleY = cam.y + view.y * TitleFraction;
             if (levelTitle != null)
                 levelTitle.transform.position = new Vector3(cam.x, titleY, 0f);
-
-            // Çıkmaz uyarısı: başlık ile tahta tavanı arasındaki bandın ORTASINA
-            // yerleşen iki satır. Ofsetler dünya biriminde: TitleClearance da
-            // dünya biriminde olduğundan tahta tavanı her zoom'da uyarının
-            // altından geçer — uyarı tüplerin üstüne binmez.
-            if (deadlockBannerTop != null)
-                deadlockBannerTop.transform.position =
-                    new Vector3(cam.x, titleY - 0.45f, 0f);
-            if (deadlockBannerBottom != null)
-                deadlockBannerBottom.transform.position =
-                    new Vector3(cam.x, titleY - 0.78f, 0f);
         }
 
         private static void PlaceButton(MonoBehaviour button, float x, float y)
@@ -408,6 +402,9 @@ namespace TubeSort.Game
         /// <summary>Herhangi bir dökme/geri-alma animasyonu sürüyor mu? Testler
         /// bitişini beklemek için kullanır.</summary>
         public bool IsAnimating => AnyAnimating;
+
+        /// <summary>Çıkmaz pop-up'ı ekranda mı? Testlerin durum sorgusu için.</summary>
+        public bool DeadlockPopupVisible => deadlockPopup != null && deadlockPopup.Visible;
 
         /// <summary>
         /// Dışarıdan tahta yükler: level üreticinin ve testlerin giriş kapısı.
@@ -536,9 +533,9 @@ namespace TubeSort.Game
             ClearSelection();
             // Çıkmaz uyarısını KOŞULLU güncelle (koşulsuz gizleme değil):
             // eşzamanlı dökmede çıkmaza iki hamle birlikte sokmuş olabilir, tek
-            // geri alma yetmeyebilir. Banner yalnız tahta gerçekten çözülebilir
-            // hâle dönünce kalkar; hâlâ çıkmazsa kalır (undo verisi hemen işlendi).
-            RefreshDeadlockBanner();
+            // geri alma yetmeyebilir. Pop-up yalnız tahta gerçekten çözülebilir
+            // hâle dönünce kapanır; hâlâ çıkmazsa kalır (undo verisi hemen işlendi).
+            RefreshDeadlockPopup();
             StartCoroutine(AnimateUndo(undone));
         }
 
@@ -605,14 +602,11 @@ namespace TubeSort.Game
 
             board.AddTube(board[0].Capacity);
             ClearSelection();
+            // +tüp genelde çıkmazı çözer (boş tüp = daha çok yer) ama garanti
+            // değil: RebuildViews sonunda durumu koşullu tazeler — hâlâ çıkmazsa
+            // pop-up geri gelir (undo'daki koşullu temizlemenin aynısı).
             if (initialized)
-            {
                 RebuildViews();
-                // +tüp genelde çıkmazı çözer (boş tüp = daha çok yer) ama garanti
-                // değil: RebuildViews banner'ı gizledi; yeni tahta hâlâ çıkmazsa
-                // banner geri gelir (undo'daki koşullu temizlemenin aynısı).
-                RefreshDeadlockBanner();
-            }
         }
 
         /// <summary>Mevcut tüp görünümlerini yıkıp tahtayı baştan kurar.</summary>
@@ -633,6 +627,10 @@ namespace TubeSort.Game
 
             BuildViews();
             ApplyLayout();
+
+            // Yeni tahta da çıkmaz olabilir (level geçişi / LoadBoard ile dış
+            // tahta / +tüp yetmedi): uyarı durumu her kurulumda tazelenir.
+            RefreshDeadlockPopup();
         }
 
         /// <summary>
@@ -963,6 +961,16 @@ namespace TubeSort.Game
         private void HandleClick(Vector2 screenPosition)
         {
             Vector3 worldPoint = mainCamera.ScreenToWorldPoint(screenPosition);
+
+            // Pop-up açıkken TÜM dokunuşlar ona gider: butona denk gelmeyen
+            // dokunuş yutulur. Hamle kilidi budur — tüpler, HUD butonları ve
+            // level gezinme pop-up kapanana dek dokunuşla erişilemez.
+            if (deadlockPopup != null && deadlockPopup.Visible)
+            {
+                deadlockPopup.HandleClick(worldPoint);
+                return;
+            }
+
             Collider2D[] hits = Physics2D.OverlapPointAll(worldPoint);
 
             // Butonlar tüplerin/akışın üstünde; herhangi bir collider buysa öncelikli.
@@ -1063,15 +1071,15 @@ namespace TubeSort.Game
                 return;
             }
 
-            RefreshDeadlockBanner();
+            RefreshDeadlockPopup();
         }
 
-        /// <summary>Çıkmaz uyarısını tahtanın çözülebilirliğine göre günceller:
+        /// <summary>Çıkmaz pop-up'ını tahtanın çözülebilirliğine göre günceller:
         /// çözülemezse gösterir, çözülebilirse gizler. Hem dökme sonrası
-        /// (ReportBoardState) hem geri alma sonrası çağrılır — bu yüzden banner
-        /// yalnız gerçekten çıkmazdan çıkınca kalkar, her undo'da körü körüne değil.
-        /// Varlık kontrolü ucuz (ilk çözümde durur).</summary>
-        private void RefreshDeadlockBanner()
+        /// (ReportBoardState) hem geri alma sonrası çağrılır — bu yüzden pop-up
+        /// yalnız gerçekten çıkmazdan çıkınca kapanır, her undo'da körü körüne
+        /// değil. Varlık kontrolü ucuz (ilk çözümde durur).</summary>
+        private void RefreshDeadlockPopup()
         {
             if (!Solver.IsSolvable(board))
             {
@@ -1084,24 +1092,18 @@ namespace TubeSort.Game
             }
         }
 
-        /// <summary>Çıkmaz uyarısını gösterir: banner + kaçış butonlarını yanıp söndür.</summary>
+        /// <summary>Çıkmaz pop-up'ını gösterir; seçim temizlenir (pop-up
+        /// kapandığında bayat seçim kalmasın).</summary>
         private void ShowDeadlock()
         {
-            if (deadlockBannerTop != null) deadlockBannerTop.gameObject.SetActive(true);
-            if (deadlockBannerBottom != null) deadlockBannerBottom.gameObject.SetActive(true);
-            if (undoButton != null) undoButton.SetHighlight(true);
-            if (restartButton != null) restartButton.SetHighlight(true);
-            if (addTubeButton != null) addTubeButton.SetHighlight(true);
+            ClearSelection();
+            if (deadlockPopup != null && !deadlockPopup.Visible) deadlockPopup.Show();
         }
 
-        /// <summary>Çıkmaz uyarısını gizler ve butonların yanıp sönmesini durdurur.</summary>
+        /// <summary>Çıkmaz pop-up'ını gizler.</summary>
         private void HideDeadlock()
         {
-            if (deadlockBannerTop != null) deadlockBannerTop.gameObject.SetActive(false);
-            if (deadlockBannerBottom != null) deadlockBannerBottom.gameObject.SetActive(false);
-            if (undoButton != null) undoButton.SetHighlight(false);
-            if (restartButton != null) restartButton.SetHighlight(false);
-            if (addTubeButton != null) addTubeButton.SetHighlight(false);
+            if (deadlockPopup != null && deadlockPopup.Visible) deadlockPopup.Hide();
         }
 
         /// <summary>
