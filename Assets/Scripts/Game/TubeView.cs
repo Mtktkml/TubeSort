@@ -24,12 +24,13 @@ namespace TubeSort.Game
         /// öncekinden farklı renkse hiçbiri birleşmez. Yani bu sayı aynı zamanda
         /// desteklenen en büyük tüp kapasitesidir.
         ///
-        /// Sekiz, oynanabilir tüp boylarını (4-6 birim) rahatça karşılar.
+        /// On iki, oyunun hedeflediği en derin tüpleri (kapasite 12) karşılar.
         /// Büyütmenin bedeli var: shader döngüsü her piksel için bu kadar tur
-        /// döner. Daha büyük kapasite gerekirse burayı ve shader'daki MAX_LAYERS'ı
-        /// birlikte artır; aşım durumunda Initialize hata basar.
+        /// döner (12, eski 8'e göre ~%50 daha fazla piksel maliyeti). Daha büyük
+        /// kapasite gerekirse burayı ve shader'daki MAX_LAYERS'ı birlikte artır;
+        /// aşım durumunda Initialize hata basar.
         /// </summary>
-        private const int MaxLayers = 8;
+        private const int MaxLayers = 12;
 
         private const float SelectedLift = 0.3f;
 
