@@ -12,6 +12,8 @@
 # Python scriptlerinin uretilen raporlari ve onbellegi
 /Tools/SolverBenchmark/py_results.md
 /Tools/SolverBenchmark/py_benchmark.md
+# Level uretici teshis ciktisi (turetilmis, ~29K satir; her kosuda yeniden uretilir)
+/Tools/SolverBenchmark/diagnostics.json
 /Tools/**/__pycache__/
 /[Ll]ibrary/
 /[Tt]emp/
