@@ -37,6 +37,13 @@ def set_stage(text):
 
 BUDGET = 2_000_000
 
+# solvable_only() icin AYRI, daha comert butce. Yalnizca "ilk cozumde dur"
+# yaptigi ve durum basina hicbir sey saymadigi (sozluk/kenar biriktirmedigi)
+# icin state basina maliyeti solve()'tan cok daha dusuktur; ayni duvar-zamanda
+# daha genis bir uzayi tarayabilir. Boylece tam-sayim solve() butceyi asip
+# "bilinmiyor" dedigi buyuk tahtalarda cozulebilirligi yine de GARANTI eder.
+SOLVABLE_BUDGET = 20_000_000
+
 # ---------------------------------------------------------------- kurallar
 
 def top_segment(tube):
@@ -173,6 +180,48 @@ def solve(board, cap, max_states=BUDGET):
     return ("OUT_OF_BUDGET" if budget_hit else "UNSOLVABLE"), states, 0, None
 
 
+def solvable_only(board, cap, max_states=SOLVABLE_BUDGET):
+    """Yalin cozulebilirlik karari: ILK cozumde durur, hicbir sey saymaz.
+
+    solve() ile AYNI budanmis kanonik graf (ayni gen_moves, ayni canonical);
+    tek fark: cozume dusen ilk kenarda hemen durur ve durum/cozum sayimi yapmaz.
+    Birlestirme-oncelikli DFS (gen_moves dolu hedefleri one koyar) cozumu az
+    dugumle bulur. Amac: buyuk tahtada tam-sayim solve() butceyi asinca
+    cozulebilirligi yine de GARANTI etmek (comert SOLVABLE_BUDGET ile).
+
+    Doner:
+      True  — en az bir cozum bulundu (cozulebilir).
+      False — uzay TAM tukendi, cozum yok (UNSOLVABLE ile ayni karar).
+      None  — butce asildi, cozum bulunamadan ("bilinmiyor", cozum yok DEGIL).
+    """
+    board = tuple(tuple(t) for t in board)
+    if is_solved(board, cap):
+        return True
+
+    visited = {canonical(board)}
+    # Acik yigin; solve() ile ayni gezinme sirasi icin hamleler ters itilir
+    # (LIFO: son itilen ilk islenir -> gen_moves'un ilk hamlesi ilk denenir).
+    stack = [board]
+    states = 0
+
+    while stack:
+        cur = stack.pop()
+        if states >= max_states:
+            return None
+        states += 1
+
+        for i, j in reversed(gen_moves(cur, cap)):
+            nxt = pour(cur, cap, i, j)
+            if is_solved(nxt, cap):
+                return True
+            key = canonical(nxt)
+            if key not in visited:
+                visited.add(key)
+                stack.append(nxt)
+
+    return False
+
+
 def shortest_solution(board, cap, max_states=BUDGET):
     """En kisa cozum uzunlugu (hamle sayisi): kanonik graf uzerinde BFS.
 
@@ -292,6 +341,73 @@ def dead_ratio(board, cap, max_states=BUDGET):
     reachable = len(visited)   # start dahil tum erisilebilir (hedef-olmayan) durumlar
     dead = reachable - len(alive)
     return dead / reachable, reachable, False
+
+
+def measure(board, cap, max_states=BUDGET):
+    """TEK BFS ile enKisa (L) + erisilebilir durum sayisi (C girdisi) + olu-oran (T).
+
+    shortest_solution() (BFS) + dead_ratio() (DFS) iki ayri taramasinin yerine
+    gecer: AYNI budanmis kanonik graf (gen_moves + canonical), ama tek gezi.
+    Katman katman (BFS) gezildigi icin cozume dusen ILK kenarin derinligi = en
+    kisa (L); gezi C ve T icin sonuna kadar surer; ayni gezide olu-oran
+    (geri-erisilebilirlik) hesaplanir. Sonuclar shortest_solution + dead_ratio
+    ile birebir tutmali (crosscheck: run_dead_ratio_checks bunu dogrular).
+
+    Doner (shortest, reachable, dead_ratio, budget_hit):
+      budget_hit False, shortest int  -> tam olculdu.
+      budget_hit False, shortest None -> uzay tukendi, cozum yok (UNSOLVABLE).
+      budget_hit True                 -> tam tarama butceyi asti; reachable/dead
+                                         guvenilmez (shortest bulunmus olabilir).
+    Bastan cozulmus tahta -> (0, 0, 0.0, False)."""
+    board = tuple(tuple(t) for t in board)
+    if is_solved(board, cap):
+        return 0, 0, 0.0, False
+
+    visited = {canonical(board)}
+    queue = deque([(board, 0)])
+    succ = {}
+    seed_alive = set()
+    shortest = None
+    states = 0
+
+    while queue:
+        cur, depth = queue.popleft()
+        if states >= max_states:
+            return shortest, states, None, True
+        states += 1
+        key = canonical(cur)
+        children = []
+        for i, j in gen_moves(cur, cap):
+            nxt = pour(cur, cap, i, j)
+            if is_solved(nxt, cap):
+                if shortest is None:
+                    shortest = depth + 1          # BFS -> ilk bulunan = en kisa
+                seed_alive.add(key)
+                continue
+            nkey = canonical(nxt)
+            children.append(nkey)
+            if nkey not in visited:
+                visited.add(nkey)
+                queue.append((nxt, depth + 1))
+        succ[key] = children
+
+    # Olu-oran: seed_alive'dan geri-erisilebilirlikle canliligi yay.
+    preds = {}
+    for u, kids in succ.items():
+        for v in kids:
+            preds.setdefault(v, []).append(u)
+    alive = set(seed_alive)
+    dq = deque(seed_alive)
+    while dq:
+        v = dq.popleft()
+        for u in preds.get(v, ()):
+            if u not in alive:
+                alive.add(u)
+                dq.append(u)
+
+    reachable = len(visited)
+    dead = (reachable - len(alive)) / reachable
+    return shortest, reachable, dead, False
 
 
 # ------------------------------------------------- capraz dogrulama verisi
@@ -454,6 +570,38 @@ def run_dead_ratio_checks(out):
     return all_ok
 
 
+def run_measure_checks(out):
+    """Birlesik measure() (tek BFS) dogrulamasi: enKisa/erisilebilir/olu,
+    ayri shortest_solution() + dead_ratio() referanslariyla birebir tutmali.
+    (pilot_ladder uretimde measure() kullanir; bu, o birlesik yolun ayni sonucu
+    verdigini garanti eder.)"""
+    out.append("## measure() dogrulamasi: tek-BFS vs (shortest_solution + dead_ratio)\n")
+    out.append("Birlesik `measure()` -> enKisa (L), erisilebilir (C), olu (T); "
+               "ayri iki-tarama referansiyla birebir tutmali.\n")
+    out.append("| Tahta | enKisa (m/ref) | erisilebilir (m/ref) | olu (m/ref) | Sonuc |")
+    out.append("|---|---|---|---|---|")
+
+    all_ok = True
+    for name, cap, board in DEAD_RATIO_CHECKS:
+        m_short, m_reach, m_dead, m_hit = measure(board, cap)
+        r_short, _, s_hit = shortest_solution(board, cap)
+        r_ratio, r_reach, d_hit = dead_ratio(board, cap)
+        ok = (not (m_hit or s_hit or d_hit)
+              and m_short == r_short
+              and m_reach == r_reach
+              and abs(m_dead - r_ratio) < 1e-9)
+        all_ok = all_ok and ok
+        mark = "ESLESTI" if ok else "**UYUSMAZLIK**"
+        out.append(f"| {name} | {m_short} / {r_short} | {m_reach} / {r_reach} "
+                   f"| {m_dead:.4f} / {r_ratio:.4f} | {mark} |")
+
+    out.append("")
+    out.append("**TOPLU SONUC: " + ("MEASURE ESLESTI**" if all_ok
+               else "UYUSMAZLIK VAR — INCELE!**"))
+    out.append("")
+    return all_ok
+
+
 # --------------------------------------------------------------- benchmark
 
 def generate(colors, cap, empties, rng):
@@ -524,6 +672,9 @@ def main():
 
     set_stage("dead_ratio dogrulamasi")
     run_dead_ratio_checks(out)
+
+    set_stage("measure() dogrulamasi")
+    run_measure_checks(out)
 
     set_stage("benchmark basliyor")
     run_benchmark(out)

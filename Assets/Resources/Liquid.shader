@@ -60,7 +60,7 @@ Shader "TubeSort/Liquid"
             // eşittir (hiçbir bitişik renk aynı değilse), o yüzden bu sınır aynı
             // zamanda desteklenen en büyük kapasitedir. Döngü her piksel için
             // bu kadar tur döndüğünden gereğinden büyük tutulmaz.
-            #define MAX_LAYERS 8
+            #define MAX_LAYERS 12
 
             CBUFFER_START(UnityPerMaterial)
                 float _EdgeSoftness;

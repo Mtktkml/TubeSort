@@ -102,10 +102,12 @@ işleniyor, Shader Graph'ta dizi/döngü yok.
 
 **İki yerde tutulan, derleyicinin zorlayamadığı sabitler:**
 
-- **`MaxLayers = 8`** — `TubeView.MaxLayers` ve `Liquid.shader`'daki `MAX_LAYERS`
+- **`MaxLayers = 12`** — `TubeView.MaxLayers` ve `Liquid.shader`'daki `MAX_LAYERS`
   aynı olmalı. En kötü durumda katman sayısı kapasiteye eşittir, yani bu sayı aynı
   zamanda **desteklenen en büyük tüp kapasitesi**. Aşılırsa `TubeView.Initialize`
-  hata basar (sessizce yanlış çizmek yerine).
+  hata basar (sessizce yanlış çizmek yerine). (8→12 yükseltildi: daha derin/zor
+  tüpler; shader piksel-döngüsü ~%50 arttı. Palet de 8→10 renge çıktı,
+  `ColorPalette.cs`.)
 - **SDF formülleri** — `TubeShape.hlsl` (GPU, piksel boyama) ve `TubeView.cs` (CPU,
   tıklama doğrulama) aynı şekli çizmeli. GPU/CPU kod paylaşamadığı için tekrar
   kaçınılmaz. Şekil değişirse `SdRoundedBox` ve `SdTube` ikisinde birlikte güncellenir.
