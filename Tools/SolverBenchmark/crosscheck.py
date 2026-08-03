@@ -37,6 +37,13 @@ def set_stage(text):
 
 BUDGET = 2_000_000
 
+# solvable_only() icin AYRI, daha comert butce. Yalnizca "ilk cozumde dur"
+# yaptigi ve durum basina hicbir sey saymadigi (sozluk/kenar biriktirmedigi)
+# icin state basina maliyeti solve()'tan cok daha dusuktur; ayni duvar-zamanda
+# daha genis bir uzayi tarayabilir. Boylece tam-sayim solve() butceyi asip
+# "bilinmiyor" dedigi buyuk tahtalarda cozulebilirligi yine de GARANTI eder.
+SOLVABLE_BUDGET = 20_000_000
+
 # ---------------------------------------------------------------- kurallar
 
 def top_segment(tube):
@@ -171,6 +178,48 @@ def solve(board, cap, max_states=BUDGET):
     if sols > 0:
         return "SOLVABLE", states, sols, first_len
     return ("OUT_OF_BUDGET" if budget_hit else "UNSOLVABLE"), states, 0, None
+
+
+def solvable_only(board, cap, max_states=SOLVABLE_BUDGET):
+    """Yalin cozulebilirlik karari: ILK cozumde durur, hicbir sey saymaz.
+
+    solve() ile AYNI budanmis kanonik graf (ayni gen_moves, ayni canonical);
+    tek fark: cozume dusen ilk kenarda hemen durur ve durum/cozum sayimi yapmaz.
+    Birlestirme-oncelikli DFS (gen_moves dolu hedefleri one koyar) cozumu az
+    dugumle bulur. Amac: buyuk tahtada tam-sayim solve() butceyi asinca
+    cozulebilirligi yine de GARANTI etmek (comert SOLVABLE_BUDGET ile).
+
+    Doner:
+      True  — en az bir cozum bulundu (cozulebilir).
+      False — uzay TAM tukendi, cozum yok (UNSOLVABLE ile ayni karar).
+      None  — butce asildi, cozum bulunamadan ("bilinmiyor", cozum yok DEGIL).
+    """
+    board = tuple(tuple(t) for t in board)
+    if is_solved(board, cap):
+        return True
+
+    visited = {canonical(board)}
+    # Acik yigin; solve() ile ayni gezinme sirasi icin hamleler ters itilir
+    # (LIFO: son itilen ilk islenir -> gen_moves'un ilk hamlesi ilk denenir).
+    stack = [board]
+    states = 0
+
+    while stack:
+        cur = stack.pop()
+        if states >= max_states:
+            return None
+        states += 1
+
+        for i, j in reversed(gen_moves(cur, cap)):
+            nxt = pour(cur, cap, i, j)
+            if is_solved(nxt, cap):
+                return True
+            key = canonical(nxt)
+            if key not in visited:
+                visited.add(key)
+                stack.append(nxt)
+
+    return False
 
 
 def shortest_solution(board, cap, max_states=BUDGET):
