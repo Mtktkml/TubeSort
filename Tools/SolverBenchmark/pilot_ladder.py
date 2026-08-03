@@ -4,13 +4,13 @@ Dengeli (kap, renk) GRID (|kap-renk|<=BALANCE) uzerinde forward-random
 uret-ve-test. Cikti: pilot_ladder.md + pilot_levels.json + diagnostics.json.
 Agirlik kalibrasyonu oyuncu testiyle.
 
-SIRALAMA (kullanici karari): bantlar hacme gore dizilir -> hem tup DERINLIGI
-(kapasite) hem tup SAYISI (renk) GENELDE artar. Buyuk "derin-az tup <-> sig-cok
-tup" ziplamasi YOK (BALANCE=2 -> tie'larda en fazla +-2 salinim). Olculebilir
-bantlar (hacim, kap)'a; HARD bantlar (skor yok) (hacim, RENK)'e gore siralanir
-(renk = zorluk vekili: az->cok renk = kolay->zor). Skora gore YENIDEN SIRALAMA
-YOK; olculen skor yalniz BANT ICI kolay->zor tahta seciminde. ~34 durum; 300
-level = durum basina ~9 tahta (ayni kap x renk, farkli dizilis).
+SIRALAMA (kullanici karari): OLCULEBILIR bantlar ORTALAMA SKORA gore sirali
+(skor-monoton -> testere yok). HARD bantlar (skor yok) (hacim, RENK)'e gore, en
+sona (renk = zorluk vekili: az->cok renk = kolay->zor). Dengeli grid
+(|kap-renk|<=BALANCE) sayesinde skor-siralamasi yapiyi <=+-BALANCE salinimda tutar:
+hem tup DERINLIGI (kapasite) hem tup SAYISI (renk) GENELDE artar, buyuk "derin-az
+<-> sig-cok" ziplamasi YOK. Skor ayrica BANT ICI kolay->zor tahta seciminde. ~34
+durum; 300 level = durum basina ~9 tahta (ayni kap x renk, farkli dizilis).
 (STRICT monoton "ikisi de hic azalmaz" integer kap/renk ile ancak ~16 durum ->
 durum basi ~19 tahta cok tekrarli olurdu; BALANCE=2 kabul edilen kucuk salinim.)
 
@@ -20,11 +20,10 @@ olmaz — kullanici hamle yapmadan tipali/cozulmus tup gorunmesin.
 Uretim: FORWARD-RANDOM, 2 bos tup (ters-uretim yok). Olcum PARALEL. Determinizm
 aday basina tohumdan (seed_for).
 
-Metrik (cozum-sayisi/tam-sayim solve() YOK):
-  L <- shortest_solution (enKisa) + cozulebilirlik
-  C (durum) + T (olu) <- tek dead_ratio taramasi
-Hacim > MEASURABLE_VOLUME_MAX -> yalin solvable_only (cozulebilirlik GARANTI,
-metrik kismi; "hard" bantlar).
+Metrik (cozum-sayisi/tam-sayim solve() YOK): olculebilir bantlarda TEK BFS
+(cc.measure) -> L (enKisa) + C (durum) + T (olu) tek gezide. Hacim >
+MEASURABLE_VOLUME_MAX -> yalin solvable_only (cozulebilirlik GARANTI, metrik
+kismi; "hard" bantlar).
 
 Skor (BANT ICI): UC-TERIM AGIRLIKLI, olculebilir havuzda [0,1] normalize.
   L 0.45 (enKisa) · C 0.30 (log durum) · T 0.25 (olu-oran)
@@ -66,10 +65,9 @@ WORKERS = max(1, (os.cpu_count() or 2) - 1)
 
 
 def _build_ladder():
-    """Dengeli GRID'i durum sirasina dizer. Hep hacme gore; olculebilir bantlar
-    (hacim, kap)'a (kabul edilen derinlik-artan rampa, gercek skoru var), HARD
-    bantlar (hacim, renk)'e (skor yok, renk zorluk vekili). Ikisi de hacimle
-    dizildiginden olculebilir (<=tavan) once, hard sonra gelir."""
+    """GRID'i URETIM sirasina dizer (hacme gore). Bu sira yalniz uretim/tohum
+    icindir (seed_for slot_idx'e bagli -> deterministik tahtalar). NIHAI level
+    sirasi main'de olculen skora gore yeniden dizilir (bkz. 'SIRALA (B)')."""
     combos = [(cap, colors, 2) for cap in GRID_CAPS for colors in GRID_COLORS
               if abs(cap - colors) <= BALANCE]
     meas = sorted((c for c in combos if c[0] * c[1] <= MEASURABLE_VOLUME_MAX),
@@ -138,23 +136,22 @@ def evaluate_candidate(task):
             return _diag(board, cap, colors, "budget", t0)
         return _diag(board, cap, colors, "accepted_partial", t0)
 
-    # OLCULEBILIR rejim: L + cozulebilirlik <- shortest; C + T <- dead_ratio.
-    shortest, _, short_hit = cc.shortest_solution(board, cap)
-    if shortest is None and not short_hit:
-        return _diag(board, cap, colors, "unsolvable", t0)
-    if short_hit:                       # enKisa BFS butce asti -> yalin kontrol
-        ok = cc.solvable_only(board, cap, max_states=HARD_SOLVABLE_BUDGET)
-        if ok is False:
+    # OLCULEBILIR rejim: TEK BFS -> L (enKisa) + C (durum) + T (olu).
+    shortest, reach, dratio, hit = cc.measure(board, cap)
+    if not hit:
+        if shortest is None:                    # uzay tukendi, cozum yok
             return _diag(board, cap, colors, "unsolvable", t0)
-        if ok is None:
-            return _diag(board, cap, colors, "budget", t0)
-        return _diag(board, cap, colors, "accepted_partial", t0)
-
-    dratio, reach, dead_hit = cc.dead_ratio(board, cap)
-    if dead_hit:                        # nadir: enKisa cozuldu, tam graf bitmedi
+        return _diag(board, cap, colors, "accepted", t0,
+                     shortest=shortest, states=reach, dead=dratio)
+    # Butce asti (vol<=64'te ~imkansiz): C/T guvenilmez. Cozulebilirse kismi.
+    if shortest is not None:
         return _diag(board, cap, colors, "accepted_partial", t0, shortest=shortest)
-    return _diag(board, cap, colors, "accepted", t0,
-                 shortest=shortest, states=reach, dead=dratio)
+    ok = cc.solvable_only(board, cap, max_states=HARD_SOLVABLE_BUDGET)
+    if ok is False:
+        return _diag(board, cap, colors, "unsolvable", t0)
+    if ok is None:
+        return _diag(board, cap, colors, "budget", t0)
+    return _diag(board, cap, colors, "accepted_partial", t0)
 
 
 def build_slot(pool, slot_idx, cap, colors, empties, target=CANDIDATES_PER_SLOT):
@@ -228,14 +225,11 @@ def choose_spread(items, n, key=None):
 
 
 def metrics_for(board, cap, colors):
-    """Elle kurulan (ogretici) tahtanin metrikleri; cozulebilirligi DOGRULAR."""
+    """Elle kurulan (ogretici) tahtanin metrikleri (tek BFS); cozulebilirligi DOGRULAR."""
     t0 = time.perf_counter()
-    shortest, _, _ = cc.shortest_solution(board, cap)
-    if shortest is None:
-        raise ValueError(f"Ogretici cozulemez/butce: {fmt_tubes(board)}")
-    dratio, reach, dead_hit = cc.dead_ratio(board, cap)
-    if dead_hit:
-        raise ValueError(f"Ogretici dead_ratio butce: {fmt_tubes(board)}")
+    shortest, reach, dratio, hit = cc.measure(board, cap)
+    if hit or shortest is None:
+        raise ValueError(f"Ogretici olculemedi (butce/cozulemez): {fmt_tubes(board)}")
     return _diag(board, cap, colors, "accepted", t0,
                  shortest=shortest, states=reach, dead=dratio)
 
@@ -243,8 +237,8 @@ def metrics_for(board, cap, colors):
 def main():
     print(f"300-level uretimi (PARALEL {WORKERS}) — dengeli GRID {len(LADDER)} durum "
           f"(|kap-renk|<={BALANCE}), hedef {TARGET_TOTAL} level, aday/durum {CANDIDATES_PER_SLOT}")
-    print(f"siralama hacme gore (olc:(hacim,kap), hard:(hacim,renk)); skor yalniz "
-          f"durum ici secim. olculebilir tavan hacim<={MEASURABLE_VOLUME_MAX}\n")
+    print(f"siralama: olculebilir SKORA gore (skor-monoton), hard (hacim,renk); "
+          f"olculebilir tavan hacim<={MEASURABLE_VOLUME_MAX}\n")
     wall0 = time.perf_counter()
 
     # 1. Tum durumlari uret+olc (paylasilan Pool) + ogretici 2.
@@ -270,8 +264,8 @@ def main():
 
     score_fn, bounds = make_scorer(all_measurable)
 
-    # 2. Durumlar LADDER sirasinda (yeniden siralama yok; yapisal ramp korunur).
-    #    Olculebilir durum -> tam-metrik adaylar; hard durum -> kismi adaylar.
+    # 2. Durumlari yapilandir: olculebilir -> tam-metrik (ortalama skorlu);
+    #    hard -> kismi (skor yok).
     bands = []
     for res in band_results:
         cap, colors = res["cap"], res["colors"]
@@ -287,6 +281,14 @@ def main():
                       if meas else None)
         bands.append({"cap": cap, "colors": colors, "vol": vol,
                       "measurable": meas, "mean_score": mean_score, "cands": cands})
+
+    # SIRALA (B): olculebilir bantlar ORTALAMA SKORA gore (skor-monoton -> testere
+    # gider); hard bantlar (skor yok) (hacim, renk)'e gore, en sona. Dengeli grid
+    # (|kap-renk|<=BALANCE) skor-siralamasini yapisal olarak <=+-BALANCE'da tutar.
+    bands = (sorted((b for b in bands if b["measurable"]),
+                    key=lambda b: b["mean_score"])
+             + sorted((b for b in bands if not b["measurable"]),
+                      key=lambda b: (b["vol"], b["colors"])))
 
     # 3. Ogretici (4 tahta) — en basta, sabit.
     tut1 = [metrics_for(bd, TUTORIAL_CAP, 1) for bd in TUTORIAL1_BOARDS]
@@ -317,7 +319,7 @@ def main():
 
     # 5. Konsol: rampa ozeti (yapisal ramp + level araliklari gorunsun).
     print(
-        f"\n=== RAMPA OZETI (hacme gore) — Lv 1-{len(tutorial_boards)}: ogretici ===")
+        f"\n=== RAMPA OZETI (skora gore) — Lv 1-{len(tutorial_boards)}: ogretici ===")
     lvl = len(tutorial_boards) + 1
     for b in bands:
         n = len(b["picks"])
@@ -375,9 +377,10 @@ def write_report(bands, tutorial_boards, bounds, total_secs):
     lines.append(f"Seed `{SEED}` · dengeli grid {len(LADDER)} durum (|kap-renk|<={BALANCE}) · "
                  f"aday/durum {CANDIDATES_PER_SLOT} · PARALEL {WORKERS} · gercek {total_secs:.1f}s")
     lines.append("")
-    lines.append("Siralama hacme gore — olculebilir bantlar (hacim, kap), hard bantlar "
-                 f"(hacim, renk). kap + renk GENELDE artar (tie'larda en fazla +-{BALANCE} "
-                 "salinim; buyuk deep-few<->shallow-many jar YOK). Skor yalniz BANT ICI "
+    lines.append("Siralama: **olculebilir bantlar ORTALAMA SKORA gore** (skor-monoton, "
+                 "testere yok); hard bantlar (hacim, renk), en sonda. Dengeli grid "
+                 f"(|kap-renk|<={BALANCE}) skor-siralamasini yapisal <=+-{BALANCE} salinimda "
+                 "tutar (kap+renk genelde artar, buyuk jar YOK). Skor ayrica BANT ICI "
                  f"kolay->zor secim. (L={WEIGHTS['L']} C={WEIGHTS['C']} T={WEIGHTS['T']}; "
                  f"olculebilir havuzda [0,1] normalize; hacim>{MEASURABLE_VOLUME_MAX} 'hard'.)")
     lines.append("")
