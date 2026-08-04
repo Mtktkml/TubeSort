@@ -1637,13 +1637,15 @@ namespace TubeSort.Game
             float lipSide = -Mathf.Sign(signedAngle);
 
             // Görünen sıvı kenarı artık shader'ın HACİM-KORUMALI yüzeyinden
-            // gelir: döken kenardaki yükseklik = TiltedEdgeLevel (fiziksel, hacim
-            // korunumlu), tepede 1.0'da kırpılır. Akış kolonu buraya demirlenir;
-            // sıvı ağza tam ulaşmasa da (son kırıntı) kolon sıvının gerçek
-            // yüzeyine bağlı kalır → dökme boyunca bağlantı kopmaz.
+            // gelir: döken kenardaki yükseklik = TiltedEdgeLevel (fiziksel,
+            // hacim korunumlu), tepede 1.05'te kırpılır — sıvı artık gövde
+            // tepesini aşıp halka arkasında ağza tırmanabildiği (_MouthOverflow)
+            // için kolonun demiri de dudak payına dek yükselir; görünen sıvı
+            // kenarıyla kolon ağızda buluşur. Sıvı ağza ulaşmasa da (son
+            // kırıntı) kolon gerçek yüzeye bağlı kalır → bağlantı kopmaz.
             // surfaceNorm sıvı-yerel (0=iç taban); tüp-yerele FloorInset ekler.
-            float surfaceNorm = Mathf.Clamp01(TiltedEdgeLevel(
-                fromView.CurrentFill, signedAngle, fromView.LiquidHeight));
+            float surfaceNorm = Mathf.Clamp(TiltedEdgeLevel(
+                fromView.CurrentFill, signedAngle, fromView.LiquidHeight), 0f, 1.05f);
 
             Vector3 localPos = new Vector3(
                 TubeView.Width * 0.5f * lipSide,

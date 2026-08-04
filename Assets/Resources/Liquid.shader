@@ -11,7 +11,9 @@ Shader "TubeSort/Liquid"
     {
         _EdgeSoftness ("Yüzey yumuşaklığı (dünya birimi)", Float) = 0.012
         _SideShading ("Kenar gölgesi", Range(0, 1)) = 0.35
-        _Glossiness ("Şerit parlaklığı", Range(0, 1)) = 0.5
+        // 1 = camdan ölçülen bant şiddeti (nötr gri, tepe alfa ~0.30);
+        // ölçek yalnız ince ayar için.
+        _Glossiness ("Şerit parlaklığı", Range(0, 1.5)) = 1.0
         // TubeView.Width artık camın İÇ boşluğu (104 px): sıvı kutusu duvara
         // zaten dayanır, buradaki pay yalnız küçük bir sıkı-oturma kenarı.
         _WallThickness ("Cam et kalınlığı", Float) = 0.02
@@ -87,6 +89,13 @@ Shader "TubeSort/Liquid"
             float4 _BodySize;
             float _TopRadius;
             float _BottomRadius;
+            // Sıvının gövde tepesinin ÜSTÜNE (halka arkasında ağza doğru)
+            // tırmanabildiği pay (dünya birimi): kırpma kutusu yalnız üstten
+            // bu kadar uzar, fill/katman matematiği (_BodySize) değişmez.
+            // Dökme eğiminde dudağa bastırılan sıvı (kenar 1.05) artık gövde
+            // tepesinde kırpılmaz — akış kolonuyla ağızda buluşur. Dinlenmede
+            // yüzey en fazla FillSpan'e çıktığından bu bölge hiç boyanmaz.
+            float _MouthOverflow;
             float _TiltAngle;
             // Eğik yüzeyin dudak demirlemesi (normalize, gövde oranı): düzlem
             // kaydırması dik açılarda dudaktaki sıvıyı gerçek (hacim korunumlu)
@@ -123,24 +132,27 @@ Shader "TubeSort/Liquid"
                 return output;
             }
 
-            // Camdaki yumuşak parlama bandının sıvı içindeki taklidi: dikey
-            // bant, uçları eğik kesilmiş (paralelkenar), altta soluk yukarı
-            // doğru netleşir — camdaki bantların el yazısıyla aynı.
+            // Camdaki yumuşak parlama bandının sıvı içindeki taklidi — cam
+            // bandının ölçülen el yazısıyla aynı: ÜST uç eğik kesilmiş
+            // (paralelkenar), ALT uç kesimsiz — şiddet alt üçte birde sönerek
+            // iç dokuya karışır, bandın bittiği yer görünmez (camda alfa
+            // 75→39 inip 26'lık zemine erir; keskin alt kenar YOK).
             // cx/halfW: yatay merkez ve yarı genişlik (sıvı uv'si);
-            // y0..y1: dikey pencere; slant: uç kesimlerinin eğikliği.
+            // y0..y1: dikey pencere; slant: üst kesimin eğikliği.
             float GlassBand(float2 uv, float cx, float halfW,
                 float y0, float y1, float slant)
             {
                 float ndx = clamp((uv.x - cx) / halfW, -1.0, 1.0);
-                float xMask = smoothstep(1.0, 0.55, abs(ndx));
-                // Paralelkenar: üst/alt kesim çizgileri bant boyunca x ile kayar.
+                float xMask = smoothstep(1.0, 0.6, abs(ndx));
+                float t = saturate((uv.y - y0) / max(y1 - y0, 1e-3));
+                // Üst uç: bant boyunca kayan eğik kesim (paralelkenar).
                 float shift = slant * 0.5 * (ndx + 1.0);
-                float yMask = smoothstep(y0 - shift, y0 - shift + 0.06, uv.y)
-                    * smoothstep(y1 - shift, y1 - shift - 0.04, uv.y);
-                // Altta ~%45 soluk, tepede tam — camdaki gradyanla aynı yön.
-                float fade = lerp(0.45, 1.0,
-                    saturate((uv.y - y0) / max(y1 - y0, 1e-3)));
-                return xMask * yMask * fade;
+                float topMask = smoothstep(y1 - shift, y1 - shift - 0.03, uv.y);
+                // Alt uç: kesim yok, uzun sönüş.
+                float bottomFade = smoothstep(0.0, 0.35, t);
+                // Şiddet yukarı doğru artar (cam: alfa 39 → 75).
+                float gain = lerp(0.5, 1.0, t);
+                return xMask * topMask * bottomFade * gain;
             }
 
             half4 Fragment(Varyings input) : SV_Target
@@ -156,7 +168,11 @@ Shader "TubeSort/Liquid"
                 // içeri doğru daraltır. Böylece sıvı camın bir tık içinden başlar
                 // ve yuvarlak dibe kusursuz oturur - ayrı bir maske dokusu ve
                 // piksel hizalama derdi olmadan.
-                float glassDistance = SdTube(p, _QuadSize.xy, _BodySize.xy,
+                // Kırpma kutusu gövdeden _MouthOverflow kadar uzun (dip hizası
+                // aynı: SdTube gövdeyi dörtgenin dibine yaslar) — sıvı dökme
+                // eğiminde ağza doğru tırmanabilir.
+                float2 clipSize = float2(_BodySize.x, _BodySize.y + _MouthOverflow);
+                float glassDistance = SdTube(p, _QuadSize.xy, clipSize,
                     _TopRadius, _BottomRadius);
                 float innerDistance = glassDistance + _WallThickness;
 
@@ -326,17 +342,21 @@ Shader "TubeSort/Liquid"
 
                 // Cam görselindeki (v2 tube.png) parlama BANTLARININ sıvı
                 // bölgesindeki devamı — cam arkada kaldığı için dolu bölgede
-                // parlamayı sıvı çizmeli. Camda iki yumuşak paralelkenar bant
-                // ölçüldü: sol x38-48 / satır ~140-345 (tepe alfa 76→40),
-                // sağ x98-112 / satır ~85-245 (61→41) — ikisi de altta soluk,
-                // yukarı doğru netleşiyor. Konumlar sıvı uv'sine yaklaşık
-                // taşındı (9-slice esnemesi birebir kaydı zaten imkânsız kılar);
-                // oran/şiddet görselle gözle hizalanır, görsel değişirse birlikte.
-                float streak = GlassBand(uv, 0.183, 0.050, 0.32, 0.80, 0.06);
+                // parlamayı sıvı çizmeli. Piksel ölçümü: sol bant x38-48 /
+                // satır ~140-350; sağ tarafta İKİ parça (klasik cam parıltısı):
+                // üstte kısa tire (satır 85-105) + boşluk + ana bant (130-245).
+                // Konumlar sıvı uv'sine yaklaşık taşındı (9-slice esnemesi
+                // birebir kaydı imkânsız kılar); görselle gözle hizalanır.
+                float streak = GlassBand(uv, 0.183, 0.050, 0.30, 0.78, 0.06);
                 streak = max(streak,
-                    0.85 * GlassBand(uv, 0.779, 0.067, 0.55, 0.92, 0.06));
-                // Mavimsi beyaz — görseldeki şerit tonuyla aynı aile.
-                color.rgb = lerp(color.rgb, float3(0.94, 0.97, 1.0), streak * _Glossiness);
+                    0.9 * GlassBand(uv, 0.779, 0.067, 0.57, 0.88, 0.06));
+                streak = max(streak,
+                    0.9 * GlassBand(uv, 0.779, 0.067, 0.90, 0.97, 0.06));
+                // Ton ve şiddet CAMDAN ölçüldü: bant NÖTR GRİ (tepe RGB ~187 =
+                // 0.73) ve alfası ~0.30'u geçmez — beyaza çekmek bandı
+                // camdakinden parlak gösteriyordu (boş/dolu tutarsızlığı).
+                color.rgb = lerp(color.rgb, float3(0.73, 0.73, 0.73),
+                    streak * 0.30 * _Glossiness);
 
                 // 2.5D yüzey diski: yüzey çizgisinin ±ellipseDepth·arc bandı,
                 // üstten görünen elips — en üst katmanın açık tonu. Gölge ve

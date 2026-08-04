@@ -126,6 +126,11 @@ namespace TubeSort.Game
         /// boşluğu satır 3..27, merkez ~15) ve x yarıçapı (x45..105 → 30 px).</summary>
         private const float RingHoleCenterRows = 15f;
         private const float RingHoleRx = 30f / SpritePpu;
+        /// <summary>Sıvının gövde tepesinin üstüne (halka arkasında, delik
+        /// merkezine dek: 41 satır) tırmanabildiği pay. Dökme eğiminde dudağa
+        /// bastırılan sıvı gövde tepesinde kırpılmayıp akış kolonuyla ağızda
+        /// buluşur; dinlenmede yüzey FillSpan'i aşamadığından hiç boyanmaz.</summary>
+        private const float MouthOverflow = 41f / SpritePpu;
 
         // Cam dudak (collar.png, 152×61): deliği zaten ŞEFFAF çizilmiş; ön
         // parça maskesi bu yüzden tek satır sınırı — delik merkezinin üstü
@@ -159,6 +164,7 @@ namespace TubeSort.Game
         private static readonly int BodySizeId = Shader.PropertyToID("_BodySize");
         private static readonly int TopRadiusId = Shader.PropertyToID("_TopRadius");
         private static readonly int BottomRadiusId = Shader.PropertyToID("_BottomRadius");
+        private static readonly int MouthOverflowId = Shader.PropertyToID("_MouthOverflow");
         private static readonly int TiltAngleId = Shader.PropertyToID("_TiltAngle");
         private static readonly int SurfaceLiftId = Shader.PropertyToID("_SurfaceLift");
         private static readonly int RippleStrengthId = Shader.PropertyToID("_RippleStrength");
@@ -468,8 +474,9 @@ namespace TubeSort.Game
         /// <summary>Sıvı/tıklama dörtgeninin genişliği: gövde + iki yanda pay.</summary>
         private static float QuadWidth => Width + 2f * QuadPadding;
 
-        /// <summary>Sıvı dörtgeninin boyu: sıvı gövdesinin boyu.</summary>
-        private float QuadHeight => LiquidHeight;
+        /// <summary>Sıvı dörtgeninin boyu: sıvı gövdesi + ağız tırmanma payı
+        /// (dörtgen yalnız üstten uzar; dip iç tabanda kalır).</summary>
+        private float QuadHeight => LiquidHeight + MouthOverflow;
 
         /// <summary>
         /// Cam gövde sprite'ını kurar (order 0, sıvının arkasında). 9-slice:
@@ -497,6 +504,7 @@ namespace TubeSort.Game
             properties.SetVector(BodySizeId, new Vector4(Width, bodyHeight, 0f, 0f));
             properties.SetFloat(TopRadiusId, TopRadius);
             properties.SetFloat(BottomRadiusId, BottomRadius);
+            properties.SetFloat(MouthOverflowId, MouthOverflow);
         }
 
         /// <summary>
@@ -583,8 +591,6 @@ namespace TubeSort.Game
         {
             bool shouldCork = tube.IsComplete && !tube.IsEmpty && !corkSuppressed;
 
-            mouthFront.enabled = shouldCork;
-
             if (shouldCork == cork.enabled)
                 return;
 
@@ -595,11 +601,18 @@ namespace TubeSort.Game
             }
 
             cork.enabled = shouldCork;
-            corkVeil.enabled = shouldCork;
             cork.transform.localPosition = corkRestPosition;
             cork.transform.localScale = Vector3.one;
 
-            if (shouldCork && viewReady)
+            // Pus perdesi ve ön dudak tıpa OTURDUĞUNDA görünür: düşüş boyunca
+            // tıpa havada, cam pusu ve dudağın onu sarması ancak ağza girince
+            // anlamlı. Animasyonlu yolda AnimateCorkIn düşüş bitince açar;
+            // anlık yolda (kurulum / kapanış) burada.
+            bool animate = shouldCork && viewReady;
+            corkVeil.enabled = shouldCork && !animate;
+            mouthFront.enabled = shouldCork && !animate;
+
+            if (animate)
                 corkRoutine = StartCoroutine(AnimateCorkIn());
         }
 
@@ -745,6 +758,11 @@ namespace TubeSort.Game
                 yield return null;
             }
             cork.transform.localPosition = corkRestPosition;
+
+            // Tıpa oturdu ("tak" anı): pus perdesi ve cam dudak ŞİMDİ görünür —
+            // tıpa ağza girdi, cam onu sarıyor (bkz. RefreshCork).
+            corkVeil.enabled = true;
+            mouthFront.enabled = true;
 
             // Oturma esnemesi: hafif yassılıp geri toparlar (merkez pivotlu
             // ölçek — %8'lik esneme, abartısız).
