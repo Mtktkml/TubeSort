@@ -54,8 +54,8 @@ namespace TubeSort.Game
             properties = new MaterialPropertyBlock();
 
             // Üst parça: kaynak tüpün TÜM parçalarının önünde. Kaynak dökme
-            // sırasında bir offset bandı alır (10/20/…); üst parça o kaynağın ön
-            // dudağının (offset+6) hemen üstünde olmalı. Sıra her dökmede
+            // sırasında bir offset bandı alır (10/20/…); üst parça o kaynağın
+            // en üst katmanının (pus, offset+5) üstünde olmalı. Sıra her dökmede
             // BoardView'dan SetSortingOrders ile atanır; buradaki 15 varsayılan.
             quadTop = CreateQuad(unitSprite, streamMaterial, "StreamTop", 15);
 

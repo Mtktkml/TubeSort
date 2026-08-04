@@ -55,14 +55,11 @@ namespace TubeSort.Game
         private Material liquidMaterial;
         private Material streamMaterial;
         private Sprite tubeSprite;              // Resources/Sprites/v2 görselleri
-        private Sprite collarSprite;            // cam ağız/dudak (yarı saydam)
         private Sprite corkSprite;
-        private Sprite corkVeilSprite;          // tıpanın camdaki kısmına binen pus
+        private Sprite corkVeilSprite;          // tıpanın tüp-içi kısmına binen pus
         private Sprite glassBodySprite;         // tüp dokusundan kesilen parçalar
         private Sprite ringSprite;              // (Sprite bizde, doku asset'in;
                                                 // OnDestroy yalnız Sprite'ı siler)
-        private Sprite mouthFrontSprite;        // dudaktan maskeyle üretilen ön parça;
-                                                // doku + sprite bizde, OnDestroy temizler
         private readonly List<TubeView> tubeViews = new List<TubeView>();
 
         // Akış görselleri havuzu: her aktif dökme kendi akışını kullanır.
@@ -214,27 +211,25 @@ namespace TubeSort.Game
             liquidMaterial = CreateMaterial("Liquid");
             streamMaterial = CreateMaterial("Stream");
 
-            // Cam+halka, dudak, tıpa ve pus sprite'ları (Resources/Sprites/v2);
-            // sıvı ve akış shader.
+            // Cam+halka, tıpa ve pus sprite'ları (Resources/Sprites/v2); sıvı
+            // ve akış shader. (collar.png bilerek kullanılmıyor — bkz. TubeView
+            // katman açıklaması: ağız bölgesine ek katman binmez.)
             tubeSprite = LoadSprite(TubeView.TubeSpritePath);
-            collarSprite = LoadSprite(TubeView.CollarSpritePath);
             corkSprite = LoadSprite(TubeView.CorkSpritePath);
             corkVeilSprite = LoadSprite(TubeView.CorkVeilSpritePath);
 
             if (liquidMaterial == null || streamMaterial == null
-                || tubeSprite == null || collarSprite == null || corkSprite == null
-                || corkVeilSprite == null)
+                || tubeSprite == null || corkSprite == null || corkVeilSprite == null)
             {
                 enabled = false;
                 return;
             }
 
-            // Tüp dokusu BİR kez gövde+halka parçalarına bölünür, ön dudak
-            // parçası dudaktan BİR kez maskeyle üretilir; hepsi tüm tüplere
-            // paylaştırılır. Kesim bilgisi TubeView'da, sahiplik (OnDestroy) burada.
+            // Tüp dokusu BİR kez gövde+halka parçalarına bölünür ve tüm
+            // tüplere paylaştırılır. Kesim bilgisi TubeView'da, sahiplik
+            // (OnDestroy) burada.
             glassBodySprite = TubeView.CreateBodySprite(tubeSprite);
             ringSprite = TubeView.CreateRingSprite(tubeSprite);
-            mouthFrontSprite = TubeView.CreateMouthFrontSprite(collarSprite);
 
             // Tahta önceliği: dışarıdan verilen (LoadBoard) önce; yoksa pilot
             // merdiveni (pilot_levels.json) yüklenir. Testler kendi tahtalarını
@@ -706,15 +701,6 @@ namespace TubeSort.Game
             return sprite;
         }
 
-        /// <summary>Çalışma anında üretilen yaka parçasını dokusuyla yok eder.
-        /// Asset sprite'larına UYGULANMAZ: onların dokusu paylaşımlıdır.</summary>
-        private static void DestroyCollarPiece(Sprite piece)
-        {
-            if (piece == null) return;
-            Destroy(piece.texture);
-            Destroy(piece);
-        }
-
         private void BuildViews()
         {
             for (int i = 0; i < board.TubeCount; i++)
@@ -724,7 +710,7 @@ namespace TubeSort.Game
 
                 var view = go.AddComponent<TubeView>();
                 view.Initialize(i, board[i], palette, unitSprite, liquidMaterial,
-                    glassBodySprite, ringSprite, mouthFrontSprite, corkSprite, corkVeilSprite);
+                    glassBodySprite, ringSprite, corkSprite, corkVeilSprite);
                 tubeViews.Add(view);
             }
         }
@@ -959,10 +945,8 @@ namespace TubeSort.Game
             Destroy(liquidMaterial);
             Destroy(streamMaterial);
 
-            // Ön dudak parçası (sprite + kendi dokusu) çalışma anında üretildi,
-            // birikmesin. Gövde/halka parçaları asset DOKUSUNU paylaşır: doku
-            // yok edilmez, yalnız Sprite nesneleri temizlenir.
-            DestroyCollarPiece(mouthFrontSprite);
+            // Gövde/halka parçaları asset DOKUSUNU paylaşır: doku yok edilmez,
+            // yalnız çalışma anında yaratılan Sprite nesneleri temizlenir.
             if (glassBodySprite != null) Destroy(glassBodySprite);
             if (ringSprite != null) Destroy(ringSprite);
 
@@ -1218,11 +1202,11 @@ namespace TubeSort.Game
             TubeView fromView = tubeViews[result.FromIndex];
             TubeView toView = tubeViews[result.ToIndex];
             StreamView stream = AcquireStream();
-            // Akış üst parçası kaynağın offset bandının önünde (ön dudak
-            // offset+6'nın üstü); alt parça hedefin camının arkasında
-            // (order 1, hedef offset almaz). Böylece öndeki kaynağın akışı
-            // arkasında kalmaz, hedefte kolon deliğe girip camın içinden
-            // süzülerek yüzeye iner.
+            // Akış üst parçası kaynağın offset bandının önünde (en üst katman
+            // pus 5'in üstü); alt parça hedefin camının arkasında (order 1,
+            // hedef offset almaz). Böylece öndeki kaynağın akışı arkasında
+            // kalmaz, hedefte kolon deliğe girip camın içinden süzülerek
+            // yüzeye iner.
             stream.SetSortingOrders(job.SortingOffset + 7, 1);
 
             // Board hamleyi zaten uyguladı; tube verileri yeni durumu yansıtıyor.
@@ -1435,7 +1419,7 @@ namespace TubeSort.Game
                 // (efekt dökme bitince hissedilmeli).
                 toView.PlayRippleBurst();
                 // Tüp tamamlandıysa tıpa ŞİMDİ takılma animasyonuyla gelir;
-                // pus perdesi ve ön dudak da onunla birlikte açılır.
+                // pus perdesi tıpa oturunca onunla birlikte açılır.
                 toView.SetCorkSuppressed(false);
             }
 

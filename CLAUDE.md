@@ -72,16 +72,19 @@ Statik parçalar (cam tüp, bej yaka, mantar tıpa) PNG sprite'lardır; dinamik 
 için asset'le yapılamazlar. `Resources` altındalar çünkü her şey koddan kurulur:
 sahnede/prefab'da referans yok, `Resources` dışında build'e girmezlerdi.
 
-Katman sırası (sortingOrder), tüp içi: sıvı 0 < akış-alt 1 < cam gövde 2 <
-halka 3 < tıpa 4 < pus perdesi 5 < ön dudak 6. SIVI CAMIN ARKASINDADIR: cam
-yarı saydam olduğundan sıvı içinden görünür ve camın gömülü parlamaları
-(duvar çizgileri, bantlar, dip parlaması) sıvının üstüne kendiliğinden düşer —
-dolu tüpün parlaması boş tüple tanımı gereği birebir; sıvı shader'ı parlama
-ÇİZMEZ (bant taklidi denendi, hiza tutmadı, mimari buna geçildi). Akışın alt
-parçası da hedefin camının arkasına (1) çizilir — kolon deliğe girip camın
-içinden süzülerek yüzeye iner; üst parça her şeyin önüne (kaynak offset+7,
-havuz varsayılanı 15). Dökülen tüp bu değerlere +10 offset alır
-(`SetSortingOffset`). Butonlar 100, level başlığı ve banner 101.
+Katman sırası (sortingOrder), tüp içi: sıvı 0 < akış-alt 1 < halka 2 <
+tıpa 3 < pus perdesi 4 < cam gövde 5. SIVI CAMIN VE HALKANIN ARKASINDADIR
+(cam yarı saydam olduğundan içerik içinden görünür; camın gömülü parlamaları
+içeriğin üstüne kendiliğinden düşer — dolu tüpün parlaması boş tüple tanımı
+gereği birebir). TIPA HALKANIN ÖNÜNDE ama CAMIN ARKASINDADIR (referans
+kompozitle birebir): yaka bölgesinde çıplak görünür — delik gölgesi tıpa
+görselinin kendi koyu bandı — tüp içine giren kısmı cam + pus arkasında
+buzlanır. Etkileşimler shader'da/ek parçayla ÇİZİLMEZ (taklit denendi, hiza
+tutmadı, mimari buna geçildi). Akışın alt parçası hedefin camının/halkasının
+arkasına (1) çizilir — kolon deliğe girip camın içinden süzülerek yüzeye
+iner; üst parça her şeyin önüne (kaynak offset+7, havuz varsayılanı 15).
+Dökülen tüp bu değerlere +10 offset alır (`SetSortingOffset`). Butonlar 100,
+level başlığı ve banner 101.
 
 - `Sprites/tube.png` — cam tüp (PPU 247.5, pivot Bottom, **9-slice** alt border 88:
   dip kavisi sabit kalır, düz gövde kapasiteyle uzar).

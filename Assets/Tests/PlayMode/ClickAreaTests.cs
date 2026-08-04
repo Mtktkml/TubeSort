@@ -65,15 +65,13 @@ namespace TubeSort.Tests.PlayMode
             var liquidMat = new Material(liquidShader);
 
             var tubeSprite = Resources.Load<Sprite>(TubeView.TubeSpritePath);
-            var collarSprite = Resources.Load<Sprite>(TubeView.CollarSpritePath);
             var corkSprite = Resources.Load<Sprite>(TubeView.CorkSpritePath);
             var veilSprite = Resources.Load<Sprite>(TubeView.CorkVeilSpritePath);
             var bodySprite = TubeView.CreateBodySprite(tubeSprite);
             var ringSprite = TubeView.CreateRingSprite(tubeSprite);
-            var mouthFront = TubeView.CreateMouthFrontSprite(collarSprite);
 
             tubeView.Initialize(0, sourceTube, palette, sprite, liquidMat,
-                bodySprite, ringSprite, mouthFront, corkSprite, veilSprite);
+                bodySprite, ringSprite, corkSprite, veilSprite);
 
             yield return null;
         }
