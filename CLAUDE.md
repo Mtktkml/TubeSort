@@ -72,21 +72,23 @@ Statik parçalar (cam tüp, bej yaka, mantar tıpa) PNG sprite'lardır; dinamik 
 için asset'le yapılamazlar. `Resources` altındalar çünkü her şey koddan kurulur:
 sahnede/prefab'da referans yok, `Resources` dışında build'e girmezlerdi.
 
-Katman sırası (sortingOrder), tüp içi: sıvı 0 < akış-alt 1 < halka 2 <
-düşen tıpa 3 < cam gövde 4 < tıpalı ağız 5. SIVI CAMIN VE HALKANIN
-ARKASINDADIR (cam yarı saydam olduğundan içerik içinden görünür; camın gömülü
-parlamaları içeriğin üstüne kendiliğinden düşer — dolu tüpün parlaması boş
-tüple tanımı gereği birebir). TIPALI AĞIZ TEK PARÇADIR: tıpa+halka+pus
-etkileşimini parçalardan yeniden kurma denemeleri (dudak yayı, pencere
-sandviçi, halka-üstü) referansla birebir tutmadı; tamamlanan tüpte ağız,
-`tube reference.png`'den olduğu gibi kesilmiş `cork_mouth.png` ile çizilir
-ve HALKANIN YERİNE GEÇER (halka kapatılır; çıplak tıpa yalnız düşüş
-animasyonunda görünür, oturma anında tek parçaya geçilir). collar.png ve
-shadow.png bilerek kullanılmıyor. Akışın alt parçası hedefin
-camının/halkasının arkasına (1) çizilir — kolon deliğe girip camın içinden
-süzülerek yüzeye iner; üst parça her şeyin önüne (kaynak offset+7, havuz
-varsayılanı 15). Dökülen tüp bu değerlere +10 offset alır
-(`SetSortingOffset`). Butonlar 100, level başlığı ve banner 101.
+Katman sırası (sortingOrder), tüp içi: sıvı 0 < akış-alt 1 < tıpa 2 <
+collar 3 < pus perdesi 4 < cam gövde 5. SIVI VE TIPA, COLLAR'IN VE CAMIN
+ARKASINDADIR (cam yarı saydam olduğundan içerik içinden görünür; camın
+gömülü parlamaları içeriğin üstüne kendiliğinden düşer — dolu tüpün
+parlaması boş tüple tanımı gereği birebir). Tıpanın başı collar'ın üstünde
+serbest; gövdesi deliğe collar'ın arkasından girer ve TIPALIYKEN COLLAR
+YARI SAYDAM ÇİZİLİR (renderer rengi, `CorkedRingAlpha` — asset değişmez):
+collar önde durur ama tıpa içinden görünür. Tıpasız tüpte collar OPAK —
+dökmede dudağa tırmanan sıvıyı gizleme görevi bozulmaz (tıpalı tüp zaten
+dökülemez). Tıpanın tüp içine giren kısmı cam + pus (shadow.png, YALNIZ
+tüp-içi bölgede, dikeyde sıkıştırılmış) ile buzlanır. Cam gövde (tube.png)
+ve collar (collar.png) AYRI asset'lerdir: ekipten gelen birleşik tüp
+görselinden İÇERİĞE GÖRE ayrıldılar, kanvasları dikiş çevresinde örtüşür.
+Akışın alt parçası hedefin camının/collar'ının arkasına (1) çizilir — kolon
+deliğe girip camın içinden süzülerek yüzeye iner; üst parça her şeyin önüne
+(kaynak offset+7, havuz varsayılanı 15). Dökülen tüp bu değerlere +10
+offset alır (`SetSortingOffset`). Butonlar 100, level başlığı ve banner 101.
 
 - `Sprites/tube.png` — cam tüp (PPU 247.5, pivot Bottom, **9-slice** alt border 88:
   dip kavisi sabit kalır, düz gövde kapasiteyle uzar).

@@ -69,16 +69,16 @@ namespace TubeSort.Tests.PlayMode
             var liquidShader = Resources.Load<Shader>("Liquid");
             var liquidMat = new Material(liquidShader);
 
-            // Sprite'lar BoardView'ın yaptığı gibi yüklenir; tüp dokusundan
-            // gövde+halka parçaları üretilir.
-            var tubeSprite = Resources.Load<Sprite>(TubeView.TubeSpritePath);
+            // Sprite'lar BoardView'ın yaptığı gibi yüklenir (gövde+halka
+            // içeriğe göre ayrılmış ayrı asset'ler).
+            var bodySprite = Resources.Load<Sprite>(TubeView.TubeBodySpritePath);
+            var ringSprite = Resources.Load<Sprite>(TubeView.TubeRingSpritePath);
             var corkSprite = Resources.Load<Sprite>(TubeView.CorkSpritePath);
-            var corkedMouthSprite = Resources.Load<Sprite>(TubeView.CorkedMouthSpritePath);
-            var bodySprite = TubeView.CreateBodySprite(tubeSprite);
-            var ringSprite = TubeView.CreateRingSprite(tubeSprite);
+            var seatedCorkSprite = TubeView.CreateSeatedCorkSprite(corkSprite);
+            var veilSprite = Resources.Load<Sprite>(TubeView.CorkVeilSpritePath);
 
             tubeView.Initialize(0, tube, palette, sprite, liquidMat,
-                bodySprite, ringSprite, corkSprite, corkedMouthSprite);
+                bodySprite, ringSprite, corkSprite, seatedCorkSprite, veilSprite);
 
             yield return null;
         }
@@ -246,11 +246,11 @@ namespace TubeSort.Tests.PlayMode
 
             tubeView.SetSortingOffset(10);
 
-            // Katman sözleşmesi (CLAUDE.md): sıvı 0 < akış-alt 1 < halka 2 <
-            // düşen tıpa 3 < cam 4 < tıpalı ağız 5 — SIVI CAMIN ARKASINDADIR
-            // (parlamalar camdan gelir); tıpalı ağız tek parça görsel olarak
-            // halkanın yerine geçer. Sıra bozulursa parlama mimarisi ya da
-            // tıpa görünümü kırılır.
+            // Katman sözleşmesi (CLAUDE.md): sıvı 0 < akış-alt 1 < collar 2 <
+            // tıpa 3 < pus 4 < cam 5 — SIVI COLLAR'IN VE CAMIN ARKASINDADIR;
+            // TIPA collar'ın önündedir, "delikte/arkada" hissi oturmuş
+            // tıpanın aşamalı boyalı kopyasıyla verilir. Sıra bozulursa
+            // parlama mimarisi ya da tıpa görünümü kırılır.
             var renderers = tubeObject.GetComponentsInChildren<SpriteRenderer>(true);
             bool foundGlass = false, foundLiquid = false, foundRing = false,
                 foundCork = false;
@@ -259,7 +259,7 @@ namespace TubeSort.Tests.PlayMode
             {
                 if (r.gameObject.name == "Glass")
                 {
-                    Assert.AreEqual(14, r.sortingOrder, "Glass sorting order yanlış");
+                    Assert.AreEqual(15, r.sortingOrder, "Glass sorting order yanlış");
                     foundGlass = true;
                 }
                 else if (r.gameObject.name == "Liquid")
@@ -287,7 +287,7 @@ namespace TubeSort.Tests.PlayMode
             foreach (var r in renderers)
             {
                 if (r.gameObject.name == "Glass")
-                    Assert.AreEqual(4, r.sortingOrder);
+                    Assert.AreEqual(5, r.sortingOrder);
                 else if (r.gameObject.name == "Liquid")
                     Assert.AreEqual(0, r.sortingOrder);
                 else if (r.gameObject.name == "Ring")

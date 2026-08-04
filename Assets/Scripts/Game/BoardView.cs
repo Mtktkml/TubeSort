@@ -54,12 +54,13 @@ namespace TubeSort.Game
         private Sprite unitSprite;
         private Material liquidMaterial;
         private Material streamMaterial;
-        private Sprite tubeSprite;              // Resources/Sprites/v2 görselleri
-        private Sprite corkSprite;
-        private Sprite corkedMouthSprite;       // tıpalı ağız (referanstan tek parça)
-        private Sprite glassBodySprite;         // tüp dokusundan kesilen parçalar
-        private Sprite ringSprite;              // (Sprite bizde, doku asset'in;
-                                                // OnDestroy yalnız Sprite'ı siler)
+        private Sprite glassBodySprite;         // Resources/Sprites/v2 görselleri:
+        private Sprite ringSprite;              // cam gövde (tube) + collar (içeriğe
+        private Sprite corkSprite;              // göre ayrılmış), tıpa ve pus perdesi
+        private Sprite corkVeilSprite;
+        private Sprite seatedCorkSprite;        // oturmuş tıpanın aşamalı boyalı
+                                                // kopyası; doku + sprite bizde,
+                                                // OnDestroy temizler
         private readonly List<TubeView> tubeViews = new List<TubeView>();
 
         // Akış görselleri havuzu: her aktif dökme kendi akışını kullanır.
@@ -211,25 +212,26 @@ namespace TubeSort.Game
             liquidMaterial = CreateMaterial("Liquid");
             streamMaterial = CreateMaterial("Stream");
 
-            // Cam+halka, tıpa ve tıpalı-ağız sprite'ları (Resources/Sprites/v2);
-            // sıvı ve akış shader. (collar.png ve shadow.png bilerek
-            // kullanılmıyor: tıpalı ağız referanstan tek parça.)
-            tubeSprite = LoadSprite(TubeView.TubeSpritePath);
+            // Cam gövde, halka, tıpa ve tıpalı-ağız sprite'ları
+            // (Resources/Sprites/v2); sıvı ve akış shader. (tube.png,
+            // collar.png ve shadow.png bilerek kullanılmıyor.)
+            glassBodySprite = LoadSprite(TubeView.TubeBodySpritePath);
+            ringSprite = LoadSprite(TubeView.TubeRingSpritePath);
             corkSprite = LoadSprite(TubeView.CorkSpritePath);
-            corkedMouthSprite = LoadSprite(TubeView.CorkedMouthSpritePath);
+            corkVeilSprite = LoadSprite(TubeView.CorkVeilSpritePath);
 
             if (liquidMaterial == null || streamMaterial == null
-                || tubeSprite == null || corkSprite == null || corkedMouthSprite == null)
+                || glassBodySprite == null || ringSprite == null
+                || corkSprite == null || corkVeilSprite == null)
             {
                 enabled = false;
                 return;
             }
 
-            // Tüp dokusu BİR kez gövde+halka parçalarına bölünür ve tüm
-            // tüplere paylaştırılır. Kesim bilgisi TubeView'da, sahiplik
+            // Oturmuş tıpanın aşamalı boyalı kopyası BİR kez üretilir ve tüm
+            // tüplere paylaştırılır. Boyama bilgisi TubeView'da, sahiplik
             // (OnDestroy) burada.
-            glassBodySprite = TubeView.CreateBodySprite(tubeSprite);
-            ringSprite = TubeView.CreateRingSprite(tubeSprite);
+            seatedCorkSprite = TubeView.CreateSeatedCorkSprite(corkSprite);
 
             // Tahta önceliği: dışarıdan verilen (LoadBoard) önce; yoksa pilot
             // merdiveni (pilot_levels.json) yüklenir. Testler kendi tahtalarını
@@ -710,7 +712,7 @@ namespace TubeSort.Game
 
                 var view = go.AddComponent<TubeView>();
                 view.Initialize(i, board[i], palette, unitSprite, liquidMaterial,
-                    glassBodySprite, ringSprite, corkSprite, corkedMouthSprite);
+                    glassBodySprite, ringSprite, corkSprite, seatedCorkSprite, corkVeilSprite);
                 tubeViews.Add(view);
             }
         }
@@ -945,10 +947,13 @@ namespace TubeSort.Game
             Destroy(liquidMaterial);
             Destroy(streamMaterial);
 
-            // Gövde/halka parçaları asset DOKUSUNU paylaşır: doku yok edilmez,
-            // yalnız çalışma anında yaratılan Sprite nesneleri temizlenir.
-            if (glassBodySprite != null) Destroy(glassBodySprite);
-            if (ringSprite != null) Destroy(ringSprite);
+            // Oturmuş tıpa kopyası (sprite + kendi dokusu) çalışma anında
+            // üretildi, birikmesin.
+            if (seatedCorkSprite != null)
+            {
+                Destroy(seatedCorkSprite.texture);
+                Destroy(seatedCorkSprite);
+            }
 
             if (unitSprite != null)
                 Destroy(unitSprite.texture);

@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 5625c344b903e804990f0181d00209bf
+guid: 7e0d19b182d48ac4c88cce43c388d668
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 4536015807284659308
-    second: tube_0
+      213: 7454303770308557901
+    second: tube_body_cut_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -50,9 +50,9 @@ TextureImporter:
   spriteExtrude: 1
   spriteMeshType: 0
   alignment: 7
-  spritePivot: {x: 0.5, y: 0}
+  spritePivot: {x: 0.5, y: 0.5}
   spritePixelsToUnits: 126.67
-  spriteBorder: {x: 0, y: 54, z: 0, w: 80}
+  spriteBorder: {x: 0, y: 54, z: 0, w: 36}
   spriteGenerateFallbackPhysicsShape: 1
   alphaUsage: 1
   alphaIsTransparency: 1
@@ -126,13 +126,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: tube_0
+      name: tube_body_cut_0
       rect:
         serializedVersion: 2
         x: 0
         y: 0
-        width: 152
-        height: 496
+        width: 145
+        height: 456
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -141,8 +141,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: c6442c8085a23fe30800000000000000
-      internalID: 4536015807284659308
+      spriteID: d4cb815d8c1037760800000000000000
+      internalID: 7454303770308557901
       vertices: []
       indices: 
       edges: []
@@ -161,7 +161,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      tube_0: 4536015807284659308
+      tube_body_cut_0: 7454303770308557901
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
