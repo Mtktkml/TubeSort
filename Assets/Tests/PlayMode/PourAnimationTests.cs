@@ -69,16 +69,18 @@ namespace TubeSort.Tests.PlayMode
             var liquidShader = Resources.Load<Shader>("Liquid");
             var liquidMat = new Material(liquidShader);
 
-            // Cam/yaka/tıpa sprite'ları: BoardView'ın yaptığı gibi yüklenir,
-            // ön sandviç parçaları yakadan üretilir.
+            // Sprite'lar BoardView'ın yaptığı gibi yüklenir; tüp dokusu
+            // gövde+halka parçalarına bölünür, ön dudak dudaktan üretilir.
             var tubeSprite = Resources.Load<Sprite>(TubeView.TubeSpritePath);
             var collarSprite = Resources.Load<Sprite>(TubeView.CollarSpritePath);
             var corkSprite = Resources.Load<Sprite>(TubeView.CorkSpritePath);
-            var frontTop = TubeView.CreateCollarFrontTopSprite(collarSprite);
-            var frontBottom = TubeView.CreateCollarFrontBottomSprite(collarSprite);
+            var veilSprite = Resources.Load<Sprite>(TubeView.CorkVeilSpritePath);
+            var bodySprite = TubeView.CreateBodySprite(tubeSprite);
+            var ringSprite = TubeView.CreateRingSprite(tubeSprite);
+            var mouthFront = TubeView.CreateMouthFrontSprite(collarSprite);
 
-            tubeView.Initialize(0, tube, palette, sprite, liquidMat, tubeSprite,
-                collarSprite, frontTop, frontBottom, corkSprite);
+            tubeView.Initialize(0, tube, palette, sprite, liquidMat,
+                bodySprite, ringSprite, mouthFront, corkSprite, veilSprite);
 
             yield return null;
         }

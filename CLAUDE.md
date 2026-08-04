@@ -174,12 +174,16 @@ sonra doğrulma + geri dönüş eş zamanlı. Model: **fiziksel eğim + zamanlay
   taşıyacak kadar eğilir (`CalculatePourAngle` → `AngleForLiquidAtLip`); sıvı
   azaldıkça açı artar (dolu ~50°, son birim ~83-88°). Tavan `MaxPourAngle` = 88°,
   shader'daki eğim kelepçesiyle (`max(|cos|,0.03)` ≈ 88.3°) **twin sabit**.
-  1.05 payı ŞART: dökme kapısı kenarın 1.0'ı geçmesini bekler ve `SmoothDamp`
-  kritik sönümlü olduğundan hedefini asla aşmaz — pay tam 1.0 olursa asimptot
-  donması yaşanır (yaşandı; `PourFreezeTests`'te regresyon testi var).
-- Açı, dökme başlayana dek `SmoothDamp` ile yükselir; başladıktan sonra güncel
-  fill'in dudak açısını **birebir** izler (`MoveTowards`, gecikme yok) — SmoothDamp
-  gecikmesi (~6°) sıvıyı dudaktan düşürüp akış kolonundan koparıyordu.
+  1.05 payı ŞART: dökme kapısı kenarın 1.0'ı geçmesini bekler ve eğim sürüşü
+  hedefini asla aşmaz — pay tam 1.0 olursa kapı ancak sıfır hızla açılır
+  (SmoothDamp döneminde asimptot donması yaşandı; `PourFreezeTests`'te
+  regresyon testi var).
+- Açı, dökme başlayana dek SÜRELİ SmoothStep rampasıyla yükselir (toplam
+  `slideDuration + 2×angleSmoothTime`; süre sınırlı, asimptot yok — SmoothDamp
+  kuyruğu yavaşlatılmış sürelerde kapı önünde saniyelerce sürünüyordu);
+  başladıktan sonra güncel fill'in dudak açısını **birebir** izler
+  (`MoveTowards`, gecikme yok) — takip gecikmesi (~6°) sıvıyı dudaktan
+  düşürüp akış kolonundan koparıyordu.
 - Boşalma **zamanlayıcıyla** ilerler (dudak-gating YOK): akışla birlikte tam biter,
   donma imkânsız. Watchdog yalnız emniyet.
 - Ağız her karede hedefin üstüne konumlanır (`CalculatePourPosition`); stream

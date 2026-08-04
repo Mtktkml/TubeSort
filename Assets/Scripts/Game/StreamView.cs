@@ -52,14 +52,14 @@ namespace TubeSort.Game
 
             // Üst parça: kaynak tüpün TÜM parçalarının önünde. Kaynak dökme
             // sırasında bir offset bandı alır (10/20/…); üst parça o kaynağın ön
-            // dilimlerinin (offset+4) hemen üstünde olmalı. Sıra her dökmede
+            // dudağının (offset+5) hemen üstünde olmalı. Sıra her dökmede
             // BoardView'dan SetSortingOrders ile atanır; buradaki 15 varsayılan.
             quadTop = CreateQuad(unitSprite, streamMaterial, "StreamTop", 15);
 
-            // Alt parça: hedefin yaka sandviçinde TIPA katmanı (order 3, arka
-            // yaka 2 ile ön dilimler 4 arası). Hedef offset almaz (dökülmüyor).
-            // Dökme sırasında hedefin ön dilimleri açılır (SetMouthOverlay):
-            // kolon delikten girer, bej bandın arkasında kaybolur, tüpte görünür.
+            // Alt parça: hedefin ağız sandviçinde TIPA katmanı (order 3, halka 2
+            // ile ön dudak 5 arası). Hedef offset almaz (dökülmüyor). Dökme
+            // sırasında hedefin ön dudağı açılır (SetMouthOverlay): kolon
+            // delikten girer, camın arkasında kaybolur, tüpte görünür.
             quadBottom = CreateQuad(unitSprite, streamMaterial, "StreamBottom", 3);
         }
 

@@ -34,7 +34,8 @@ namespace TubeSort.Game
         [SerializeField] private float slideDuration = 0.24f;
         [Tooltip("Sıvının dökülme (seviye değişimi) süresi.")]
         [SerializeField] private float pourDuration = 0.4f;
-        [Tooltip("Eğim açısı SmoothDamp tepki süresi (kritik sönümleme, aşım yok).")]
+        [Tooltip("Eğilme süresi payı: tüp, dökme eğimine kayma + 2×bu süre içinde " +
+                 "SmoothStep rampasıyla ulaşır (aşım yok, süre sınırlı).")]
         [SerializeField] private float angleSmoothTime = 0.12f;
         [Tooltip("Emniyet: dökme bu süre içinde bitmezse hata loglanıp zorla tamamlanır. " +
                  "Süreler play mode'da yavaşlatıldığında bunu da büyütmen gerekebilir.")]
@@ -54,12 +55,15 @@ namespace TubeSort.Game
         private Sprite unitSprite;
         private Material liquidMaterial;
         private Material streamMaterial;
-        private Sprite tubeSprite;              // Resources/Sprites görselleri
-        private Sprite collarSprite;
+        private Sprite tubeSprite;              // Resources/Sprites/v2 görselleri
+        private Sprite collarSprite;            // cam ağız/dudak (yarı saydam)
         private Sprite corkSprite;
-        private Sprite collarFrontTopSprite;    // yakadan eğri maskeyle üretilen ön
-        private Sprite collarFrontBottomSprite; // sandviç parçaları; doku + sprite bizde,
-                                                // OnDestroy temizler
+        private Sprite corkVeilSprite;          // tıpanın camdaki kısmına binen pus
+        private Sprite glassBodySprite;         // tüp dokusundan kesilen parçalar
+        private Sprite ringSprite;              // (Sprite bizde, doku asset'in;
+                                                // OnDestroy yalnız Sprite'ı siler)
+        private Sprite mouthFrontSprite;        // dudaktan maskeyle üretilen ön parça;
+                                                // doku + sprite bizde, OnDestroy temizler
         private readonly List<TubeView> tubeViews = new List<TubeView>();
 
         // Akış görselleri havuzu: her aktif dökme kendi akışını kullanır.
@@ -211,22 +215,27 @@ namespace TubeSort.Game
             liquidMaterial = CreateMaterial("Liquid");
             streamMaterial = CreateMaterial("Stream");
 
-            // Cam, yaka ve tıpa sprite (Resources/Sprites); sıvı ve akış shader.
+            // Cam+halka, dudak, tıpa ve pus sprite'ları (Resources/Sprites/v2);
+            // sıvı ve akış shader.
             tubeSprite = LoadSprite(TubeView.TubeSpritePath);
             collarSprite = LoadSprite(TubeView.CollarSpritePath);
             corkSprite = LoadSprite(TubeView.CorkSpritePath);
+            corkVeilSprite = LoadSprite(TubeView.CorkVeilSpritePath);
 
             if (liquidMaterial == null || streamMaterial == null
-                || tubeSprite == null || collarSprite == null || corkSprite == null)
+                || tubeSprite == null || collarSprite == null || corkSprite == null
+                || corkVeilSprite == null)
             {
                 enabled = false;
                 return;
             }
 
-            // Ön sandviç parçaları yakadan BİR kez üretilir ve tüm tüplere
-            // paylaştırılır; kesim bilgisi TubeView'da, sahiplik (OnDestroy) burada.
-            collarFrontTopSprite = TubeView.CreateCollarFrontTopSprite(collarSprite);
-            collarFrontBottomSprite = TubeView.CreateCollarFrontBottomSprite(collarSprite);
+            // Tüp dokusu BİR kez gövde+halka parçalarına bölünür, ön dudak
+            // parçası dudaktan BİR kez maskeyle üretilir; hepsi tüm tüplere
+            // paylaştırılır. Kesim bilgisi TubeView'da, sahiplik (OnDestroy) burada.
+            glassBodySprite = TubeView.CreateBodySprite(tubeSprite);
+            ringSprite = TubeView.CreateRingSprite(tubeSprite);
+            mouthFrontSprite = TubeView.CreateMouthFrontSprite(collarSprite);
 
             // Tahta önceliği: dışarıdan verilen (LoadBoard) önce; yoksa pilot
             // merdiveni (pilot_levels.json) yüklenir. Testler kendi tahtalarını
@@ -715,8 +724,8 @@ namespace TubeSort.Game
                 go.transform.SetParent(transform, false);
 
                 var view = go.AddComponent<TubeView>();
-                view.Initialize(i, board[i], palette, unitSprite, liquidMaterial, tubeSprite,
-                    collarSprite, collarFrontTopSprite, collarFrontBottomSprite, corkSprite);
+                view.Initialize(i, board[i], palette, unitSprite, liquidMaterial,
+                    glassBodySprite, ringSprite, mouthFrontSprite, corkSprite, corkVeilSprite);
                 tubeViews.Add(view);
             }
         }
@@ -951,10 +960,12 @@ namespace TubeSort.Game
             Destroy(liquidMaterial);
             Destroy(streamMaterial);
 
-            // Yaka/tıpa görselleri asset olduğu için yok edilmez; ama ön parçalar
-            // (sprite + kendi dokuları) çalışma anında üretildi, birikmesinler.
-            DestroyCollarPiece(collarFrontTopSprite);
-            DestroyCollarPiece(collarFrontBottomSprite);
+            // Ön dudak parçası (sprite + kendi dokusu) çalışma anında üretildi,
+            // birikmesin. Gövde/halka parçaları asset DOKUSUNU paylaşır: doku
+            // yok edilmez, yalnız Sprite nesneleri temizlenir.
+            DestroyCollarPiece(mouthFrontSprite);
+            if (glassBodySprite != null) Destroy(glassBodySprite);
+            if (ringSprite != null) Destroy(ringSprite);
 
             if (unitSprite != null)
                 Destroy(unitSprite.texture);
@@ -1202,16 +1213,16 @@ namespace TubeSort.Game
         {
             // slideDuration/pourDuration/angleSmoothTime Inspector'dan gelir
             // (sabit değil): görsel izlemek için play mode'da yavaşlatılabilir.
-            // angleSmoothTime = eğim açısı SmoothDamp tepki süresi (kritik sönüm).
+            // angleSmoothTime = eğilme rampasının kuyruk payı (bkz. tiltDuration).
             ClearSelection();
 
             TubeView fromView = tubeViews[result.FromIndex];
             TubeView toView = tubeViews[result.ToIndex];
             StreamView stream = AcquireStream();
-            // Akış üst parçası kaynağın offset bandının önünde (ön dilimler
-            // offset+4'ün üstü); alt parça hedefin sandviçinde (tıpa katmanı 3,
+            // Akış üst parçası kaynağın offset bandının önünde (ön dudak
+            // offset+5'in üstü); alt parça hedefin sandviçinde (tıpa katmanı 3,
             // hedef offset almaz). Böylece öndeki kaynağın akışı arkasında kalmaz.
-            stream.SetSortingOrders(job.SortingOffset + 5, 3);
+            stream.SetSortingOrders(job.SortingOffset + 6, 3);
 
             // Board hamleyi zaten uyguladı; tube verileri yeni durumu yansıtıyor.
             float fromTarget = fromView.TargetFillLevel;
@@ -1251,8 +1262,12 @@ namespace TubeSort.Game
             float splashStrength = 0f;   // hedefteki sıçrama (yumuşak aç/kapa)
             float fromStart = fromView.CurrentFill;
             float currentAngle = 0f;
-            float angleVelocity = 0f;
             float moveElapsed = 0f;
+            // Eğilme rampasının toplam süresi: kayma + kuyruk. Süre SINIRLI —
+            // açı hedefe bu sürede TAM ulaşır, dökme kapısı en geç rampa
+            // bitiminde kesin açılır (asimptot yok; aşağıdaki ramp bloğu).
+            float tiltDuration = Mathf.Max(slideDuration + 2f * angleSmoothTime, 0.05f);
+            float tiltElapsed = 0f;
 
             // 2 kaynak → 1 hedef: kolonu kaynağın tarafına kaydır (biri sağa, biri
             // sola) ki ağızlar hedefin merkezinde üst üste binmesin. Tek dökmede 0.
@@ -1302,14 +1317,25 @@ namespace TubeSort.Game
                 float moveT = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(moveElapsed / slideDuration));
                 Vector3 currentBase = Vector3.Lerp(startPos, pourPos, moveT);
 
-                // Eğim, dökme BAŞLAYANA dek SmoothDamp ile hedefe yükselir.
+                // Eğim, dökme BAŞLAYANA dek SÜRELİ SmoothStep rampasıyla hedefe
+                // yükselir (dökme öncesi fill değişmediği için hedef sabittir).
+                // Eskiden SmoothDamp'ti: kritik sönümlü yaklaşma hedefe
+                // ASİMPTOTİK yaklaşır ve dökme kapısı (kenar 1.0) hedefin (1.05)
+                // hemen altında olduğundan son dereceler sürünerek geçiliyordu —
+                // süreler test için yavaşlatılınca tüp kapı önünde saniyelerce
+                // asılı kalıyor, akış "takılarak" başlıyordu. Rampa süre SINIRLI:
+                // hedefe tiltDuration'da TAM ulaşır; kapı anında hız hâlâ tepe
+                // hızın ~1/3'ü (smoothstep türevi 6t(1-t), kapı t≈0.9'da) —
+                // eğilme duraksamadan akışa bağlanır, her hız ayarında.
                 // Dökme başladıktan sonra açı drain bloğunda fill'i birebir
-                // izler: SmoothDamp'in rampa takip gecikmesi (~6°) dudak payının
-                // açı karşılığını (0.05 ≈ 0.6-2.6°) aştığından sıvı dudaktan
-                // geri düşüyor, akış kolonundan görünür biçimde KOPUYORDU.
+                // izler (aşağıda): rampanın işi kapıya kadar.
                 if (!pourStarted)
-                    currentAngle = Mathf.SmoothDamp(
-                        currentAngle, targetAngle, ref angleVelocity, angleSmoothTime);
+                {
+                    tiltElapsed += dt;
+                    float tiltT = Mathf.SmoothStep(0f, 1f,
+                        Mathf.Clamp01(tiltElapsed / tiltDuration));
+                    currentAngle = targetAngle * tiltT;
+                }
 
                 // Dökme başlangıcı: tüp yerine kayıp SIVI DÖKEN KENARDA AĞZA
                 // ULAŞINCA başlar. Tüp eğildikçe sıvı yükselir; ağza değince akış
@@ -1470,7 +1496,7 @@ namespace TubeSort.Game
             // kaynağın tarafına kaydırır (tek dökmede 0). ApplyTiltWithPivot
             // modeli: nokta = taban + pivotTelafisi + R(açı)·yerel — taban çözülür.
             float lipSide = -Mathf.Sign(signedAngle);
-            Vector3 spout = from.CollarMouthLip(lipSide);
+            Vector3 spout = from.MouthLip(lipSide);
             float cos = Mathf.Cos(signedAngle);
             float sin = Mathf.Sin(signedAngle);
             float spoutOffsetX = pivotHeight * sin + (cos * spout.x - sin * spout.y);
@@ -1498,7 +1524,7 @@ namespace TubeSort.Game
         private static float CalculatePourAngle(TubeView fromView)
         {
             const float minAngle = 48f * Mathf.Deg2Rad;
-            float needed = AngleForLiquidAtLip(fromView.CurrentFill, fromView.Height);
+            float needed = AngleForLiquidAtLip(fromView.CurrentFill, fromView.LiquidHeight);
             return Mathf.Clamp(needed, minAngle, MaxPourAngle);
         }
 
@@ -1506,14 +1532,15 @@ namespace TubeSort.Game
         /// Sıvının döken kenarda ağzın BİRAZ ÜSTÜNE (normalize 1.05) ulaşması
         /// için gereken eğim açısı — TiltedEdgeLevel'in tersi. Hedef BİLEREK
         /// 1.0 değil 1.05: dökme kapısı (HasLiquidReachedMouth) kenarın 1.0'ı
-        /// GEÇMESİNİ bekler ve SmoothDamp kritik sönümlü olduğu için hedefini
-        /// asla aşmaz. Hedef tam 1.0 olsaydı açı asimptotik yaklaşıp kapıyı hiç
-        /// açamaz, dökme donardı (yaşandı: yalnız dolu tüpte minAngle tabanı
-        /// hedefi kazara temas açısının üstüne ittiği için ilk katman dökülüyor,
-        /// sonrakiler 67-82°'de donuyordu). 0.05 pay kapının sonlu sürede
-        /// aşılmasını garantiler; dökme boyunca da sıvıyı dudağa hafif BASTIRIR
-        /// (akış koluyla temas kopmaz; taşan pay yaka arkasında gizli).
-        /// AnchorLiquidToLip'teki 1.05 tavanıyla eş (twin sabit).
+        /// GEÇMESİNİ bekler ve eğim sürüşü (SmoothStep rampası) hedefini asla
+        /// aşmaz. Hedef tam 1.0 olsaydı kapı ancak rampanın son karesinde sıfır
+        /// hızla açılırdı; SmoothDamp döneminde hiç açılmıyordu — dökme donardı
+        /// (yaşandı: yalnız dolu tüpte minAngle tabanı hedefi kazara temas
+        /// açısının üstüne ittiği için ilk katman dökülüyor, sonrakiler
+        /// 67-82°'de donuyordu). 0.05 pay kapının rampa bitmeden, sağlıklı
+        /// hızla aşılmasını garantiler; dökme boyunca da sıvıyı dudağa hafif
+        /// BASTIRIR (akış koluyla temas kopmaz; taşan pay halka arkasında
+        /// gizli). AnchorLiquidToLip'teki 1.05 tavanıyla eş (twin sabit).
         ///
         /// İki rejim: yüzey iki duvarı da kesiyorsa (fill >= lip/2)
         /// tan = 2·(lip-fill)·(H/W); az sıvıda üçgen rejimi
@@ -1536,7 +1563,7 @@ namespace TubeSort.Game
         /// </summary>
         private static bool HasLiquidReachedMouth(TubeView view, float angle)
         {
-            return TiltedEdgeLevel(view.CurrentFill, angle, view.Height) >= 1f;
+            return TiltedEdgeLevel(view.CurrentFill, angle, view.LiquidHeight) >= 1f;
         }
 
         /// <summary>
@@ -1586,9 +1613,9 @@ namespace TubeSort.Game
             float tiltSlope = Mathf.Sin(signedAngle)
                 / Mathf.Max(Mathf.Abs(Mathf.Cos(signedAngle)), 0.03f);
             float shearEdge = fromView.CurrentFill
-                + Mathf.Abs(0.5f * tiltSlope * (TubeView.Width / fromView.Height));
+                + Mathf.Abs(0.5f * tiltSlope * (TubeView.Width / fromView.LiquidHeight));
             float physicalEdge = Mathf.Min(1.05f, TiltedEdgeLevel(
-                fromView.CurrentFill, signedAngle, fromView.Height));
+                fromView.CurrentFill, signedAngle, fromView.LiquidHeight));
             fromView.SetSurfaceLift(Mathf.Max(0f, physicalEdge - shearEdge));
         }
 
@@ -1601,15 +1628,15 @@ namespace TubeSort.Game
             // Döken taraf: tüp sağa eğiliyorsa (negatif açı) sağ kenar döker.
             float lipSide = -Mathf.Sign(signedAngle);
             Vector3 mouthWorld = fromView.transform.TransformPoint(
-                fromView.CollarMouthLip(lipSide));
+                fromView.MouthLip(lipSide));
             return transform.InverseTransformPoint(mouthWorld);
         }
 
-        /// <summary>Hedefin yaka deliğinin merkezi, board-local: akış kolonunun
+        /// <summary>Hedefin ağız deliğinin merkezi, board-local: akış kolonunun
         /// hedefte indiği nokta ve üst/alt parçaların birleşme hizası.</summary>
         private Vector3 CalculateDestMouth(TubeView toView)
         {
-            Vector3 mouthWorld = toView.transform.TransformPoint(toView.CollarMouth);
+            Vector3 mouthWorld = toView.transform.TransformPoint(toView.MouthCenter);
             return transform.InverseTransformPoint(mouthWorld);
         }
 
@@ -1627,12 +1654,13 @@ namespace TubeSort.Game
             // korunumlu), tepede 1.0'da kırpılır. Akış kolonu buraya demirlenir;
             // sıvı ağza tam ulaşmasa da (son kırıntı) kolon sıvının gerçek
             // yüzeyine bağlı kalır → dökme boyunca bağlantı kopmaz.
+            // surfaceNorm sıvı-yerel (0=iç taban); tüp-yerele FloorInset ekler.
             float surfaceNorm = Mathf.Clamp01(TiltedEdgeLevel(
-                fromView.CurrentFill, signedAngle, fromView.Height));
+                fromView.CurrentFill, signedAngle, fromView.LiquidHeight));
 
             Vector3 localPos = new Vector3(
                 TubeView.Width * 0.5f * lipSide,
-                surfaceNorm * fromView.Height, 0f);
+                TubeView.LiquidFloor + surfaceNorm * fromView.LiquidHeight, 0f);
 
             Vector3 worldPos = fromView.transform.TransformPoint(localPos);
             return transform.InverseTransformPoint(worldPos);
@@ -1643,18 +1671,20 @@ namespace TubeSort.Game
         /// Tüpler saydam olduğu için akış ağızda değil, sıvının
         /// olduğu seviyede bitmeli.
         /// </summary>
-        // Boş hedefte kolon dibinin oturacağı iç-dip payı: RestPosition tüpün
-        // pivot (dış) dibidir; görünür iç dip biraz yukarıda, kolon oraya otursun.
-        private const float DestBottomInset = 0.06f;
+        // Boş hedefte kolon dibinin iç tabana gömülme payı: yüzey en az bu kadar
+        // iç tabanın (LiquidFloor) üstünde tutulur, kolon dibi taban altına inmez.
+        private const float DestBottomInset = 0.02f;
 
         private static Vector3 CalculateDestSurface(TubeView toView, float fillLevel)
         {
-            float surfaceY = fillLevel * toView.Height;
-            // Boş/az dolu hedefte kolonun dibi tüpün altına taşmasın: kolon dibi
-            // yüzeyden SurfacePlunge kadar aşağı iner; yüzey en az bu + iç-dip payı
-            // kadar tüp dibinin (RestPosition) üstünde tutulur.
+            // fillLevel sıvı-yerel (0=iç taban); dünyaya LiquidFloor eklenir.
+            float surfaceY = fillLevel * toView.LiquidHeight;
+            // Boş/az dolu hedefte kolonun dibi camın kalın dibine taşmasın: kolon
+            // dibi yüzeyden SurfacePlunge kadar aşağı iner; yüzey en az bu + pay
+            // kadar iç tabanın üstünde tutulur.
             surfaceY = Mathf.Max(surfaceY, StreamView.SurfacePlunge + DestBottomInset);
-            return toView.RestPosition + new Vector3(0f, surfaceY, 0f);
+            return toView.RestPosition
+                + new Vector3(0f, TubeView.LiquidFloor + surfaceY, 0f);
         }
 
         /// <summary>
