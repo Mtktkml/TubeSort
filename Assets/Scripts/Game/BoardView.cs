@@ -1219,10 +1219,11 @@ namespace TubeSort.Game
             TubeView toView = tubeViews[result.ToIndex];
             StreamView stream = AcquireStream();
             // Akış üst parçası kaynağın offset bandının önünde (ön dudak
-            // offset+6'nın üstü); alt parça hedefin halkasının arkasında
-            // (order 2, hedef offset almaz). Böylece öndeki kaynağın akışı
-            // arkasında kalmaz, hedefte kolon deliğin içinden süzülür.
-            stream.SetSortingOrders(job.SortingOffset + 7, 2);
+            // offset+6'nın üstü); alt parça hedefin camının arkasında
+            // (order 1, hedef offset almaz). Böylece öndeki kaynağın akışı
+            // arkasında kalmaz, hedefte kolon deliğe girip camın içinden
+            // süzülerek yüzeye iner.
+            stream.SetSortingOrders(job.SortingOffset + 7, 1);
 
             // Board hamleyi zaten uyguladı; tube verileri yeni durumu yansıtıyor.
             float fromTarget = fromView.TargetFillLevel;

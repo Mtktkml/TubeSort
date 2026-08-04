@@ -20,10 +20,12 @@ namespace TubeSort.Game
         // görsel ya da import PPU'su değişirse burası da birlikte güncellenir. ──
         private const float SpritePpu = 126.67f;
 
-        /// <summary>Cam iç boşluğunun (sıvı gövdesinin) genişliği: tüp
-        /// dokusunda iç duvarlar x24..127 → 104 px. Sıvı SDF'i ve dökme
-        /// fiziği (açı/hacim) bu genişlikle çalışır.</summary>
-        public const float Width = 104f / SpritePpu;
+        /// <summary>Sıvı gövdesinin genişliği: sıvının kabı camın İÇ KONTURUDUR
+        /// (görselde iki kontur var — dış kabuk x19-23/x128-132 ve içteki ince
+        /// çizgi x30-34/x116-120; sıvı iç çizgiye dayanır, merkezler x32..118 →
+        /// 86 px). Cam önde çizildiği için çizgi sıvının kenarını örter. Sıvı
+        /// SDF'i ve dökme fiziği (açı/hacim) bu genişlikle çalışır.</summary>
+        public const float Width = 86f / SpritePpu;
         private const float UnitHeight = 0.5f;
 
         /// <summary>
@@ -51,12 +53,12 @@ namespace TubeSort.Game
         private const float TopRadius = 0.04f;
 
         /// <summary>
-        /// Dibin yuvarlaklığı. Camın iç çanak profili ölçüldü (duvar-iç sınırı,
-        /// satır 440→478): 46 px köşe yarıçaplı yuvarlak kutu profile her
-        /// seviyede ±2 px oturuyor — sıvı çanağı boşluksuz doldurur, duvara
-        /// en fazla ~2 px biner (AA içinde kaybolur).
+        /// Dibin yuvarlaklığı. İÇ KONTURUN çanak profili ölçüldü (iç çizgi
+        /// satır 435'te kıvrılmaya başlar, 463'te kapanır): 38 px köşe
+        /// yarıçaplı yuvarlak kutu profile ±2 px oturuyor — sıvı iç çanağı
+        /// boşluksuz doldurur, çizgiye en fazla ~2 px biner (cam önde, örter).
         /// </summary>
-        private const float BottomRadius = 46f / SpritePpu;
+        private const float BottomRadius = 38f / SpritePpu;
 
         /// <summary>
         /// Sıvı/tıklama dörtgeninin gövde dışına yan payı: kenar yumuşaması
@@ -65,13 +67,15 @@ namespace TubeSort.Game
         private const float QuadPadding = 0.06f;
 
         /// <summary>
-        /// Camın kalın dibi: iç taban, tüpün (pivot) dibinden bu kadar yukarıda.
-        /// Ölçüm duvar-iç sınırından: çanak içi satır 477'de biter, 478 cam —
-        /// taban alttan 18 px. (Dikkat: satır 463-468'deki beyaz şerit tabanda
-        /// DEĞİL, çanağın içinde yüzen parlama bandı — taban sanılmasın,
-        /// sanıldı ve sıvı havada asılı kaldı.)
+        /// Sıvı tabanının tüpün (pivot) dibinden yüksekliği: İÇ KONTURUN çanağı
+        /// satır ~463'te kapanır (463-468'deki beyaz parlama bandı iç tabanın
+        /// kendisidir) → alttan 32 px; taban bandın 2 px İÇİNE gömülür (30) ki
+        /// sıvıyla çanak arasında tek piksellik bile boşluk kalmasın — bindirme
+        /// önde çizilen bandın arkasında görünmez. (Tarihçe: önce dış kabuğun
+        /// tabanı [satır 478] sanıldı — sıvı iç çizginin dışına taşıyordu;
+        /// doğru kap İÇ kontur.)
         /// </summary>
-        private const float FloorInset = 18f / SpritePpu;
+        private const float FloorInset = 30f / SpritePpu;
 
         /// <summary>
         /// Sıvı ağzına kadar dolu olsa bile sıvının tepesiyle gövde tepesi
@@ -87,15 +91,17 @@ namespace TubeSort.Game
 
         // ── Görsel katman: v2 PNG'leri (Resources/Sprites/v2). Tüp görseli
         // (152×496) cam gövde + gri halkayı TEK parçada taşır; çalışma anında
-        // Sprite.Create ile İKİYE bölünür (CreateBodySprite/CreateRingSprite):
-        //   gövde (order 0): 9-slice, kapasiteyle uzar;
-        //   halka (order 3): sabit, SIVININ ÖNÜNDE — dökmede dudağa tırmanan
-        //     sıvı halkanın arkasına saklanır (eski yaka mimarisinin aynısı).
-        // Order 2 akış kolonunun HEDEF parçasına ayrılmıştır: kolon halkanın
-        // arkasından ağza girer (delik camsı/yarı saydam — kolon süzülerek
-        // görünür), sıvının önünde yüzeye iner. Tam sıra:
-        //   cam 0 < sıvı 1 < akış-alt 2 < halka 3 < tıpa 4 < pus 5 < dudak 6.
-        // İki parça AYNI dokudan kesildiği için kesim çizgisinde bilinear
+        // Sprite.Create ile İKİYE bölünür (CreateBodySprite/CreateRingSprite).
+        // SIVI EN ARKADA, cam onun ÖNÜNDE çizilir: cam yarı saydam olduğu için
+        // sıvı içinden görünür ve camın GÖMÜLÜ parlamaları (duvar yansıma
+        // çizgileri, yumuşak bantlar, dip parlaması, iç tint) sıvının üstüne
+        // kendiliğinden düşer — boş/dolu tüpte parlama TANIMI GEREĞİ aynıdır,
+        // sıvı shader'ında ayrıca parlama çizilmez (çizildi, hizası asla
+        // birebir tutmadı; bu mimari o sorunu kökten kaldırdı). Tam sıra:
+        //   sıvı 0 < akış-alt 1 < cam gövde 2 < halka 3 < tıpa 4 < pus 5 <
+        //   dudak 6. Akış-alt kolonu da camın/halkanın arkasında: kolon deliğe
+        //   girip camın içinden süzülerek yüzeye iner.
+        // Gövde+halka AYNI dokudan kesildiği için kesim çizgisinde bilinear
         // filtre komşu pikseli yine doğru satırdan okur — dikiş görünmez. ──
         /// <summary>Resources yolları — BoardView yükler, TubeView kullanır.</summary>
         public const string TubeSpritePath = "Sprites/v2/tube";
@@ -231,9 +237,10 @@ namespace TubeSort.Game
 
             // Cam gövde 9-slice; tepesi (dikiş) halkanın opak bandının altında
             // kalır. Sıvı shader'ı kendi şeklini kendisi çizer, iç taban
-            // (FloorInset) üstünde kendi gövde ölçüsüyle kırpılır.
+            // (FloorInset) üstünde kendi gövde ölçüsüyle kırpılır ve CAMIN
+            // ARKASINDA durur (bkz. katman açıklaması yukarıda).
             CreateGlass(glassBodySprite);
-            liquid = CreateQuad("Liquid", liquidMaterial, sortingOrder: 1, QuadHeight);
+            liquid = CreateQuad("Liquid", liquidMaterial, sortingOrder: 0, QuadHeight);
 
             CreateRing(ringSprite);
             CreateMouthFront(mouthFrontSprite);
@@ -274,7 +281,7 @@ namespace TubeSort.Game
         /// Gri halkayı kurar (order 3, sıvının VE akış kolonunun ÖNÜNDE): tüp
         /// dokusunun üst parçası, gövdenin tepesine (dikişe) bitişik oturur.
         /// Dökme sırasında dudağa tırmanan sıvının üst kırpılma çizgisi ve ağza
-        /// giren akış kolonu (order 2) halkanın arkasında kalır — eski bej
+        /// giren akış kolonu (order 1) halkanın arkasında kalır — eski bej
         /// yakanın mimari rolünün aynısı.
         /// </summary>
         private void CreateRing(Sprite ringSprite)
@@ -479,12 +486,14 @@ namespace TubeSort.Game
         private float QuadHeight => LiquidHeight + MouthOverflow;
 
         /// <summary>
-        /// Cam gövde sprite'ını kurar (order 0, sıvının arkasında). 9-slice:
-        /// parça sprite'ında tanımlı alt border dip kavisini korur, düz gövde
-        /// kapasiteye göre uzar (görseldeki parlama şeritleri de orantılı
-        /// uzar — dikey çizgiler, doğal durur). Pivot Bottom olduğu için yerel
-        /// sıfır tüpün dibidir; genişlik görselin doğal genişliği (1.2 birim,
-        /// halka genişliğiyle aynı). Tepesi dikişte biter; halka oradan devam eder.
+        /// Cam gövde sprite'ını kurar (order 2, SIVININ VE AKIŞIN ÖNÜNDE):
+        /// yarı saydam cam, arkasındaki sıvıyı gösterirken gömülü parlamalarını
+        /// sıvının üstüne düşürür — dolu tüpün parlaması boş tüple birebirdir.
+        /// 9-slice: parça sprite'ında tanımlı alt border dip kavisini korur,
+        /// düz gövde kapasiteye göre uzar (parlama şeritleri de orantılı uzar).
+        /// Pivot Bottom olduğu için yerel sıfır tüpün dibidir; genişlik
+        /// görselin doğal genişliği (1.2 birim, halka genişliğiyle aynı).
+        /// Tepesi dikişte biter; halka oradan devam eder.
         /// </summary>
         private void CreateGlass(Sprite sprite)
         {
@@ -493,7 +502,7 @@ namespace TubeSort.Game
 
             glass = go.AddComponent<SpriteRenderer>();
             glass.sprite = sprite;
-            glass.sortingOrder = 0;
+            glass.sortingOrder = 2;
             glass.drawMode = SpriteDrawMode.Sliced;
             glass.size = new Vector2(sprite.bounds.size.x, GlassTop);
         }
@@ -847,14 +856,21 @@ namespace TubeSort.Game
         // Tıklamanın tüp şekli içinde olup olmadığını doğrulamak için kullanılır.
         // ────────────────────────────────────────────────────────────────
 
+        /// <summary>Tıklama şekli CAM SİLÜETİNİ izler, sıvı kutusunu değil:
+        /// sıvı iç kontura dar, ama parmak tüpün camına basar — dış gövde
+        /// (127 px) ve dış dip kavisi tıklanabilir kalmalı.</summary>
+        private const float ClickWidth = 127f / SpritePpu;
+        private const float ClickBottomRadius = 50f / SpritePpu;
+
         /// <summary>Dünya koordinatındaki bir noktanın tüp şekli içinde olup olmadığını döner.</summary>
         public bool ContainsPoint(Vector3 worldPoint)
         {
             Vector3 local = transform.InverseTransformPoint(worldPoint);
-            // Sıvı dörtgeninin merkezi (0, FloorInset + QuadHeight/2); noktayı oraya taşı.
-            Vector2 p = new Vector2(local.x, local.y - FloorInset - QuadHeight * 0.5f);
-
-            if (SdTube(p) <= 0f) return true;
+            // Cam silüeti: pivottan (dış dip) gövde tepesine yuvarlak kutu.
+            Vector2 p = new Vector2(local.x, local.y - BodyHeight * 0.5f);
+            if (SdRoundedBox(p, new Vector2(ClickWidth * 0.5f, BodyHeight * 0.5f),
+                    TopRadius, ClickBottomRadius) <= 0f)
+                return true;
 
             // Halka da tıklanabilir: gövdeyle birleşim. Görselden taşma yok —
             // stadyum, halkanın görünür silüetini izler.
@@ -872,17 +888,6 @@ namespace TubeSort.Game
             Vector2 half = new Vector2(RingHalfWidth, RingHeight * 0.5f);
             return SdRoundedBox(new Vector2(local.x, local.y) - center, half,
                 half.y, half.y);
-        }
-
-        // Düz tüp: shader'daki SdTube ile aynı — yalnızca sıvı gövdesi kutusu,
-        // ağız kaynaşması yok (bkz. TubeShape.hlsl açıklaması).
-        private float SdTube(Vector2 p)
-        {
-            Vector2 quadSize = new Vector2(QuadWidth, QuadHeight);
-            Vector2 bodySize = new Vector2(Width, LiquidHeight);
-
-            Vector2 bodyCenter = new Vector2(0f, -quadSize.y * 0.5f + bodySize.y * 0.5f);
-            return SdRoundedBox(p - bodyCenter, bodySize * 0.5f, TopRadius, BottomRadius);
         }
 
         /// <summary>Yuvarlak köşeli dikdörtgenin SDF'i. Üst ve alt köşe yarıçapları ayrı.</summary>
@@ -942,8 +947,8 @@ namespace TubeSort.Game
         /// </summary>
         public void SetSortingOffset(int offset)
         {
-            glass.sortingOrder = 0 + offset;
-            liquid.sortingOrder = 1 + offset;
+            liquid.sortingOrder = 0 + offset;
+            glass.sortingOrder = 2 + offset;
             ring.sortingOrder = 3 + offset;
             cork.sortingOrder = 4 + offset;
             corkVeil.sortingOrder = 5 + offset;

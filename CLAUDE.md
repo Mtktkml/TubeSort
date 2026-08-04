@@ -72,10 +72,14 @@ Statik parçalar (cam tüp, bej yaka, mantar tıpa) PNG sprite'lardır; dinamik 
 için asset'le yapılamazlar. `Resources` altındalar çünkü her şey koddan kurulur:
 sahnede/prefab'da referans yok, `Resources` dışında build'e girmezlerdi.
 
-Katman sırası (sortingOrder), tüp içi: cam gövde 0 < sıvı 1 < akış-alt 2 <
-halka 3 < tıpa 4 < pus perdesi 5 < ön dudak 6. Akışın alt parçası hedefin
-HALKASININ ARKASINA (2) çizilir — v2 camda ağız deliği yarı saydam, kolon
-deliğin içinden süzülür görünür; üst parça her şeyin önüne (kaynak offset+7,
+Katman sırası (sortingOrder), tüp içi: sıvı 0 < akış-alt 1 < cam gövde 2 <
+halka 3 < tıpa 4 < pus perdesi 5 < ön dudak 6. SIVI CAMIN ARKASINDADIR: cam
+yarı saydam olduğundan sıvı içinden görünür ve camın gömülü parlamaları
+(duvar çizgileri, bantlar, dip parlaması) sıvının üstüne kendiliğinden düşer —
+dolu tüpün parlaması boş tüple tanımı gereği birebir; sıvı shader'ı parlama
+ÇİZMEZ (bant taklidi denendi, hiza tutmadı, mimari buna geçildi). Akışın alt
+parçası da hedefin camının arkasına (1) çizilir — kolon deliğe girip camın
+içinden süzülerek yüzeye iner; üst parça her şeyin önüne (kaynak offset+7,
 havuz varsayılanı 15). Dökülen tüp bu değerlere +10 offset alır
 (`SetSortingOffset`). Butonlar 100, level başlığı ve banner 101.
 
@@ -110,9 +114,11 @@ işleniyor, Shader Graph'ta dizi/döngü yok.
   hata basar (sessizce yanlış çizmek yerine). (8→12 yükseltildi: daha derin/zor
   tüpler; shader piksel-döngüsü ~%50 arttı. Palet de 8→10 renge çıktı,
   `ColorPalette.cs`.)
-- **SDF formülleri** — `TubeShape.hlsl` (GPU, piksel boyama) ve `TubeView.cs` (CPU,
-  tıklama doğrulama) aynı şekli çizmeli. GPU/CPU kod paylaşamadığı için tekrar
-  kaçınılmaz. Şekil değişirse `SdRoundedBox` ve `SdTube` ikisinde birlikte güncellenir.
+- **SDF formülleri** — `SdRoundedBox` formülü `TubeShape.hlsl` (GPU) ve
+  `TubeView.cs` (CPU) tarafında aynı kalmalı; GPU/CPU kod paylaşamadığı için
+  tekrar kaçınılmaz. ŞEKİLLER ise bilerek farklı: sıvı İÇ KONTURA çizilir
+  (`Width` 86 px, taban 32 px, dip 38 px), tıklama DIŞ CAM silüetini kullanır
+  (`ClickWidth` 127 px) — parmak camın kenarına basar, sıvı kutusu dar.
 
 **Renk uzayı:** proje Linear. `SetVectorArray` renk dönüşümü yapmaz (`SetColor` yapar).
 Shader'a giden renkler `TubeView.ToShaderColor` ile çevrilmeli, yoksa kırmızı pembe çıkar.
