@@ -56,7 +56,7 @@ namespace TubeSort.Game
         private Material streamMaterial;
         private Sprite tubeSprite;              // Resources/Sprites/v2 görselleri
         private Sprite corkSprite;
-        private Sprite corkVeilSprite;          // tıpanın tüp-içi kısmına binen pus
+        private Sprite corkedMouthSprite;       // tıpalı ağız (referanstan tek parça)
         private Sprite glassBodySprite;         // tüp dokusundan kesilen parçalar
         private Sprite ringSprite;              // (Sprite bizde, doku asset'in;
                                                 // OnDestroy yalnız Sprite'ı siler)
@@ -211,15 +211,15 @@ namespace TubeSort.Game
             liquidMaterial = CreateMaterial("Liquid");
             streamMaterial = CreateMaterial("Stream");
 
-            // Cam+halka, tıpa ve pus sprite'ları (Resources/Sprites/v2); sıvı
-            // ve akış shader. (collar.png bilerek kullanılmıyor — bkz. TubeView
-            // katman açıklaması: ağız bölgesine ek katman binmez.)
+            // Cam+halka, tıpa ve tıpalı-ağız sprite'ları (Resources/Sprites/v2);
+            // sıvı ve akış shader. (collar.png ve shadow.png bilerek
+            // kullanılmıyor: tıpalı ağız referanstan tek parça.)
             tubeSprite = LoadSprite(TubeView.TubeSpritePath);
             corkSprite = LoadSprite(TubeView.CorkSpritePath);
-            corkVeilSprite = LoadSprite(TubeView.CorkVeilSpritePath);
+            corkedMouthSprite = LoadSprite(TubeView.CorkedMouthSpritePath);
 
             if (liquidMaterial == null || streamMaterial == null
-                || tubeSprite == null || corkSprite == null || corkVeilSprite == null)
+                || tubeSprite == null || corkSprite == null || corkedMouthSprite == null)
             {
                 enabled = false;
                 return;
@@ -710,7 +710,7 @@ namespace TubeSort.Game
 
                 var view = go.AddComponent<TubeView>();
                 view.Initialize(i, board[i], palette, unitSprite, liquidMaterial,
-                    glassBodySprite, ringSprite, corkSprite, corkVeilSprite);
+                    glassBodySprite, ringSprite, corkSprite, corkedMouthSprite);
                 tubeViews.Add(view);
             }
         }

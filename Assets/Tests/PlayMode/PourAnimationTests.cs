@@ -73,12 +73,12 @@ namespace TubeSort.Tests.PlayMode
             // gövde+halka parçaları üretilir.
             var tubeSprite = Resources.Load<Sprite>(TubeView.TubeSpritePath);
             var corkSprite = Resources.Load<Sprite>(TubeView.CorkSpritePath);
-            var veilSprite = Resources.Load<Sprite>(TubeView.CorkVeilSpritePath);
+            var corkedMouthSprite = Resources.Load<Sprite>(TubeView.CorkedMouthSpritePath);
             var bodySprite = TubeView.CreateBodySprite(tubeSprite);
             var ringSprite = TubeView.CreateRingSprite(tubeSprite);
 
             tubeView.Initialize(0, tube, palette, sprite, liquidMat,
-                bodySprite, ringSprite, corkSprite, veilSprite);
+                bodySprite, ringSprite, corkSprite, corkedMouthSprite);
 
             yield return null;
         }
@@ -247,10 +247,10 @@ namespace TubeSort.Tests.PlayMode
             tubeView.SetSortingOffset(10);
 
             // Katman sözleşmesi (CLAUDE.md): sıvı 0 < akış-alt 1 < halka 2 <
-            // tıpa 3 < pus 4 < cam 5 — SIVI VE TIPANIN TÜP-İÇİ KISMI CAMIN
-            // ARKASINDADIR (parlamalar camdan gelir), TIPA HALKANIN ÖNÜNDEDİR
-            // (yaka bölgesinde çıplak görünür). Sıra bozulursa parlama
-            // mimarisi ya da tıpa görünümü kırılır.
+            // düşen tıpa 3 < cam 4 < tıpalı ağız 5 — SIVI CAMIN ARKASINDADIR
+            // (parlamalar camdan gelir); tıpalı ağız tek parça görsel olarak
+            // halkanın yerine geçer. Sıra bozulursa parlama mimarisi ya da
+            // tıpa görünümü kırılır.
             var renderers = tubeObject.GetComponentsInChildren<SpriteRenderer>(true);
             bool foundGlass = false, foundLiquid = false, foundRing = false,
                 foundCork = false;
@@ -259,7 +259,7 @@ namespace TubeSort.Tests.PlayMode
             {
                 if (r.gameObject.name == "Glass")
                 {
-                    Assert.AreEqual(15, r.sortingOrder, "Glass sorting order yanlış");
+                    Assert.AreEqual(14, r.sortingOrder, "Glass sorting order yanlış");
                     foundGlass = true;
                 }
                 else if (r.gameObject.name == "Liquid")
@@ -287,7 +287,7 @@ namespace TubeSort.Tests.PlayMode
             foreach (var r in renderers)
             {
                 if (r.gameObject.name == "Glass")
-                    Assert.AreEqual(5, r.sortingOrder);
+                    Assert.AreEqual(4, r.sortingOrder);
                 else if (r.gameObject.name == "Liquid")
                     Assert.AreEqual(0, r.sortingOrder);
                 else if (r.gameObject.name == "Ring")

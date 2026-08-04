@@ -66,12 +66,12 @@ namespace TubeSort.Tests.PlayMode
 
             var tubeSprite = Resources.Load<Sprite>(TubeView.TubeSpritePath);
             var corkSprite = Resources.Load<Sprite>(TubeView.CorkSpritePath);
-            var veilSprite = Resources.Load<Sprite>(TubeView.CorkVeilSpritePath);
+            var corkedMouthSprite = Resources.Load<Sprite>(TubeView.CorkedMouthSpritePath);
             var bodySprite = TubeView.CreateBodySprite(tubeSprite);
             var ringSprite = TubeView.CreateRingSprite(tubeSprite);
 
             tubeView.Initialize(0, sourceTube, palette, sprite, liquidMat,
-                bodySprite, ringSprite, corkSprite, veilSprite);
+                bodySprite, ringSprite, corkSprite, corkedMouthSprite);
 
             yield return null;
         }

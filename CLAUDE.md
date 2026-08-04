@@ -73,18 +73,20 @@ için asset'le yapılamazlar. `Resources` altındalar çünkü her şey koddan k
 sahnede/prefab'da referans yok, `Resources` dışında build'e girmezlerdi.
 
 Katman sırası (sortingOrder), tüp içi: sıvı 0 < akış-alt 1 < halka 2 <
-tıpa 3 < pus perdesi 4 < cam gövde 5. SIVI CAMIN VE HALKANIN ARKASINDADIR
-(cam yarı saydam olduğundan içerik içinden görünür; camın gömülü parlamaları
-içeriğin üstüne kendiliğinden düşer — dolu tüpün parlaması boş tüple tanımı
-gereği birebir). TIPA HALKANIN ÖNÜNDE ama CAMIN ARKASINDADIR (referans
-kompozitle birebir): yaka bölgesinde çıplak görünür — delik gölgesi tıpa
-görselinin kendi koyu bandı — tüp içine giren kısmı cam + pus arkasında
-buzlanır. Etkileşimler shader'da/ek parçayla ÇİZİLMEZ (taklit denendi, hiza
-tutmadı, mimari buna geçildi). Akışın alt parçası hedefin camının/halkasının
-arkasına (1) çizilir — kolon deliğe girip camın içinden süzülerek yüzeye
-iner; üst parça her şeyin önüne (kaynak offset+7, havuz varsayılanı 15).
-Dökülen tüp bu değerlere +10 offset alır (`SetSortingOffset`). Butonlar 100,
-level başlığı ve banner 101.
+düşen tıpa 3 < cam gövde 4 < tıpalı ağız 5. SIVI CAMIN VE HALKANIN
+ARKASINDADIR (cam yarı saydam olduğundan içerik içinden görünür; camın gömülü
+parlamaları içeriğin üstüne kendiliğinden düşer — dolu tüpün parlaması boş
+tüple tanımı gereği birebir). TIPALI AĞIZ TEK PARÇADIR: tıpa+halka+pus
+etkileşimini parçalardan yeniden kurma denemeleri (dudak yayı, pencere
+sandviçi, halka-üstü) referansla birebir tutmadı; tamamlanan tüpte ağız,
+`tube reference.png`'den olduğu gibi kesilmiş `cork_mouth.png` ile çizilir
+ve HALKANIN YERİNE GEÇER (halka kapatılır; çıplak tıpa yalnız düşüş
+animasyonunda görünür, oturma anında tek parçaya geçilir). collar.png ve
+shadow.png bilerek kullanılmıyor. Akışın alt parçası hedefin
+camının/halkasının arkasına (1) çizilir — kolon deliğe girip camın içinden
+süzülerek yüzeye iner; üst parça her şeyin önüne (kaynak offset+7, havuz
+varsayılanı 15). Dökülen tüp bu değerlere +10 offset alır
+(`SetSortingOffset`). Butonlar 100, level başlığı ve banner 101.
 
 - `Sprites/tube.png` — cam tüp (PPU 247.5, pivot Bottom, **9-slice** alt border 88:
   dip kavisi sabit kalır, düz gövde kapasiteyle uzar).
