@@ -248,33 +248,43 @@ namespace TubeSort.Tests.PlayMode
 
             tubeView.SetSortingOffset(10);
 
+            // Katman sözleşmesi (CLAUDE.md): sıvı 0 < akış-alt 1 < cam 2 <
+            // halka 3 — SIVI CAMIN ARKASINDADIR, camın gömülü parlamaları
+            // sıvının üstüne düşer. Cam 0'a dönerse parlama mimarisi kırılır.
             var renderers = tubeObject.GetComponentsInChildren<SpriteRenderer>();
-            bool foundGlass = false, foundLiquid = false;
+            bool foundGlass = false, foundLiquid = false, foundRing = false;
 
             foreach (var r in renderers)
             {
                 if (r.gameObject.name == "Glass")
                 {
-                    Assert.AreEqual(10, r.sortingOrder, "Glass sorting order yanlış");
+                    Assert.AreEqual(12, r.sortingOrder, "Glass sorting order yanlış");
                     foundGlass = true;
                 }
                 else if (r.gameObject.name == "Liquid")
                 {
-                    Assert.AreEqual(11, r.sortingOrder, "Liquid sorting order yanlış");
+                    Assert.AreEqual(10, r.sortingOrder, "Liquid sorting order yanlış");
                     foundLiquid = true;
+                }
+                else if (r.gameObject.name == "Ring")
+                {
+                    Assert.AreEqual(13, r.sortingOrder, "Ring sorting order yanlış");
+                    foundRing = true;
                 }
             }
 
-            Assert.IsTrue(foundGlass && foundLiquid, "Renderer bulunamadı");
+            Assert.IsTrue(foundGlass && foundLiquid && foundRing, "Renderer bulunamadı");
 
             // Sıfırla ve kontrol et.
             tubeView.SetSortingOffset(0);
             foreach (var r in renderers)
             {
                 if (r.gameObject.name == "Glass")
-                    Assert.AreEqual(0, r.sortingOrder);
+                    Assert.AreEqual(2, r.sortingOrder);
                 else if (r.gameObject.name == "Liquid")
-                    Assert.AreEqual(1, r.sortingOrder);
+                    Assert.AreEqual(0, r.sortingOrder);
+                else if (r.gameObject.name == "Ring")
+                    Assert.AreEqual(3, r.sortingOrder);
             }
         }
     }
