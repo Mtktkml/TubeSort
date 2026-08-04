@@ -72,9 +72,11 @@ Statik parçalar (cam tüp, bej yaka, mantar tıpa) PNG sprite'lardır; dinamik 
 için asset'le yapılamazlar. `Resources` altındalar çünkü her şey koddan kurulur:
 sahnede/prefab'da referans yok, `Resources` dışında build'e girmezlerdi.
 
-Katman sırası (sortingOrder), tüp içi: cam 0 < sıvı 1 < arka yaka 2 < tıpa 3 <
-ön yaka parçaları 4. Akışın alt parçası hedefin tıpa katmanına (3), üst parçası
-her şeyin önüne (15) çizilir. Dökülen tüp bu değerlere +10 offset alır
+Katman sırası (sortingOrder), tüp içi: cam gövde 0 < sıvı 1 < akış-alt 2 <
+halka 3 < tıpa 4 < pus perdesi 5 < ön dudak 6. Akışın alt parçası hedefin
+HALKASININ ARKASINA (2) çizilir — v2 camda ağız deliği yarı saydam, kolon
+deliğin içinden süzülür görünür; üst parça her şeyin önüne (kaynak offset+7,
+havuz varsayılanı 15). Dökülen tüp bu değerlere +10 offset alır
 (`SetSortingOffset`). Butonlar 100, level başlığı ve banner 101.
 
 - `Sprites/tube.png` — cam tüp (PPU 247.5, pivot Bottom, **9-slice** alt border 88:
@@ -174,16 +176,15 @@ sonra doğrulma + geri dönüş eş zamanlı. Model: **fiziksel eğim + zamanlay
   taşıyacak kadar eğilir (`CalculatePourAngle` → `AngleForLiquidAtLip`); sıvı
   azaldıkça açı artar (dolu ~50°, son birim ~83-88°). Tavan `MaxPourAngle` = 88°,
   shader'daki eğim kelepçesiyle (`max(|cos|,0.03)` ≈ 88.3°) **twin sabit**.
-  1.05 payı ŞART: dökme kapısı kenarın 1.0'ı geçmesini bekler ve eğim sürüşü
-  hedefini asla aşmaz — pay tam 1.0 olursa kapı ancak sıfır hızla açılır
-  (SmoothDamp döneminde asimptot donması yaşandı; `PourFreezeTests`'te
-  regresyon testi var).
-- Açı, dökme başlayana dek SÜRELİ SmoothStep rampasıyla yükselir (toplam
-  `slideDuration + 2×angleSmoothTime`; süre sınırlı, asimptot yok — SmoothDamp
-  kuyruğu yavaşlatılmış sürelerde kapı önünde saniyelerce sürünüyordu);
-  başladıktan sonra güncel fill'in dudak açısını **birebir** izler
-  (`MoveTowards`, gecikme yok) — takip gecikmesi (~6°) sıvıyı dudaktan
-  düşürüp akış kolonundan koparıyordu.
+  1.05 payı ŞART: dökme kapısı kenarın 1.0'ı geçmesini bekler ve `SmoothDamp`
+  kritik sönümlü olduğundan hedefini asla aşmaz — pay tam 1.0 olursa asimptot
+  donması yaşanır (yaşandı; `PourFreezeTests`'te regresyon testi var).
+- Açı, dökme başlayana dek `SmoothDamp` ile yükselir; başladıktan sonra güncel
+  fill'in dudak açısını **birebir** izler (`MoveTowards`, gecikme yok) — SmoothDamp
+  gecikmesi (~6°) sıvıyı dudaktan düşürüp akış kolonundan koparıyordu.
+  Bilinen sınır: süreler test için aşırı yavaşlatılınca kapı öncesi SmoothDamp
+  kuyruğu görünür sürünür (normal hızda fark edilmez; taban-hız ve süreli rampa
+  denendi, ikisi de hissi bozduğu için geri alındı — yeniden deneme).
 - Boşalma **zamanlayıcıyla** ilerler (dudak-gating YOK): akışla birlikte tam biter,
   donma imkânsız. Watchdog yalnız emniyet.
 - Ağız her karede hedefin üstüne konumlanır (`CalculatePourPosition`); stream

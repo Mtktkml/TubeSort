@@ -89,8 +89,12 @@ namespace TubeSort.Game
         // (152×496) cam gövde + gri halkayı TEK parçada taşır; çalışma anında
         // Sprite.Create ile İKİYE bölünür (CreateBodySprite/CreateRingSprite):
         //   gövde (order 0): 9-slice, kapasiteyle uzar;
-        //   halka (order 2): sabit, SIVININ ÖNÜNDE — dökmede dudağa tırmanan
+        //   halka (order 3): sabit, SIVININ ÖNÜNDE — dökmede dudağa tırmanan
         //     sıvı halkanın arkasına saklanır (eski yaka mimarisinin aynısı).
+        // Order 2 akış kolonunun HEDEF parçasına ayrılmıştır: kolon halkanın
+        // arkasından ağza girer (delik camsı/yarı saydam — kolon süzülerek
+        // görünür), sıvının önünde yüzeye iner. Tam sıra:
+        //   cam 0 < sıvı 1 < akış-alt 2 < halka 3 < tıpa 4 < pus 5 < dudak 6.
         // İki parça AYNI dokudan kesildiği için kesim çizgisinde bilinear
         // filtre komşu pikseli yine doğru satırdan okur — dikiş görünmez. ──
         /// <summary>Resources yolları — BoardView yükler, TubeView kullanır.</summary>
@@ -184,7 +188,6 @@ namespace TubeSort.Game
         private Coroutine sloshRoutine;
         private Vector3 corkRestPosition;
         private bool corkSuppressed;
-        private bool mouthOverlayVisible;
         private Coroutine corkRoutine;
         /// <summary>İlk Refresh (kurulum) tamamlandı mı? Kurulumda tıpa
         /// animasyonsuz oturur; oyun sırasında belirince animasyon oynar.</summary>
@@ -262,10 +265,11 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// Gri halkayı kurar (order 2, sıvının ÖNÜNDE): tüp dokusunun üst
-        /// parçası, gövdenin tepesine (dikişe) bitişik oturur. Dökme sırasında
-        /// dudağa tırmanan sıvının üst kırpılma çizgisi halkanın opak bandının
-        /// arkasında kalır — eski bej yakanın mimari rolünün aynısı.
+        /// Gri halkayı kurar (order 3, sıvının VE akış kolonunun ÖNÜNDE): tüp
+        /// dokusunun üst parçası, gövdenin tepesine (dikişe) bitişik oturur.
+        /// Dökme sırasında dudağa tırmanan sıvının üst kırpılma çizgisi ve ağza
+        /// giren akış kolonu (order 2) halkanın arkasında kalır — eski bej
+        /// yakanın mimari rolünün aynısı.
         /// </summary>
         private void CreateRing(Sprite ringSprite)
         {
@@ -274,15 +278,16 @@ namespace TubeSort.Game
 
             ring = go.AddComponent<SpriteRenderer>();
             ring.sprite = ringSprite;   // pivot Bottom: dikişe doğrudan oturur
-            ring.sortingOrder = 2;
+            ring.sortingOrder = 3;
             go.transform.localPosition = new Vector3(0f, GlassTop, 0f);
         }
 
         /// <summary>
-        /// Cam dudağın ön parçasını kurar (order 5, sandviçin en önü): tıpa ve
+        /// Cam dudağın ön parçasını kurar (order 6, sandviçin en önü): tıpa ve
         /// pus perdesi bunun arkasında — tıpa "camın içine girmiş" okunur.
-        /// Kapalı başlar; tıpayla ya da dökme sandviçiyle açılır (RefreshCork).
-        /// Delik merkezi (LipFrontTopRow) ağız hizasına oturtulur.
+        /// Kapalı başlar; YALNIZ tıpayla açılır (RefreshCork): yarı saydam cam
+        /// parçası ağzın görünümünü değiştirdiği için tıpasız tüpte hiç
+        /// çizilmez. Delik merkezi (LipFrontTopRow) ağız hizasına oturtulur.
         /// </summary>
         private void CreateMouthFront(Sprite sprite)
         {
@@ -291,7 +296,7 @@ namespace TubeSort.Game
 
             mouthFront = go.AddComponent<SpriteRenderer>();
             mouthFront.sprite = sprite;
-            mouthFront.sortingOrder = 5;
+            mouthFront.sortingOrder = 6;
             mouthFront.enabled = false;
             go.transform.localPosition = new Vector3(
                 0f, MouthY - LipCenterBelowMouthRows / SpritePpu, 0f);
@@ -370,8 +375,8 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// Mantar tıpayı ve pus perdesini kurar (tıpa order 3: halkanın önünde,
-        /// perde order 4: tıpanın önünde; ağız-önü dudak 5 hepsini sarar).
+        /// Mantar tıpayı ve pus perdesini kurar (tıpa order 4: halkanın önünde,
+        /// perde order 5: tıpanın önünde; ağız-önü dudak 6 hepsini sarar).
         /// Konum birleşik referanstan: tıpa tepesi halka tepesinin
         /// CorkTopAboveRingTop kadar üstünde; alt ucu ağızdan içeri sarkar.
         /// Perde tıpanın ÇOCUĞUDUR: takılma animasyonu ve ezilme esnemesi
@@ -385,7 +390,7 @@ namespace TubeSort.Game
 
             cork = go.AddComponent<SpriteRenderer>();
             cork.sprite = sprite;
-            cork.sortingOrder = 3;   // halkanın ÖNÜNDE, perde ve dudağın arkasında
+            cork.sortingOrder = 4;   // halkanın ÖNÜNDE, perde ve dudağın arkasında
             cork.enabled = false;
 
             float corkTop = RingTop + CorkTopAboveRingTop;
@@ -399,7 +404,7 @@ namespace TubeSort.Game
             veilGo.transform.SetParent(go.transform, false);
             corkVeil = veilGo.AddComponent<SpriteRenderer>();
             corkVeil.sprite = veilSprite;
-            corkVeil.sortingOrder = 4;
+            corkVeil.sortingOrder = 5;
             corkVeil.enabled = false;
             veilGo.transform.localPosition = new Vector3(0f,
                 (CorkRows * 0.5f - VeilTopFromCorkTopRows - VeilRows * 0.5f) / SpritePpu, 0f);
@@ -567,8 +572,10 @@ namespace TubeSort.Game
         /// <summary>
         /// Tıpa görünürlüğü: tamamlanmış (dolu + tek renk) ve bastırılmamış
         /// tüpte açık. Tube.IsComplete boş tüpte de true döner; boşta tıpa
-        /// istemiyoruz (!IsEmpty). Pus perdesi tıpayla birlikte yaşar; cam
-        /// dudağın ön parçası tıpayla YA DA dökme sandviçiyle açılır. Oyun
+        /// istemiyoruz (!IsEmpty). Pus perdesi ve cam dudağın ön parçası
+        /// tıpayla birlikte yaşar — dudak yarı saydam olduğundan tıpasız açık
+        /// kalsa ağzın rengini değiştirirdi (dökme sandviçi için de gerekmiyor:
+        /// akış kolonunun hedef parçası halkanın arkasına çizilir). Oyun
         /// sırasında AÇILIRKEN takılma animasyonu oynar; kapanış ve kurulumdaki
         /// ilk çizim anlıktır.
         /// </summary>
@@ -576,11 +583,7 @@ namespace TubeSort.Game
         {
             bool shouldCork = tube.IsComplete && !tube.IsEmpty && !corkSuppressed;
 
-            // Ön dudak tıpayla YA DA ağız sandviçi isteğiyle açılır: dökme
-            // sırasında akışın hedef parçası tıpa katmanında (order 3) çizilir,
-            // dudak onu tıpa gibi sarar — kolon delikten girer, camın
-            // arkasından geçer, tüpte yeniden görünür.
-            mouthFront.enabled = shouldCork || mouthOverlayVisible;
+            mouthFront.enabled = shouldCork;
 
             if (shouldCork == cork.enabled)
                 return;
@@ -598,14 +601,6 @@ namespace TubeSort.Game
 
             if (shouldCork && viewReady)
                 corkRoutine = StartCoroutine(AnimateCorkIn());
-        }
-
-        /// <summary>Dökme sırasında hedefin ön dudağını tıpasız da açar
-        /// (akış sandviçi — bkz. RefreshCork). Dökme bitince kapatılır.</summary>
-        public void SetMouthOverlay(bool visible)
-        {
-            mouthOverlayVisible = visible;
-            RefreshCork();
         }
 
         /// <summary>
@@ -931,10 +926,10 @@ namespace TubeSort.Game
         {
             glass.sortingOrder = 0 + offset;
             liquid.sortingOrder = 1 + offset;
-            ring.sortingOrder = 2 + offset;
-            cork.sortingOrder = 3 + offset;
-            corkVeil.sortingOrder = 4 + offset;
-            mouthFront.sortingOrder = 5 + offset;
+            ring.sortingOrder = 3 + offset;
+            cork.sortingOrder = 4 + offset;
+            corkVeil.sortingOrder = 5 + offset;
+            mouthFront.sortingOrder = 6 + offset;
         }
 
         /// <summary>Seçili tüp yukarı kalkar; oyuncu neyi seçtiğini görsün.

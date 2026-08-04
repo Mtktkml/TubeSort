@@ -123,6 +123,26 @@ Shader "TubeSort/Liquid"
                 return output;
             }
 
+            // Camdaki yumuşak parlama bandının sıvı içindeki taklidi: dikey
+            // bant, uçları eğik kesilmiş (paralelkenar), altta soluk yukarı
+            // doğru netleşir — camdaki bantların el yazısıyla aynı.
+            // cx/halfW: yatay merkez ve yarı genişlik (sıvı uv'si);
+            // y0..y1: dikey pencere; slant: uç kesimlerinin eğikliği.
+            float GlassBand(float2 uv, float cx, float halfW,
+                float y0, float y1, float slant)
+            {
+                float ndx = clamp((uv.x - cx) / halfW, -1.0, 1.0);
+                float xMask = smoothstep(1.0, 0.55, abs(ndx));
+                // Paralelkenar: üst/alt kesim çizgileri bant boyunca x ile kayar.
+                float shift = slant * 0.5 * (ndx + 1.0);
+                float yMask = smoothstep(y0 - shift, y0 - shift + 0.06, uv.y)
+                    * smoothstep(y1 - shift, y1 - shift - 0.04, uv.y);
+                // Altta ~%45 soluk, tepede tam — camdaki gradyanla aynı yön.
+                float fade = lerp(0.45, 1.0,
+                    saturate((uv.y - y0) / max(y1 - y0, 1e-3)));
+                return xMask * yMask * fade;
+            }
+
             half4 Fragment(Varyings input) : SV_Target
             {
                 // Tüp tamamen boşsa hiçbir şey çizme.
@@ -304,21 +324,17 @@ Shader "TubeSort/Liquid"
                 float shade = 1.0 - distanceFromCenter * distanceFromCenter * _SideShading;
                 color.rgb *= shade;
 
-                // Cam görselindeki (v2 tube.png) parlamaların sıvı bölgesindeki
-                // devamı — cam arkada kaldığı için dolu bölgede parlamayı sıvı
-                // çizmeli. Üç parça, konumlar görselden piksel taramasıyla
-                // ölçüldü (görsel değişirse birlikte güncellenmeli):
-                //   1-2) İKİ İÇ DUVAR yansıma çizgisi (doku x30-35 ve x116-121
-                //        → sıvı uv'sinde 0.082 / 0.909): camda tüm boyda
-                //        kesintisizler; sıvıdaki devamları da öyle — yüzey
-                //        sınırında camdaki üst parçalarına dikişsiz bağlanır.
-                //   3)   Sol GENİŞ süzülme (doku x39-47 → uv ~0.183): camdaki
-                //        gibi üstte belirgin, aşağı doğru sönen yumuşak band.
-                float wallL = smoothstep(0.033, 0.012, abs(uv.x - 0.082));
-                float wallR = smoothstep(0.033, 0.012, abs(uv.x - 0.909));
-                float softX = smoothstep(0.055, 0.020, abs(uv.x - 0.183));
-                float softFade = smoothstep(0.25, 0.75, uv.y);
-                float streak = max(max(wallL, wallR), softX * softFade * 0.6);
+                // Cam görselindeki (v2 tube.png) parlama BANTLARININ sıvı
+                // bölgesindeki devamı — cam arkada kaldığı için dolu bölgede
+                // parlamayı sıvı çizmeli. Camda iki yumuşak paralelkenar bant
+                // ölçüldü: sol x38-48 / satır ~140-345 (tepe alfa 76→40),
+                // sağ x98-112 / satır ~85-245 (61→41) — ikisi de altta soluk,
+                // yukarı doğru netleşiyor. Konumlar sıvı uv'sine yaklaşık
+                // taşındı (9-slice esnemesi birebir kaydı zaten imkânsız kılar);
+                // oran/şiddet görselle gözle hizalanır, görsel değişirse birlikte.
+                float streak = GlassBand(uv, 0.183, 0.050, 0.32, 0.80, 0.06);
+                streak = max(streak,
+                    0.85 * GlassBand(uv, 0.779, 0.067, 0.55, 0.92, 0.06));
                 // Mavimsi beyaz — görseldeki şerit tonuyla aynı aile.
                 color.rgb = lerp(color.rgb, float3(0.94, 0.97, 1.0), streak * _Glossiness);
 

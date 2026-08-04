@@ -34,8 +34,7 @@ namespace TubeSort.Game
         [SerializeField] private float slideDuration = 0.24f;
         [Tooltip("Sıvının dökülme (seviye değişimi) süresi.")]
         [SerializeField] private float pourDuration = 0.4f;
-        [Tooltip("Eğilme süresi payı: tüp, dökme eğimine kayma + 2×bu süre içinde " +
-                 "SmoothStep rampasıyla ulaşır (aşım yok, süre sınırlı).")]
+        [Tooltip("Eğim açısı SmoothDamp tepki süresi (kritik sönümleme, aşım yok).")]
         [SerializeField] private float angleSmoothTime = 0.12f;
         [Tooltip("Emniyet: dökme bu süre içinde bitmezse hata loglanıp zorla tamamlanır. " +
                  "Süreler play mode'da yavaşlatıldığında bunu da büyütmen gerekebilir.")]
@@ -1213,16 +1212,17 @@ namespace TubeSort.Game
         {
             // slideDuration/pourDuration/angleSmoothTime Inspector'dan gelir
             // (sabit değil): görsel izlemek için play mode'da yavaşlatılabilir.
-            // angleSmoothTime = eğilme rampasının kuyruk payı (bkz. tiltDuration).
+            // angleSmoothTime = eğim açısı SmoothDamp tepki süresi (kritik sönüm).
             ClearSelection();
 
             TubeView fromView = tubeViews[result.FromIndex];
             TubeView toView = tubeViews[result.ToIndex];
             StreamView stream = AcquireStream();
             // Akış üst parçası kaynağın offset bandının önünde (ön dudak
-            // offset+5'in üstü); alt parça hedefin sandviçinde (tıpa katmanı 3,
-            // hedef offset almaz). Böylece öndeki kaynağın akışı arkasında kalmaz.
-            stream.SetSortingOrders(job.SortingOffset + 6, 3);
+            // offset+6'nın üstü); alt parça hedefin halkasının arkasında
+            // (order 2, hedef offset almaz). Böylece öndeki kaynağın akışı
+            // arkasında kalmaz, hedefte kolon deliğin içinden süzülür.
+            stream.SetSortingOrders(job.SortingOffset + 7, 2);
 
             // Board hamleyi zaten uyguladı; tube verileri yeni durumu yansıtıyor.
             float fromTarget = fromView.TargetFillLevel;
@@ -1234,7 +1234,6 @@ namespace TubeSort.Game
             // bitince takılma animasyonuyla gelir.
             float toStart = toView.CurrentFill;
             toView.SetCorkSuppressed(true);
-            toView.SetMouthOverlay(true);   // akış sandviçi: ön dilimler açılır
             toView.Refresh();
             toView.SetFillLevel(toStart);
 
@@ -1262,12 +1261,8 @@ namespace TubeSort.Game
             float splashStrength = 0f;   // hedefteki sıçrama (yumuşak aç/kapa)
             float fromStart = fromView.CurrentFill;
             float currentAngle = 0f;
+            float angleVelocity = 0f;
             float moveElapsed = 0f;
-            // Eğilme rampasının toplam süresi: kayma + kuyruk. Süre SINIRLI —
-            // açı hedefe bu sürede TAM ulaşır, dökme kapısı en geç rampa
-            // bitiminde kesin açılır (asimptot yok; aşağıdaki ramp bloğu).
-            float tiltDuration = Mathf.Max(slideDuration + 2f * angleSmoothTime, 0.05f);
-            float tiltElapsed = 0f;
 
             // 2 kaynak → 1 hedef: kolonu kaynağın tarafına kaydır (biri sağa, biri
             // sola) ki ağızlar hedefin merkezinde üst üste binmesin. Tek dökmede 0.
@@ -1317,25 +1312,19 @@ namespace TubeSort.Game
                 float moveT = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(moveElapsed / slideDuration));
                 Vector3 currentBase = Vector3.Lerp(startPos, pourPos, moveT);
 
-                // Eğim, dökme BAŞLAYANA dek SÜRELİ SmoothStep rampasıyla hedefe
-                // yükselir (dökme öncesi fill değişmediği için hedef sabittir).
-                // Eskiden SmoothDamp'ti: kritik sönümlü yaklaşma hedefe
-                // ASİMPTOTİK yaklaşır ve dökme kapısı (kenar 1.0) hedefin (1.05)
-                // hemen altında olduğundan son dereceler sürünerek geçiliyordu —
-                // süreler test için yavaşlatılınca tüp kapı önünde saniyelerce
-                // asılı kalıyor, akış "takılarak" başlıyordu. Rampa süre SINIRLI:
-                // hedefe tiltDuration'da TAM ulaşır; kapı anında hız hâlâ tepe
-                // hızın ~1/3'ü (smoothstep türevi 6t(1-t), kapı t≈0.9'da) —
-                // eğilme duraksamadan akışa bağlanır, her hız ayarında.
+                // Eğim, dökme BAŞLAYANA dek SmoothDamp ile hedefe yükselir.
                 // Dökme başladıktan sonra açı drain bloğunda fill'i birebir
-                // izler (aşağıda): rampanın işi kapıya kadar.
+                // izler: SmoothDamp'in rampa takip gecikmesi (~6°) dudak payının
+                // açı karşılığını (0.05 ≈ 0.6-2.6°) aştığından sıvı dudaktan
+                // geri düşüyor, akış kolonundan görünür biçimde KOPUYORDU.
+                // BİLİNEN SINIR: süreler test için aşırı yavaşlatılınca
+                // (angleSmoothTime ~2 sn) kapı öncesi SmoothDamp kuyruğu görünür
+                // biçimde sürünür — normal sürelerde fark edilmiyor. Taban-hız
+                // ve süreli SmoothStep rampası DENENDİ, ikisi de dökme hissini
+                // bozduğu için geri alındı; kabul edilen davranış bu.
                 if (!pourStarted)
-                {
-                    tiltElapsed += dt;
-                    float tiltT = Mathf.SmoothStep(0f, 1f,
-                        Mathf.Clamp01(tiltElapsed / tiltDuration));
-                    currentAngle = targetAngle * tiltT;
-                }
+                    currentAngle = Mathf.SmoothDamp(
+                        currentAngle, targetAngle, ref angleVelocity, angleSmoothTime);
 
                 // Dökme başlangıcı: tüp yerine kayıp SIVI DÖKEN KENARDA AĞZA
                 // ULAŞINCA başlar. Tüp eğildikçe sıvı yükselir; ağza değince akış
@@ -1444,10 +1433,9 @@ namespace TubeSort.Game
                 // Sıvı yüzeye oturdu: damla halkası patlaması şimdi oynar
                 // (efekt dökme bitince hissedilmeli).
                 toView.PlayRippleBurst();
-                // Tüp tamamlandıysa tıpa ŞİMDİ, takılma animasyonuyla; akış
-                // sandviçi kapanır (tıpalıysa dilimler tıpa üzerinden açık kalır).
+                // Tüp tamamlandıysa tıpa ŞİMDİ takılma animasyonuyla gelir;
+                // pus perdesi ve ön dudak da onunla birlikte açılır.
                 toView.SetCorkSuppressed(false);
-                toView.SetMouthOverlay(false);
             }
 
             // --- Faz 4+5: Doğrulma ve geri dönüş eş zamanlı ---
@@ -1532,15 +1520,14 @@ namespace TubeSort.Game
         /// Sıvının döken kenarda ağzın BİRAZ ÜSTÜNE (normalize 1.05) ulaşması
         /// için gereken eğim açısı — TiltedEdgeLevel'in tersi. Hedef BİLEREK
         /// 1.0 değil 1.05: dökme kapısı (HasLiquidReachedMouth) kenarın 1.0'ı
-        /// GEÇMESİNİ bekler ve eğim sürüşü (SmoothStep rampası) hedefini asla
-        /// aşmaz. Hedef tam 1.0 olsaydı kapı ancak rampanın son karesinde sıfır
-        /// hızla açılırdı; SmoothDamp döneminde hiç açılmıyordu — dökme donardı
-        /// (yaşandı: yalnız dolu tüpte minAngle tabanı hedefi kazara temas
-        /// açısının üstüne ittiği için ilk katman dökülüyor, sonrakiler
-        /// 67-82°'de donuyordu). 0.05 pay kapının rampa bitmeden, sağlıklı
-        /// hızla aşılmasını garantiler; dökme boyunca da sıvıyı dudağa hafif
-        /// BASTIRIR (akış koluyla temas kopmaz; taşan pay halka arkasında
-        /// gizli). AnchorLiquidToLip'teki 1.05 tavanıyla eş (twin sabit).
+        /// GEÇMESİNİ bekler ve SmoothDamp kritik sönümlü olduğu için hedefini
+        /// asla aşmaz. Hedef tam 1.0 olsaydı açı asimptotik yaklaşıp kapıyı hiç
+        /// açamaz, dökme donardı (yaşandı: yalnız dolu tüpte minAngle tabanı
+        /// hedefi kazara temas açısının üstüne ittiği için ilk katman dökülüyor,
+        /// sonrakiler 67-82°'de donuyordu). 0.05 pay kapının sonlu sürede
+        /// aşılmasını garantiler; dökme boyunca da sıvıyı dudağa hafif BASTIRIR
+        /// (akış koluyla temas kopmaz; taşan pay halka arkasında gizli).
+        /// AnchorLiquidToLip'teki 1.05 tavanıyla eş (twin sabit).
         ///
         /// İki rejim: yüzey iki duvarı da kesiyorsa (fill >= lip/2)
         /// tan = 2·(lip-fill)·(H/W); az sıvıda üçgen rejimi
