@@ -390,7 +390,11 @@ Shader "TubeSort/Liquid"
                         * float2(_BodySize.x / bcols, _BodySize.y / brows);
                     float bd = length(bq);
 
-                    float bubR = 0.020 + 0.012 * bh.y;   // kabarcık boyu değişir
+                    // Kabarcık boyu BELİRGİN değişir (küçük..büyük): hepsi aynı
+                    // boyda görünmesin. İki hash kanalını çarparak kır. Aralık genel
+                    // olarak yukarı kaydırıldı (biraz daha iri kabarcıklar).
+                    float bszHash = frac(bh.x * 0.7 + bh.y * 1.3);
+                    float bubR = 0.014 + 0.050 * bszHash;
                     float bcore = 1.0 - smoothstep(0.0, bubR, bd);
                     float brim = 1.0 - smoothstep(0.0, 0.008, abs(bd - bubR));
                     float bub = (bcore * 0.3 + brim) * bpresent;

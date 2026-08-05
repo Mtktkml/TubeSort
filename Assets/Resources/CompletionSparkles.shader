@@ -1,19 +1,25 @@
-// Tamamlanma efekti — YUKSELEN KIVILCIMLAR (adim D): tup boyunca dagilmis kucuk
-// altin yildizlar dipten tepeye AKAR (zamanla + progress ile yukselir), her biri
-// kendi fazinda parildar. Izgara-hash ile prosedurel: her hucrede seyrek bir
-// kivilcim; hucreler zamanla asagi kayar -> ekranda yukari akis. Additive glow;
-// yogunluk _Progress zarfiyla belirir/soner. Quad tupun onunde (TubeView).
+// Tamamlanma efekti — DUZENSIZ IŞILTILAR: dipten cikip yukari akan altin
+// yildizlar. Referans: DUZENSIZ dagilim (izgara belli olmamali) ve seridin
+// BASINI TAKIP eder — en yogun basin hemen ALTINDA, seridin x-kolonuna yakin.
+// Izgara-hash + buyuk rastgele kayma ile grid kirilir; boylar cesitli. Additive;
+// _Progress zarfiyla belirir/soner. _HeadMax (collar orani) TubeView'den.
 Shader "TubeSort/CompletionSparkles"
 {
     Properties
     {
-        _SparkColor ("Kivilcim rengi (altin)", Color) = (1, 0.85, 0.45, 1)
-        _Columns ("Sutun sayisi", Float) = 6
-        _Rows ("Satir sayisi", Float) = 11
-        _SparkSize ("Kivilcim boyutu (hucre)", Range(0.02, 0.4)) = 0.16
-        _RiseSpeed ("Yukselme hizi", Float) = 0.35
-        _TwinkleSpeed ("Parildama hizi", Float) = 6
-        _Density ("Yogunluk (0..1)", Range(0, 1)) = 0.55
+        _SparkColor ("Isilti rengi (altin)", Color) = (1, 0.86, 0.46, 1)
+        _Columns ("Sutun (kaba)", Float) = 5
+        _Rows ("Satir (ince)", Float) = 15
+        _SparkSize ("Isilti boyutu (taban)", Range(0.02, 0.4)) = 0.13
+        _RiseSpeed ("Yukselme hizi", Float) = 0.45
+        _TwinkleSpeed ("Parildama hizi", Float) = 7
+        _Density ("Yogunluk (0..1)", Range(0, 1)) = 0.5
+        _Turns ("Serit sarim (takip icin)", Float) = 1.6
+        _Amplitude ("Serit genlik (takip icin)", Range(0.1, 0.5)) = 0.30
+        _SpinSpeed ("Serit donme (takip icin)", Float) = 1.5
+        _RiseStart ("Tirmanma baslangici (progress)", Range(0, 1)) = 0.12
+        _RiseEnd ("Tirmanma bitisi (progress)", Range(0, 1)) = 0.68
+        _TrailLen ("Iz uzunlugu (uv)", Range(0.1, 0.9)) = 0.55
     }
 
     SubShader
@@ -25,7 +31,7 @@ Shader "TubeSort/CompletionSparkles"
             "RenderPipeline" = "UniversalPipeline"
         }
 
-        Blend One One   // additive glow
+        Blend One One
         Cull Off
         ZWrite Off
 
@@ -45,24 +51,20 @@ Shader "TubeSort/CompletionSparkles"
                 float _RiseSpeed;
                 float _TwinkleSpeed;
                 float _Density;
+                float _Turns;
+                float _Amplitude;
+                float _SpinSpeed;
+                float _RiseStart;
+                float _RiseEnd;
+                float _TrailLen;
             CBUFFER_END
 
-            // Tamamlanma zarfı; TubeView materyale yazar.
             float _Progress;
+            float _HeadMax;
 
-            struct Attributes
-            {
-                float4 positionOS : POSITION;
-                float2 uv : TEXCOORD0;
-            };
+            struct Attributes { float4 positionOS : POSITION; float2 uv : TEXCOORD0; };
+            struct Varyings { float4 positionCS : SV_POSITION; float2 uv : TEXCOORD0; };
 
-            struct Varyings
-            {
-                float4 positionCS : SV_POSITION;
-                float2 uv : TEXCOORD0;
-            };
-
-            // Hucre -> yalancı-rastgele 2B (kivilcim var mi + konum + faz).
             float2 Hash22(float2 p)
             {
                 p = float2(dot(p, float2(127.1, 311.7)),
@@ -80,51 +82,54 @@ Shader "TubeSort/CompletionSparkles"
 
             half4 Fragment(Varyings input) : SV_Target
             {
-                // Zarf: erken belir, ortada dur, sonda sön. Dışında hiç çizme.
-                float env = smoothstep(0.0, 0.15, _Progress)
-                          * (1.0 - smoothstep(0.75, 1.0, _Progress));
+                float env = smoothstep(0.0, 0.12, _Progress)
+                          * (1.0 - smoothstep(0.78, 0.96, _Progress));
                 if (env <= 0.001)
                     discard;
 
                 float2 uv = input.uv;
+                float headMax = max(_HeadMax, 0.35);
+                float head = smoothstep(_RiseStart, _RiseEnd, _Progress) * headMax;
 
-                // Yukari akis: hucreleri asagi kaydir -> kivilcimlar yukari akar.
-                // (progress payi: efekt boyunca da bir tur yukselme.)
-                float rise = _Progress * 1.2 + _Time.y * _RiseSpeed;
+                // Basi takip: yogunluk basin hemen ALTINDA en yuksek (iz), ustunde
+                // yok. Az taban ambient birak (dipte de birkac isilti kalsin).
+                float trail = smoothstep(head - _TrailLen, head, uv.y);
+                float aboveCut = 1.0 - smoothstep(head, head + 0.05, uv.y);
+                float dens = (trail * 0.85 + 0.15) * aboveCut;
 
-                // Izgara: her hucre bir kivilcim adayi.
-                float2 g = float2(uv.x * _Columns, (uv.y - rise) * _Rows);
+                // Seridin x-kolonuna yakinlik: isiltilar serit cevresinde toplanir.
+                float rx = 0.5 + _Amplitude
+                    * sin(uv.y * _Turns * 6.2831853 + _Time.y * _SpinSpeed);
+                dens *= 0.45 + 0.55 * (1.0 - smoothstep(0.0, 0.42, abs(uv.x - rx)));
+
+                // Izgara-hash; hucreler asagi kayar -> yukari akis.
+                float brise = _Time.y * _RiseSpeed;
+                float2 g = float2(uv.x * _Columns, (uv.y - brise) * _Rows);
                 float2 cell = floor(g);
-                float2 fpos = frac(g) - 0.5;   // hucre merkezli (-0.5..0.5)
-
                 float2 h = Hash22(cell);
-                float present = step(1.0 - _Density, h.x);   // seyreklestir
 
-                // Kivilcim merkezini hucre icinde biraz kaydir.
-                float2 q = fpos - (h - 0.5) * 0.5;
+                // Duzensizlik: presence combine-hash ile, BUYUK rastgele kayma ile
+                // isilti hucresinden tasar (grid deseni kirilir).
+                float present = step(1.0 - _Density, frac(h.x * 1.7 + h.y * 0.9));
+                float2 q = (frac(g) - 0.5) - (h - 0.5) * 0.9;
                 float d = length(q);
 
-                // Nokta cekirdegi + ince carpi (yildiz parilti).
-                float core = 1.0 - smoothstep(0.0, _SparkSize, d);
+                float sz = _SparkSize * (0.4 + 1.3 * h.y);   // cesitli boy
+                float core = 1.0 - smoothstep(0.0, sz, d);
                 float cross =
-                    (1.0 - smoothstep(0.0, _SparkSize * 3.0, abs(q.x)))
-                        * (1.0 - smoothstep(0.0, _SparkSize * 0.25, abs(q.y)))
-                  + (1.0 - smoothstep(0.0, _SparkSize * 3.0, abs(q.y)))
-                        * (1.0 - smoothstep(0.0, _SparkSize * 0.25, abs(q.x)));
+                    (1.0 - smoothstep(0.0, sz * 3.0, abs(q.x)))
+                        * (1.0 - smoothstep(0.0, sz * 0.25, abs(q.y)))
+                  + (1.0 - smoothstep(0.0, sz * 3.0, abs(q.y)))
+                        * (1.0 - smoothstep(0.0, sz * 0.25, abs(q.x)));
                 float spark = (core + cross * 0.5) * present;
 
-                // Parildama: her hucre kendi fazinda yanip soner.
-                float tw = saturate(0.45 + 0.55
-                    * sin(_Time.y * _TwinkleSpeed + h.y * 30.0));
+                float tw = saturate(0.4 + 0.6
+                    * sin(_Time.y * _TwinkleSpeed + h.y * 30.0 + h.x * 11.0));
 
-                // Yukseklik zarfı: dipte ve tepede sön (tup icinde kalsin hissi).
-                float heightFade = smoothstep(0.0, 0.12, uv.y)
-                                 * (1.0 - smoothstep(0.82, 1.0, uv.y));
-
-                float intensity = spark * tw * heightFade * env;
+                float intensity = spark * tw * dens * env;
 
                 float3 col = _SparkColor.rgb * intensity;
-                return half4(col, intensity);   // additive (Blend One One)
+                return half4(col, intensity);
             }
             ENDHLSL
         }

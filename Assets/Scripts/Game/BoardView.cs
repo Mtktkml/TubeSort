@@ -540,6 +540,11 @@ namespace TubeSort.Game
         private bool TryUndoLastMove()
         {
             if (AnyAnimating) return false;
+            // Tamamlanma efekti (~3s) activeJobs'ta DEĞİL, yani AnyAnimating onu
+            // kapsamaz. Efekt oynarken undo, tamamlanan tüpün AnimateUndo->Refresh
+            // yoluyla RefreshCork'unu tetikleyip efekti "başa sarıp keserdi". Undo'nun
+            // HER yolunu (çubuk + çıkmaz pop-up'ının "Geri Al"ı) burada kapatıyoruz.
+            if (AnyCompletionPlaying()) return false;
             if (!history.TryUndo(board, out PourResult undone)) return false;
 
             ClearSelection();
@@ -1063,6 +1068,16 @@ namespace TubeSort.Game
         /// pop-up'ındaki kurtarma butonları bu haklara dokunmaz (ayrı emniyet).</summary>
         private void HandleBarAction(ButtonBarView.ActionKind action)
         {
+            // Aksiyon butonları şu hâllerde İŞLEVSİZ olur (tıklama yok sayılır ama
+            // buton PASİF GÖRÜNMEZ: hak tüketilmez, görünüm değişmez):
+            //  • Dizilim tamamlandı (board.IsSolved) — kazanan hamlede hemen true;
+            //    kazanma pop-up'ı ~3s sonra dokunuşları yutana dek pencereyi kapatır.
+            //  • Dökme animasyonu sürüyor (AnyAnimating) — Try* zaten reddeder,
+            //    burada da erkenden keser (netlik).
+            //  • Bir tüpün TAMAMLANMA efekti (~3s) oynuyor — ara oyunda kazanmayan
+            //    tüp tamamlanınca da butonlar bloklu; efekt bitmeden basılamaz.
+            if (board.IsSolved || AnyAnimating || AnyCompletionPlaying()) return;
+
             bool used;
             switch (action)
             {

@@ -1,19 +1,21 @@
-// Tamamlanma efekti — DİP HALKASI (büyü çemberi): tüpün dibinde/zemininde
-// altın parlayan, nabız atan eş-merkezli halkalar. Quad genişçe/yassı olduğu
-// için uv'deki daire dünyada YASSI ELİPS olur (zemin perspektifi). Additive
-// blend: koyu arka planda ışıldar. Yoğunluk _Progress (0..1 tamamlanma zarfı)
-// ile belirir ve söner (TubeView.AnimateCompletion sürer).
+// Tamamlanma efekti — DIP HALKASI (buyu cemberi): tupun dibinde/zemininde altin,
+// INCE, es-merkezli iki halka. Salinim: halka yaricapi acisal olarak hafif
+// modulelenir ve donen bir parlak yay uzerinde gezer -> canli/salinan zemin
+// cemberi (referanstaki gibi). Quad genis/yassi oldugu icin dunyada YASSI ELIPS.
+// Additive; yogunluk _Progress zarfiyla belirir/soner (TubeView.AnimateCompletion).
 Shader "TubeSort/CompletionRing"
 {
     Properties
     {
-        _RingColor ("Halka rengi (altın)", Color) = (1, 0.78, 0.32, 1)
-        _RingRadius ("Ana halka yarıçapı (uv)", Range(0.2, 0.9)) = 0.62
-        _RingWidth ("Halka kalınlığı", Range(0.01, 0.2)) = 0.05
-        _Softness ("Kenar yumuşaklığı", Range(0.005, 0.3)) = 0.10
-        _InnerGlow ("İç glow", Range(0, 1)) = 0.22
-        _PulseSpeed ("Nabız hızı", Float) = 5
-        _PulseAmount ("Nabız genliği", Range(0, 0.3)) = 0.10
+        _RingColor ("Halka rengi (altin)", Color) = (1, 0.8, 0.36, 1)
+        _RingRadius ("Ana halka yaricapi (uv)", Range(0.2, 0.9)) = 0.62
+        _RingWidth ("Halka kalinligi (INCE)", Range(0.005, 0.12)) = 0.022
+        _Softness ("Kenar yumusakligi", Range(0.005, 0.2)) = 0.05
+        _InnerGlow ("Ic glow (dusuk: seritle blob yapmasin)", Range(0, 1)) = 0.07
+        _SwayAmount ("Salinim genligi (yaricap)", Range(0, 0.3)) = 0.07
+        _SwaySpeed ("Salinim/donme hizi", Float) = 1.6
+        _PulseSpeed ("Nabiz hizi", Float) = 4
+        _PulseAmount ("Nabiz genligi", Range(0, 0.3)) = 0.08
     }
 
     SubShader
@@ -43,24 +45,16 @@ Shader "TubeSort/CompletionRing"
                 float _RingWidth;
                 float _Softness;
                 float _InnerGlow;
+                float _SwayAmount;
+                float _SwaySpeed;
                 float _PulseSpeed;
                 float _PulseAmount;
             CBUFFER_END
 
-            // Tamamlanma zarfı; TubeView materyale yazar.
-            float _Progress;
+            float _Progress;   // TubeView materyale yazar
 
-            struct Attributes
-            {
-                float4 positionOS : POSITION;
-                float2 uv : TEXCOORD0;
-            };
-
-            struct Varyings
-            {
-                float4 positionCS : SV_POSITION;
-                float2 uv : TEXCOORD0;
-            };
+            struct Attributes { float4 positionOS : POSITION; float2 uv : TEXCOORD0; };
+            struct Varyings { float4 positionCS : SV_POSITION; float2 uv : TEXCOORD0; };
 
             Varyings Vertex(Attributes input)
             {
@@ -72,33 +66,35 @@ Shader "TubeSort/CompletionRing"
 
             half4 Fragment(Varyings input) : SV_Target
             {
-                // Zarf: erken belir (build 0..0.18), efektin çoğunda dur, sonda
-                // sön (fade 0.65..1). Dışında hiç çizme.
-                float env = smoothstep(0.0, 0.18, _Progress)
-                          * (1.0 - smoothstep(0.65, 1.0, _Progress));
+                // Zarf: erken belir, efektin cogunda dur, sonda son.
+                float env = smoothstep(0.0, 0.15, _Progress)
+                          * (1.0 - smoothstep(0.72, 1.0, _Progress));
                 if (env <= 0.001)
                     discard;
 
-                // uv merkezli; quad geniş/yassı olduğu için dünyada elips.
                 float2 c = input.uv - 0.5;
-                float r = length(c) * 2.0;   // ~1 kenar ortasında
+                float r = length(c) * 2.0;      // ~1 kenar ortasinda
+                float ang = atan2(c.y, c.x);
 
-                // Hafif nabız: yarıçap + parlaklık dalgalanır.
+                // Salinim: yaricap acisal + zamanla donen bir dalga; nabiz.
                 float pulse = sin(_Time.y * _PulseSpeed);
-                float ringR = _RingRadius * (1.0 + _PulseAmount * pulse * 0.5);
+                float sway = 1.0 + _SwayAmount * sin(ang * 2.0 - _Time.y * _SwaySpeed);
+                float ringR = _RingRadius * sway * (1.0 + _PulseAmount * pulse * 0.5);
 
                 float w = _RingWidth + _Softness;
                 float ring1 = 1.0 - smoothstep(0.0, w, abs(r - ringR));
-                float ring2 = 0.45 * (1.0 - smoothstep(0.0, w, abs(r - ringR * 0.62)));
+                float ring2 = 0.5 * (1.0 - smoothstep(0.0, w, abs(r - ringR * 0.66)));
 
-                // Merkeze doğru dolgun iç glow.
+                // Donen parlak yay: halka boyunca gezen aydinlik (salinim hissi).
+                float arc = 0.55 + 0.45 * sin(ang - _Time.y * _SwaySpeed);
+
                 float glow = _InnerGlow * saturate(1.0 - r / max(ringR, 1e-4));
 
-                float intensity = (ring1 + ring2 + glow) * env
+                float intensity = ((ring1 + ring2) * arc + glow) * env
                     * (0.85 + 0.15 * (pulse * 0.5 + 0.5));
 
                 float3 col = _RingColor.rgb * intensity;
-                return half4(col, intensity);   // additive (Blend One One)
+                return half4(col, intensity);   // additive
             }
             ENDHLSL
         }

@@ -1,17 +1,20 @@
-// Tamamlanma efekti — OTURMA FLASI (adim E): tipa agiza "tak" diye oturdugu an
-// patlayan kisa yildiz flasi. Parlak cekirdek + 4-uclu yildiz isini + genisleyen
-// sok halkasi; hepsi hizli parlar, genisleyerek soner. _Flash (0..1) TubeView'in
-// kisa PlayFlash coroutine'iyle surulur (efekt boyunca DEGIL, tek atislik).
-// Additive glow; quad tipin agzinda, her seyin onunde (TubeView).
+// Tamamlanma efekti — COLLAR YILDIZI: yukselen seridin ucu collar sag-koseye
+// varinca ORADA patlayan tek 4-uclu yildiz. Referans: buyuyup dikdortgen olan
+// bir flas DEGIL — sabit boyutlu, gaussian isinli, yerel yildiz; hizli parlar,
+// yavas soner (kenarlar yumusak sonup dikdortgen sinir birakmaz). _Progress ile
+// surulur (serit collar'a varinca ~0.68-0.76 tepe, 0.95'te biter). Additive.
+// Not: shader adi tarihsel olarak "CompletionFlash".
 Shader "TubeSort/CompletionFlash"
 {
     Properties
     {
-        _FlashColor ("Flas rengi (sicak altin-beyaz)", Color) = (1, 0.92, 0.7, 1)
-        _Spread ("Yayilma (genisleme)", Float) = 1.4
-        _CoreTight ("Cekirdek sikiligi", Float) = 9
-        _RayLength ("Isin uzunlugu (eksende)", Float) = 2.2
-        _RayThin ("Isin inceligi (eksene dik)", Float) = 60
+        _StarColor ("Yildiz rengi (sicak altin-beyaz)", Color) = (1, 0.93, 0.72, 1)
+        _CoreTight ("Cekirdek sikiligi", Float) = 13
+        _RayLen ("Isin uzunlugu (eksende)", Float) = 2.0
+        _RayThin ("Isin inceligi (eksene dik)", Float) = 55
+        _StarStart ("Belirme (progress)", Range(0, 1)) = 0.66
+        _StarPeak ("Tepe (progress)", Range(0, 1)) = 0.76
+        _StarEnd ("Bitis (progress)", Range(0, 1)) = 0.95
     }
 
     SubShader
@@ -23,7 +26,7 @@ Shader "TubeSort/CompletionFlash"
             "RenderPipeline" = "UniversalPipeline"
         }
 
-        Blend One One   // additive glow
+        Blend One One
         Cull Off
         ZWrite Off
 
@@ -36,27 +39,19 @@ Shader "TubeSort/CompletionFlash"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
             CBUFFER_START(UnityPerMaterial)
-                float4 _FlashColor;
-                float _Spread;
+                float4 _StarColor;
                 float _CoreTight;
-                float _RayLength;
+                float _RayLen;
                 float _RayThin;
+                float _StarStart;
+                float _StarPeak;
+                float _StarEnd;
             CBUFFER_END
 
-            // Flaş ömrü (0..1); TubeView.PlayFlash yazar (tek atışlık).
-            float _Flash;
+            float _Progress;
 
-            struct Attributes
-            {
-                float4 positionOS : POSITION;
-                float2 uv : TEXCOORD0;
-            };
-
-            struct Varyings
-            {
-                float4 positionCS : SV_POSITION;
-                float2 uv : TEXCOORD0;
-            };
+            struct Attributes { float4 positionOS : POSITION; float2 uv : TEXCOORD0; };
+            struct Varyings { float4 positionCS : SV_POSITION; float2 uv : TEXCOORD0; };
 
             Varyings Vertex(Attributes input)
             {
@@ -68,37 +63,26 @@ Shader "TubeSort/CompletionFlash"
 
             half4 Fragment(Varyings input) : SV_Target
             {
-                float life = _Flash;
-
-                // Pop: hızlı parla (0..0.12), yavaş sön (0.15..1). Dışında hiç çizme.
-                float bright = smoothstep(0.0, 0.12, life)
-                             * (1.0 - smoothstep(0.15, 1.0, life));
-                if (bright <= 0.001)
+                // Hizli parla, yavas son. Genisleme YOK -> dikdortgen olusmaz.
+                float rise = smoothstep(_StarStart, _StarPeak, _Progress);
+                float fall = 1.0 - smoothstep(_StarPeak, _StarEnd, _Progress);
+                float env = rise * fall;
+                if (env <= 0.001)
                     discard;
 
-                // Merkezli koordinat; patlama büyüdükçe koordinatı küçült (yayılma).
-                float2 c = (input.uv - 0.5) * 2.0;   // -1..1
-                float scale = 0.35 + life * _Spread;
-                float2 p = c / scale;
+                // Hafif boy parildamasi (twinkle).
+                float pulse = 1.0 + 0.15 * sin(_Time.y * 8.0);
+                float2 c = (input.uv - 0.5) * 2.0 / pulse;   // -1..1
 
-                float d = length(p);
-
-                // Parlak çekirdek.
+                float d = length(c);
                 float core = exp(-d * d * _CoreTight);
+                float rayH = exp(-c.y * c.y * _RayThin) * exp(-abs(c.x) * _RayLen);
+                float rayV = exp(-c.x * c.x * _RayThin) * exp(-abs(c.y) * _RayLen);
 
-                // 4-uçlu yıldız: eksenler boyunca ince parlak ışınlar.
-                float rayH = exp(-p.y * p.y * _RayThin) * exp(-abs(p.x) * _RayLength);
-                float rayV = exp(-p.x * p.x * _RayThin) * exp(-abs(p.y) * _RayLength);
-                float star = rayH + rayV;
+                float intensity = (core * 1.5 + rayH + rayV) * env;
 
-                // Genişleyen şok halkası.
-                float rr = (d - 0.8) * 4.0;
-                float ring = exp(-rr * rr) * saturate(life * 2.0);
-
-                float intensity = (core * 1.6 + star * 1.1 + ring * 0.5) * bright;
-
-                float3 col = _FlashColor.rgb * intensity;
-                return half4(col, intensity);   // additive (Blend One One)
+                float3 col = _StarColor.rgb * intensity;
+                return half4(col, intensity);
             }
             ENDHLSL
         }
