@@ -89,30 +89,30 @@ namespace TubeSort.Game
         /// boşluk (2.5D yüzey elipsine de yer bırakır).</summary>
         private const float CorkLiquidGap = 0.12f;
 
-        // ── Görsel katman: v2 PNG'leri (Resources/Sprites/v2). Cam gövde ve
-        // mor halka AYRI asset'lerdir (tube.png'den içeriğe göre ayrıldılar;
-        // kanvasları dikiş çevresinde bilerek örtüşür — konum sabitleri
-        // aşağıda). SIVI EN ARKADA, cam önde çizilir: cam yarı saydam olduğu
-        // için içerik içinden görünür ve camın GÖMÜLÜ parlamaları içeriğin
-        // üstüne kendiliğinden düşer — parlama/etkileşim shader'da ya da ek
-        // parçayla ÇİZİLMEZ, kompozit halleder (taklit denendi, hiza asla
-        // birebir tutmadı; mimari buna geçildi). TIPA COLLAR'IN ÖNÜNDE ama
-        // CAMIN ARKASINDA; "delikte/collar'ın arkasında" hissi, oturmuş
-        // tıpanın AŞAMALI BOYALI kopyasıyla verilir (collar hep opak — bkz.
-        // aşama sabitleri). Tam sıra:
-        //   sıvı 0 < akış-alt 1 < collar 2 < tıpa 3 < pus 4 < cam gövde 5.
-        // Akış-alt kolonu collar'ın ve camın arkasında: deliğe girip camın
-        // içinden süzülerek yüzeye iner; dudağa tırmanan sıvı da collar'ın
-        // arkasında kalır. ──
+        // ── Görsel katman: PNG'leri (Resources/Sprites). Cam gövde (tube) ve
+        // ring/yaka (collar) AYRI asset'lerdir (birleşik tüpten içeriğe göre
+        // ayrıldılar; kanvasları dikiş çevresinde bilerek örtüşür — konum
+        // sabitleri aşağıda). SIVI EN ARKADA, cam önde çizilir: cam yarı saydam
+        // olduğu için içerik içinden görünür ve camın GÖMÜLÜ parlamaları içeriğin
+        // üstüne kendiliğinden düşer (taklit denendi, hiza tutmadı; kompozit
+        // halleder). Tam sıra:
+        //   sıvı 0 < akış-alt 1 < ring/yaka 2 < cam gövde 5 < tıpa 6.
+        // TIPA (tamamlanan tüpte) HER ŞEYİN ÖNÜNDE, opak: cork_seated (referanstan
+        // tıpa silüetine kırpma). Yakayı ring verir (arkada, cama dikişsiz bağlı);
+        // tıpa ağza oturur, "iki şekli uç uca birleştirme" çizgisi yok. Akış-alt
+        // kolonu ring'in ve camın arkasında (deliğe girip camdan süzülür). ──
         /// <summary>Resources yolları — BoardView yükler, TubeView kullanır.
         /// Cam gövde ve mor halka AYRI asset'lerdir: tube.png'den İÇERİĞE GÖRE
         /// ayrıldılar (düz kesim değil — geçiş bölgesinde mor pikseller
         /// halkaya, camlar gövdeye; runtime Sprite.Create bölmesi kaldırıldı).</summary>
-        public const string TubeBodySpritePath = "Sprites/v2/tube";
-        public const string TubeRingSpritePath = "Sprites/v2/collar";
-        public const string CorkSpritePath = "Sprites/v2/cork";
-        /// <summary>Tıpanın tüp içinde kalan kısmına binen beyaz pus rampası.</summary>
-        public const string CorkVeilSpritePath = "Sprites/v2/shadow";
+        public const string TubeBodySpritePath = "Sprites/tube";
+        public const string TubeRingSpritePath = "Sprites/collar";
+        public const string CorkSpritePath = "Sprites/cork";
+        /// <summary>Oturmuş tıpa: cork_mouth'tan TIPA SİLÜETİNE kırpılmış (yaka
+        /// atıldı; camsı-mat alt referanstan). Yakayı ring verir; bu yalnız ağza
+        /// oturan mantar → "iki şekil birleşimi" çizgisi olmaz. cork.png ile aynı
+        /// 90×97, pivot Center.</summary>
+        public const string CorkSeatedSpritePath = "Sprites/cork_seated";
 
         // Parça geometrisi (piksel, satırlar orijinal tube.png'ye göre ÜSTTEN).
         /// <summary>Halkanın DİKİŞE kadarki yüksekliği (satır 0-59; dikiş 60).
@@ -146,37 +146,11 @@ namespace TubeSort.Game
         /// buluşur; dinlenmede yüzey FillSpan'i aşamadığından hiç boyanmaz.</summary>
         private const float MouthOverflow = 41f / SpritePpu;
 
-        // AŞAMALI TIPA (kullanıcı tarifi, referanstan 4 aşama). Collar hep
-        // OPAK, tıpa collar'ın ÖNÜNDE; "arkasında" hissi katmanla değil
-        // RENKLE verilir: oturmuş tıpa için cork.png'den tek seferlik
-        // işlenmiş kopya üretilir (CreateSeatedCorkSprite; cork.png
-        // Read/Write ister). Bölgeler (tıpa satırı, üstten; geçişler
-        // ZoneFeatherRows kadar yumuşak — keskin sınır istenmedi):
-        //  1) 0..Zone1End: DİREKT görünür (collar'ın siyah deliği bitene dek).
-        //  2) Zone1End..Zone2End: collar'ın üst yüzüyle NEREDEYSE aynı renge
-        //     boyanır — yalnız silüet sınırı hafifçe seçilir.
-        //  3) Zone2End..Zone3End: normalinden KOYU — "collar'ın arkasında"
-        //     GİBİ okunur (gerçekten arkaya konunca hiç görünmüyordu).
-        //  4) Zone3End altı: ham tıpa + pus perdesi (shadow.png) üstüne biner
-        //     (tüp içi). Düşüş animasyonunda HAM tıpa kullanılır; işlenmiş
-        //     kopyaya oturma anında geçilir.
-        private const int CorkZone1EndRow = 44;
-        private const int CorkZone2EndRow = 62;
-        private const int CorkZone3EndRow = 82;
-        private const int CorkZoneFeatherRows = 6;
-        /// <summary>Collar üst yüzünün ortalama tonu (halka görselinden
-        /// örneklendi): aşama 2 tıpayı buna boyar.</summary>
-        private static readonly Color CollarUpperTone = new Color(0.545f, 0.525f, 0.588f);
-        /// <summary>Aşama 2'de collar rengine yaklaşma oranı (1 = tamamen
-        /// aynı renk; silüet hiç seçilmez).</summary>
-        private const float CorkZone2Blend = 0.85f;
-        /// <summary>Aşama 3 koyulaştırma çarpanı ("BİRAZ daha koyu" — 0.62
-        /// denendi, fazla karanlıktı).</summary>
-        private const float CorkZone3Darken = 0.78f;
-        // Pus perdesi (shadow.png, 77×47) konum sabitleri:
-        private const float CorkRows = 97f;
-        private const float VeilRows = 47f;
-        private const float VeilTopFromCorkTopRows = 76f;
+        // TIPA: tamamlanan tüpte ring (yaka) hep açık kalır; onun ÖNÜNE cork_seated
+        // (cork_mouth'tan tıpa silüetine kırpılmış — camsı-mat alt referanstan)
+        // biner (order 6). Ağza oturan mantar: kenarı doğal, "iki şekil birleşimi"
+        // çizgisi yok. Düşüşte ham cork.png, oturunca cork_seated. Eski boyama/pus
+        // makinesi kaldırıldı (referans-kırpma yeterli).
 
         /// <summary>Tıpa görselinin dünya boyu (97 satır) — FillHeadroom
         /// türetimi statik kalsın diye sabit (CreateCork konumu çalışma anında
@@ -209,9 +183,9 @@ namespace TubeSort.Game
         private SpriteRenderer liquid;
         private SpriteRenderer ring;
         private SpriteRenderer cork;
-        private SpriteRenderer corkVeil;
         private Sprite corkRawSprite;     // düşüş animasyonundaki ham tıpa
-        private Sprite corkSeatedSprite;  // oturmuş tıpa (aşamalı boyalı kopya)
+        private Sprite corkSeatedSprite;  // oturmuş tıpa (cork_seated; düşüş bitince ham'ın yerine)
+        private bool corked;              // mantıksal tıpa durumu (cork.enabled değil: oturunca cork kapalı)
         private MaterialPropertyBlock properties;
         private Vector3 restPosition;
         private bool isSelected;
@@ -240,7 +214,7 @@ namespace TubeSort.Game
 
         public void Initialize(int index, Tube tube, ColorPalette palette, Sprite unitSprite,
             Material liquidMaterial, Sprite glassBodySprite, Sprite ringSprite,
-            Sprite corkSprite, Sprite seatedCorkSprite, Sprite corkVeilSprite)
+            Sprite corkSprite, Sprite seatedCorkSprite)
         {
             Index = index;
             this.tube = tube;
@@ -270,7 +244,7 @@ namespace TubeSort.Game
             corkRawSprite = corkSprite;
             corkSeatedSprite = seatedCorkSprite;
             CreateRing(ringSprite);
-            CreateCork(corkSprite, corkVeilSprite);
+            CreateCork(corkSprite);
             CreateClickArea();
             Refresh();
             viewReady = true;
@@ -336,94 +310,25 @@ namespace TubeSort.Game
         /// perdeyi kendiliğinden taşır. İkisi de gizli başlar; yalnız
         /// tamamlanan tüpte görünürler (bkz. RefreshCork).
         /// </summary>
-        private void CreateCork(Sprite sprite, Sprite veilSprite)
+        private void CreateCork(Sprite sprite)
         {
+            // Tıpa: düşüşte HAM cork.png, oturunca cork_seated (camsı-mat alt,
+            // referanstan tıpa-silüetine kırpma). Cam gövdenin ve ring'in ÖNÜNDE
+            // (order 6) → opak mantar. Yakayı RING verir (arkada); tıpa ağzın
+            // içine oturur, kenarı "iki şekil birleşimi" değil doğal mantar kenarı.
             var go = new GameObject("Cork");
             go.transform.SetParent(transform, false);
 
             cork = go.AddComponent<SpriteRenderer>();
             cork.sprite = sprite;
-            cork.sortingOrder = 3;   // collar'ın ÖNÜNDE (aşamalı boya "arkada" hissi verir)
+            cork.sortingOrder = 6;   // ring'in ve camın önünde
             cork.enabled = false;
 
-            float corkTop = RingTop + CorkTopAboveRingTop;
-            corkRestPosition = new Vector3(0f, corkTop - sprite.bounds.extents.y, 0f);
+            // Tıpanın gri yaka bandı ring'in yakasıyla çakışacak şekilde hesaplı
+            // konumlanır. Ham ve seated aynı 90×97, aynı merkez → oturmada tıpa
+            // oynamaz, yalnız camsı-mat alt belirir.
+            corkRestPosition = new Vector3(0f, CorkSeatedCenterY, 0f);
             go.transform.localPosition = corkRestPosition;
-
-            // Pus perdesi (aşama 4): YALNIZ tıpanın tüp içinde kalan kısmında
-            // (halkanın bittiği hizadan tıpanın dibine). Doku, kalan bölgeye
-            // sığacak şekilde dikeyde sıkıştırılır: alfa rampası korunur, en
-            // yoğun kısım en derinde biter. Konum tıpa-yerel (pivot merkez).
-            var veilGo = new GameObject("CorkVeil");
-            veilGo.transform.SetParent(go.transform, false);
-            corkVeil = veilGo.AddComponent<SpriteRenderer>();
-            corkVeil.sprite = veilSprite;
-            corkVeil.sortingOrder = 4;
-            corkVeil.enabled = false;
-            float veilRowsScaled = CorkRows - VeilTopFromCorkTopRows;
-            veilGo.transform.localScale = new Vector3(1f, veilRowsScaled / VeilRows, 1f);
-            veilGo.transform.localPosition = new Vector3(0f,
-                (CorkRows * 0.5f - VeilTopFromCorkTopRows - veilRowsScaled * 0.5f)
-                    / SpritePpu, 0f);
-        }
-
-        /// <summary>
-        /// Oturmuş tıpanın aşamalı boyalı kopyasını üretir (bkz. bölge
-        /// sabitlerinin açıklaması): aşama 2 satırları collar'ın üst yüz
-        /// rengine boyanır, aşama 3 satırları koyulaştırılır; geçişler
-        /// yumuşaktır. Yalnız RGB değişir, alfa korunur (silüet aynı kalır).
-        /// cork.png Read/Write açık olmalı. BoardView bir kez yaratır, yaşam
-        /// döngüsünü (doku dahil) o yönetir.
-        /// </summary>
-        public static Sprite CreateSeatedCorkSprite(Sprite corkSprite)
-        {
-            Texture2D src = corkSprite.texture;
-            int w = src.width, h = src.height;
-            Color[] pixels = src.GetPixels();
-            float f = CorkZoneFeatherRows * 0.5f;
-            for (int ty = 0; ty < h; ty++)
-            {
-                int row = h - 1 - ty;   // üstten satır numarası
-                // Yumuşak bölge ağırlıkları: sınırların çevresinde feather.
-                float below1 = Mathf.SmoothStep(0f, 1f,
-                    Mathf.InverseLerp(CorkZone1EndRow - f, CorkZone1EndRow + f, row));
-                float below2 = Mathf.SmoothStep(0f, 1f,
-                    Mathf.InverseLerp(CorkZone2EndRow - f, CorkZone2EndRow + f, row));
-                float below3 = Mathf.SmoothStep(0f, 1f,
-                    Mathf.InverseLerp(CorkZone3EndRow - f, CorkZone3EndRow + f, row));
-                float zone2 = below1 * (1f - below2);   // collar rengine boyama
-                float zone3 = below2 * (1f - below3);   // koyulaştırma
-                if (zone2 <= 0f && zone3 <= 0f) continue;
-
-                for (int x = 0; x < w; x++)
-                {
-                    Color c = pixels[ty * w + x];
-                    if (c.a <= 0f) continue;
-                    if (zone2 > 0f)
-                    {
-                        float t = zone2 * CorkZone2Blend;
-                        c.r = Mathf.Lerp(c.r, CollarUpperTone.r, t);
-                        c.g = Mathf.Lerp(c.g, CollarUpperTone.g, t);
-                        c.b = Mathf.Lerp(c.b, CollarUpperTone.b, t);
-                    }
-                    if (zone3 > 0f)
-                    {
-                        float k = Mathf.Lerp(1f, CorkZone3Darken, zone3);
-                        c.r *= k; c.g *= k; c.b *= k;
-                    }
-                    pixels[ty * w + x] = c;
-                }
-            }
-
-            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false)
-            {
-                filterMode = src.filterMode,
-                wrapMode = TextureWrapMode.Clamp,
-            };
-            tex.SetPixels(pixels);
-            tex.Apply(false, makeNoLongerReadable: true);
-            return Sprite.Create(tex, new Rect(0f, 0f, w, h), new Vector2(0.5f, 0.5f),
-                SpritePpu, 0, SpriteMeshType.FullRect);
         }
 
         /// <summary>
@@ -474,6 +379,16 @@ namespace TubeSort.Game
 
         /// <summary>Halkanın üst kenarı (tüp görselinin en üst noktası).</summary>
         private float RingTop => GlassTop + RingHeight;
+
+        /// <summary>Oturmuş tıpanın (cork_seated, 90×97, pivot Center) merkezinin
+        /// RingTop'un ne kadar ALTINA konacağı. HESAPLANDI (tahmin değil): tıpanın
+        /// gri yaka bandı merkezi (üstten satır 49) oyunun ring'inin (collar.png
+        /// 152×70, pivot Bottom, GlassTop−10px'te) gri yaka merkeziyle (tabandan
+        /// satır 38) ÇAKIŞIR → (118.5 − 38 − 49) = 31.5px. İki yaka da 40 satır
+        /// olduğundan tam biner. Ham tıpa da bu merkeze konur ki oturmada tıpa
+        /// oynamasın. (RingTop=GlassTop+60px, ring dibi GlassTop−10px, h=97.)</summary>
+        private const float CorkSeatedCenterBelowRingTop = 31.5f / SpritePpu;
+        private float CorkSeatedCenterY => RingTop - CorkSeatedCenterBelowRingTop;
 
         /// <summary>Ağız deliğinin merkezi (y): akış kolonunun hizası.</summary>
         private float MouthY => RingTop - RingHoleCenterRows / SpritePpu;
@@ -605,8 +520,9 @@ namespace TubeSort.Game
         {
             bool shouldCork = tube.IsComplete && !tube.IsEmpty && !corkSuppressed;
 
-            if (shouldCork == cork.enabled)
+            if (shouldCork == corked)
                 return;
+            corked = shouldCork;
 
             if (corkRoutine != null)
             {
@@ -614,20 +530,27 @@ namespace TubeSort.Game
                 corkRoutine = null;
             }
 
-            cork.enabled = shouldCork;
+            if (!shouldCork)
+            {
+                cork.enabled = false;   // tıpa kalktı (yaka=ring zaten hep açık)
+                return;
+            }
+
+            cork.enabled = true;
             cork.transform.localPosition = corkRestPosition;
             cork.transform.localScale = Vector3.one;
 
-            // Pus perdesi ve aşamalı boyalı kopya tıpa OTURDUĞUNDA devreye
-            // girer: düşüş boyunca HAM tıpa havada, boyalı hâle geçiş ancak
-            // tüpe girince anlamlı. Animasyonlu yolda AnimateCorkIn düşüş
-            // bitince uygular; anlık yolda (kurulum / kapanış) burada.
-            bool animate = shouldCork && viewReady;
-            corkVeil.enabled = shouldCork && !animate;
-            cork.sprite = shouldCork && !animate ? corkSeatedSprite : corkRawSprite;
-
-            if (animate)
+            // Oyun sırasında AÇILIRKEN takılma animasyonu; kurulum/kapanışta anlık.
+            if (viewReady)
+            {
+                // Ham tıpa düşer, oturunca cork_seated'e geçer (AnimateCorkIn).
+                cork.sprite = corkRawSprite;
                 corkRoutine = StartCoroutine(AnimateCorkIn());
+            }
+            else
+            {
+                cork.sprite = corkSeatedSprite;   // anlık oturuş (kurulum/kapanış)
+            }
         }
 
         /// <summary>
@@ -774,15 +697,11 @@ namespace TubeSort.Game
             }
             cork.transform.localPosition = corkRestPosition;
 
-            // Tıpa oturdu ("tak" anı): ham tıpa yerini aşamalı boyalı kopyaya
-            // bırakır, pus perdesi açılır — tıpa "deliğe girmiş" görünümüne
-            // kavuşur (bkz. RefreshCork).
+            // "tak" anı: ham tıpa yerini cork_seated'e bırakır (camsı-mat alt gelir;
+            // aynı 90×97, aynı merkez → tıpa oynamaz).
             cork.sprite = corkSeatedSprite;
-            corkVeil.enabled = true;
 
-            // Oturma esnemesi: hafif yassılıp geri toparlar (merkez pivotlu
-            // ölçek — %8'lik esneme, abartısız; perde tıpanın çocuğu, birlikte
-            // esner).
+            // Oturma esnemesi: %8, abartısız.
             elapsed = 0f;
             while (elapsed < settleDuration)
             {
@@ -957,9 +876,8 @@ namespace TubeSort.Game
         {
             liquid.sortingOrder = 0 + offset;
             ring.sortingOrder = 2 + offset;
-            cork.sortingOrder = 3 + offset;
-            corkVeil.sortingOrder = 4 + offset;
             glass.sortingOrder = 5 + offset;
+            cork.sortingOrder = 6 + offset;
         }
 
         /// <summary>Seçili tüp yukarı kalkar; oyuncu neyi seçtiğini görsün.

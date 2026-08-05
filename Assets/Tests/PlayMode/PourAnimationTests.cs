@@ -74,11 +74,10 @@ namespace TubeSort.Tests.PlayMode
             var bodySprite = Resources.Load<Sprite>(TubeView.TubeBodySpritePath);
             var ringSprite = Resources.Load<Sprite>(TubeView.TubeRingSpritePath);
             var corkSprite = Resources.Load<Sprite>(TubeView.CorkSpritePath);
-            var seatedCorkSprite = TubeView.CreateSeatedCorkSprite(corkSprite);
-            var veilSprite = Resources.Load<Sprite>(TubeView.CorkVeilSpritePath);
+            var seatedCorkSprite = Resources.Load<Sprite>(TubeView.CorkSeatedSpritePath);
 
             tubeView.Initialize(0, tube, palette, sprite, liquidMat,
-                bodySprite, ringSprite, corkSprite, seatedCorkSprite, veilSprite);
+                bodySprite, ringSprite, corkSprite, seatedCorkSprite);
 
             yield return null;
         }
@@ -246,11 +245,9 @@ namespace TubeSort.Tests.PlayMode
 
             tubeView.SetSortingOffset(10);
 
-            // Katman sözleşmesi (CLAUDE.md): sıvı 0 < akış-alt 1 < collar 2 <
-            // tıpa 3 < pus 4 < cam 5 — SIVI COLLAR'IN VE CAMIN ARKASINDADIR;
-            // TIPA collar'ın önündedir, "delikte/arkada" hissi oturmuş
-            // tıpanın aşamalı boyalı kopyasıyla verilir. Sıra bozulursa
-            // parlama mimarisi ya da tıpa görünümü kırılır.
+            // Katman sözleşmesi: sıvı 0 < akış-alt 1 < ring(yaka) 2 < cam 5 <
+            // tıpa 6. Tamamlanan tüpte tıpa (cork_seated) HER ŞEYİN ÖNÜNDE, opak;
+            // yakayı ring verir (arkada). Sıra bozulursa tıpa/yaka görünümü kırılır.
             var renderers = tubeObject.GetComponentsInChildren<SpriteRenderer>(true);
             bool foundGlass = false, foundLiquid = false, foundRing = false,
                 foundCork = false;
@@ -274,7 +271,7 @@ namespace TubeSort.Tests.PlayMode
                 }
                 else if (r.gameObject.name == "Cork")
                 {
-                    Assert.AreEqual(13, r.sortingOrder, "Cork sorting order yanlış");
+                    Assert.AreEqual(16, r.sortingOrder, "Cork sorting order yanlış");
                     foundCork = true;
                 }
             }
@@ -293,7 +290,7 @@ namespace TubeSort.Tests.PlayMode
                 else if (r.gameObject.name == "Ring")
                     Assert.AreEqual(2, r.sortingOrder);
                 else if (r.gameObject.name == "Cork")
-                    Assert.AreEqual(3, r.sortingOrder);
+                    Assert.AreEqual(6, r.sortingOrder);
             }
         }
     }
