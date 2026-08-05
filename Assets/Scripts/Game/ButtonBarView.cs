@@ -1,27 +1,32 @@
+using TMPro;
 using UnityEngine;
 
 namespace TubeSort.Game
 {
     /// <summary>
-    /// Alt-orta aksiyon çubuğu: panel + 3 sprite buton (geri al / karıştır / +tüp).
-    /// Koddan çizilen eski butonların (UndoButtonView / ButtonView /
-    /// PilotNextButtonView) yerine geçer; görselleri Resources/UI'den asset
-    /// olarak gelir — "her şey koddan çizilir" kuralının bilinçli istisnası
-    /// (kullanıcı kararı, pop-up'lardaki gibi).
+    /// Alt-orta aksiyon çubuğu: panel + 3 sprite buton (geri al / karıştır / +tüp),
+    /// her butonda sağ-altta sayı rozeti (kalan hak). Koddan çizilen eski butonların
+    /// (UndoButtonView / ButtonView / PilotNextButtonView) yerine geçer; görselleri
+    /// Resources/UI'den asset olarak gelir — "her şey koddan çizilir" kuralının
+    /// bilinçli istisnası (kullanıcı kararı, pop-up'lardaki gibi).
     ///
     /// Diğer görünümlerin aksine bu bileşen SAHNE NESNESİNE bağlıdır (kullanıcı
     /// kararı): buton GameObject'leri sahnede kalıcıdır ve BoxCollider2D'leri elle
     /// Inspector'dan eklenir. Kod ise sprite'ları yükler, çubuğu ekrana göre
-    /// konumlar/ölçekler, collider'ı sprite'a göre boyutlar ve tıklamayı çözer.
+    /// konumlar/ölçekler, collider'ı sprite'a göre boyutlar, rozet+sayıyı kurar ve
+    /// tıklamayı çözer.
     ///
-    /// Yerleşim responsive: panel her karede görüş alanının bir oranına
-    /// ölçeklenir (tahtanın kendisi gibi), böylece farklı en-boy oranlarında
-    /// bozulmaz. Buton GameObject'leri panelin ÇOCUĞUDUR: panel ölçeklenince
-    /// birlikte ölçeklenirler, oranları sabit kalır.
+    /// Yerleşim responsive: panel her karede görüş alanının bir oranına ölçeklenir
+    /// (tahtanın kendisi gibi). Buton GameObject'leri panelin ÇOCUĞUDUR; rozet ve
+    /// sayı da butonun çocuğudur — hepsi tek ölçekle birlikte büyür/küçülür.
     ///
-    /// Tıklama girişi tek noktadan gelir (BoardView.HandleClick); BoardView bu
-    /// çubuğa <see cref="TryGetAction"/> ile sorar. Hak/rozet sistemi (her level
-    /// 3/3/3, 0'da dim+kilit) sonraki adımda buraya eklenecek.
+    /// Hak sistemi: her aksiyon level başına <see cref="MaxRights"/> (3) hakla
+    /// sınırlı. <see cref="ResetRights"/> yeni level'de 3/3/3'e döndürür (restart
+    /// değil — BoardView.StepPilot çağırır). <see cref="ConsumeRight"/> başarılı
+    /// aksiyonda azaltır. Hak 0'da buton karartılır ve collider'ı kapatılır
+    /// (gerçekten tıklanamaz). Tıklama girişi tek noktadan gelir
+    /// (BoardView.HandleClick); BoardView <see cref="TryGetAction"/> ile sorar,
+    /// aksiyonu çalıştırıp başarılıysa ConsumeRight'ı kendisi çağırır.
     /// </summary>
     public class ButtonBarView : MonoBehaviour
     {
@@ -43,10 +48,16 @@ namespace TubeSort.Game
         private const string UndoPath = "UI/action_undo";
         private const string ShufflePath = "UI/action_shuffle";
         private const string AddTubePath = "UI/action_add_tube";
+        private const string BadgePath = "UI/action_badge";
 
         // Çizim sırası: eski butonlarla aynı band (tüplerin ve akışın üstünde).
         private const int PanelSortingOrder = 100;
         private const int ButtonSortingOrder = 101;
+        private const int BadgeSortingOrder = 102;
+        private const int CountSortingOrder = 103;
+
+        /// <summary>Her aksiyonun level başına hak sayısı (asset rozetindeki 3).</summary>
+        private const int MaxRights = 3;
 
         /// <summary>Panelin görüş genişliğine oranı (bu kadarını kaplar).</summary>
         private const float WidthFraction = 0.9f;
@@ -56,9 +67,24 @@ namespace TubeSort.Game
         /// bağımsız: gerçek panel genişliğinden türetilir).</summary>
         private static readonly float[] ButtonXFraction = { -0.6f, 0f, 0.6f };
 
+        // Rozet geometrisi (memory ölçümü): jeton çapı = buton çapının %32'si;
+        // buton merkezinden sağ-alta ofset ≈ (+0.338, -0.338)·buton genişliği.
+        private const float BadgeScaleOfButton = 0.32f;
+        private const float BadgeOffsetFraction = 0.338f;
+
+        // Hak > 0: normal; hak = 0: KOYU GRİ dim buton. Alfa yüksek (0.95): düşük
+        // alfada arkadaki açık panel sızıp tint'i açardı (kullanıcı: arka planla
+        // aynı renge yaklaşıyor) — koyu görünsün diye neredeyse opak.
+        private static readonly Color EnabledTint = Color.white;
+        private static readonly Color DisabledTint = new Color(0.28f, 0.28f, 0.30f, 0.95f);
+
         private SpriteRenderer panelRenderer;
         private Transform[] buttons;
+        private SpriteRenderer[] buttonRenderers;
         private Collider2D[] colliders;
+        private SpriteRenderer[] badges;
+        private TextMeshPro[] counts;
+        private int[] rights;
         private bool ready;
 
         private void Awake()
@@ -66,9 +92,9 @@ namespace TubeSort.Game
             ready = BuildVisuals();
         }
 
-        /// <summary>Referansları çözer, sprite'ları giydirir, collider'ları bulur.
-        /// Eksik referans/collider ölümcül değil: Console'a hata basılır, çubuk
-        /// sessizce çalışmaz (yanlış çizmez).</summary>
+        /// <summary>Referansları çözer, sprite'ları giydirir, rozet+sayıyı kurar,
+        /// collider'ları bulur ve hakları 3/3/3'e ayarlar. Eksik referans/collider
+        /// ölümcül değil: Console'a hata basılır, çubuk sessizce çalışmaz.</summary>
         private bool BuildVisuals()
         {
             if (undoButton == null || shuffleButton == null || addTubeButton == null)
@@ -82,11 +108,25 @@ namespace TubeSort.Game
             panelRenderer = Dress(transform, PanelPath, PanelSortingOrder);
             if (panelRenderer == null) return false;
 
-            string[] paths = { UndoPath, ShufflePath, AddTubePath };
+            var badgeSprite = Resources.Load<Sprite>(BadgePath);
+            if (badgeSprite == null)
+            {
+                Debug.LogError($"ButtonBarView: {BadgePath} sprite bulunamadı " +
+                               $"(Assets/Resources/{BadgePath}.png).");
+                return false;
+            }
+
+            buttonRenderers = new SpriteRenderer[3];
             colliders = new Collider2D[3];
+            badges = new SpriteRenderer[3];
+            counts = new TextMeshPro[3];
+            rights = new int[3];
+
+            string[] paths = { UndoPath, ShufflePath, AddTubePath };
             for (int i = 0; i < 3; i++)
             {
-                if (Dress(buttons[i], paths[i], ButtonSortingOrder) == null) return false;
+                buttonRenderers[i] = Dress(buttons[i], paths[i], ButtonSortingOrder);
+                if (buttonRenderers[i] == null) return false;
 
                 colliders[i] = buttons[i].GetComponent<Collider2D>();
                 if (colliders[i] == null)
@@ -94,9 +134,50 @@ namespace TubeSort.Game
                                    "(elle eklenmeli; tıklama collider'a bağlı).");
                 else
                     colliders[i].offset = Vector2.zero;   // sprite pivot Center; kutu tam üstüne otursun
+
+                CreateBadge(buttons[i], i, buttonRenderers[i].sprite.bounds.size.x, badgeSprite);
+            }
+
+            for (int i = 0; i < 3; i++)
+            {
+                rights[i] = MaxRights;
+                RefreshButton(i);
             }
 
             return true;
+        }
+
+        /// <summary>Butonun sağ-altına sayı rozeti (jeton sprite'ı) ve üstüne TMP
+        /// sayı kurar; ikisi de butonun çocuğudur (onunla ölçeklenir). Sayı asset'e
+        /// gömülü değil — TMP ile yazılır ki 3→2→1→0 azalması kod tarafında olsun.</summary>
+        private void CreateBadge(Transform button, int index, float buttonNativeW, Sprite badgeSprite)
+        {
+            float off = BadgeOffsetFraction * buttonNativeW;
+            float badgeLocalW = BadgeScaleOfButton * buttonNativeW;   // rozetin buton-yerel boyu
+
+            var badgeGo = new GameObject("Badge");
+            badgeGo.transform.SetParent(button, false);
+            badgeGo.transform.localPosition = new Vector3(off, -off, 0f);
+            badgeGo.transform.localScale =
+                Vector3.one * (badgeLocalW / badgeSprite.bounds.size.x);
+            var badgeSr = badgeGo.AddComponent<SpriteRenderer>();
+            badgeSr.sprite = badgeSprite;
+            badgeSr.sortingOrder = BadgeSortingOrder;
+            badges[index] = badgeSr;
+
+            var countGo = new GameObject("Count");
+            countGo.transform.SetParent(button, false);
+            countGo.transform.localPosition = new Vector3(off, -off, 0f);
+            var tmp = countGo.AddComponent<TextMeshPro>();
+            tmp.alignment = TextAlignmentOptions.Center;
+            tmp.color = Color.white;
+            tmp.fontStyle = FontStyles.Bold;
+            tmp.enableAutoSizing = true;   // rakam rozete sığacak kadar büyür
+            tmp.fontSizeMin = 1f;
+            tmp.fontSizeMax = 36f;
+            tmp.rectTransform.sizeDelta = new Vector2(badgeLocalW, badgeLocalW) * 0.85f;
+            tmp.sortingOrder = CountSortingOrder;
+            counts[index] = tmp;
         }
 
         /// <summary>Verilen nesneye SpriteRenderer ekler (yoksa) ve Resources'tan
@@ -153,17 +234,47 @@ namespace TubeSort.Game
                 buttons[i].localPosition = new Vector3(ButtonXFraction[i] * halfWidth, 0f, 0f);
 
                 if (colliders[i] is BoxCollider2D box)
-                {
-                    var sr = buttons[i].GetComponent<SpriteRenderer>();
-                    box.size = sr.sprite.bounds.size;   // yerel uzayda; sprite'ı tam kaplar
-                }
+                    box.size = buttonRenderers[i].sprite.bounds.size;   // yerel; sprite'ı tam kaplar
             }
         }
 
+        /// <summary>Tüm hakları level başı değerine (3/3/3) döndürür. Yeni level'e
+        /// geçişte BoardView çağırır — RESTART değil (sayaçlar anlamlı kalsın).</summary>
+        public void ResetRights()
+        {
+            if (!ready) return;
+            for (int i = 0; i < 3; i++)
+            {
+                rights[i] = MaxRights;
+                RefreshButton(i);
+            }
+        }
+
+        /// <summary>Bir aksiyonun hakkını bir azaltır (BAŞARILI aksiyondan sonra
+        /// BoardView çağırır). 0'a inince buton karartılır + tıklanamaz olur.</summary>
+        public void ConsumeRight(ActionKind action)
+        {
+            if (!ready) return;
+            int i = (int)action;
+            if (rights[i] <= 0) return;
+            rights[i]--;
+            RefreshButton(i);
+        }
+
+        /// <summary>Rozet sayısını, dim tint'i ve collider durumunu hakka göre
+        /// tazeler. Hak 0: gri tint + collider kapalı (gerçekten tıklanamaz).</summary>
+        private void RefreshButton(int i)
+        {
+            bool enabled = rights[i] > 0;
+            counts[i].text = rights[i].ToString();
+            buttonRenderers[i].color = enabled ? EnabledTint : DisabledTint;
+            if (colliders[i] != null) colliders[i].enabled = enabled;
+        }
+
         /// <summary>
-        /// Dünya noktası bir butonun collider'ına denk geliyorsa ilgili aksiyonu
-        /// döndürür. BoardView tek giriş noktasından (HandleClick) çağırır; buton
-        /// paneli tüplerin üstünde ve önceliklidir.
+        /// Dünya noktası HAKKI OLAN bir butonun (aktif collider'lı) üstündeyse
+        /// ilgili aksiyonu döndürür. BoardView tek giriş noktasından
+        /// (HandleClick) çağırır; buton paneli tüplerin üstünde ve önceliklidir.
         /// </summary>
         public bool TryGetAction(Vector3 worldPoint, out ActionKind action)
         {
@@ -172,7 +283,8 @@ namespace TubeSort.Game
 
             for (int i = 0; i < 3; i++)
             {
-                if (colliders[i] != null && colliders[i].OverlapPoint(worldPoint))
+                if (rights[i] > 0 && colliders[i] != null && colliders[i].enabled
+                    && colliders[i].OverlapPoint(worldPoint))
                 {
                     action = (ActionKind)i;   // dizi sırası enum sırasıyla birebir
                     return true;
