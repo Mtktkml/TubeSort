@@ -69,11 +69,10 @@ namespace TubeSort.Game
         private readonly List<StreamView> streamPool = new List<StreamView>();
         private readonly HashSet<StreamView> streamsInUse = new HashSet<StreamView>();
 
-        private UndoButtonView undoButton;
-        private PilotNextButtonView pilotNextButton;
-        private ButtonView prevButton;      // önceki level (nav)
-        private ButtonView restartButton;   // leveli baştan
-        private ButtonView addTubeButton;   // +boş tüp
+        private PilotNextButtonView pilotNextButton;   // sonraki level (test nav)
+        private ButtonView prevButton;                 // önceki level (test nav)
+        private ButtonBarView buttonBar;    // alt-orta aksiyon çubuğu (asset görselli panel)
+        private BackgroundView background;  // tam ekran arka plan (koddan, en arkada)
         private PopupView deadlockPopup;    // çıkmaz pop-up'ı (gizli başlar)
         private PopupView winPopup;         // kazanma pop-up'ı (gizli başlar)
         // Tahta VERİSİNİN çözülebilirliği (cache): her veri değişiminde
@@ -252,9 +251,16 @@ namespace TubeSort.Game
             pristineBoard = board.Clone();   // restart bu kopyayı geri yükler
 
             BuildViews();
-            BuildUndoButton();
-            BuildRestartButton();
-            BuildAddTubeButton();
+            BuildBackground();
+            // Aksiyon butonları (undo/restart/+tüp) artık sahnedeki ButtonBarView
+            // (asset görselli alt-orta panel). Çubuk sahne nesnesi; burada bulunur,
+            // ApplyLayout ekrana göre konumlar.
+            buttonBar = FindFirstObjectByType<ButtonBarView>();
+            if (buttonBar == null)
+                Debug.LogWarning("Sahnede ButtonBarView yok; aksiyon çubuğu görünmez. " +
+                                 "Kurulum: sahneye ActionBar nesnesi + 3 buton çocuğu ekle.");
+            // Level ileri/geri nav butonları (koddan çizili, sağ üst köşe) TEST
+            // için geri getirildi (kullanıcı isteği); üretimde kaldırılabilir.
             BuildPilotNextButton();
             BuildPrevButton();
             BuildDeadlockPopup();
@@ -269,19 +275,8 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// Geri al butonunu kurar. Buton tahtanın çocuğu değildir: ApplyLayout
-        /// tahtayı ekrana sığdırmak için ölçeklerken buton sabit kalmalı.
-        /// </summary>
-        private void BuildUndoButton()
-        {
-            var go = new GameObject("UndoButton");
-            undoButton = go.AddComponent<UndoButtonView>();
-            undoButton.Initialize();
-        }
-
-        /// <summary>
-        /// Pilot önizlemede sıradaki level butonunu kurar (sağ üst). Yalnız
-        /// pilot modunda; telefonda ok tuşu olmadığı için level gezmenin yolu.
+        /// Sıradaki level butonunu kurar (sağ üst köşe, test nav). Telefonda ok
+        /// tuşu olmadığı için level gezmenin yolu; üretimde kaldırılabilir.
         /// </summary>
         private void BuildPilotNextButton()
         {
@@ -290,25 +285,12 @@ namespace TubeSort.Game
             pilotNextButton.Initialize();
         }
 
+        /// <summary>Önceki level butonunu kurar (sağ üst köşe, test nav).</summary>
         private void BuildPrevButton()
         {
             var go = new GameObject("PrevButton");
             prevButton = go.AddComponent<ButtonView>();
-            prevButton.Initialize(ButtonView.ButtonKind.Previous);
-        }
-
-        private void BuildRestartButton()
-        {
-            var go = new GameObject("RestartButton");
-            restartButton = go.AddComponent<ButtonView>();
-            restartButton.Initialize(ButtonView.ButtonKind.Restart);
-        }
-
-        private void BuildAddTubeButton()
-        {
-            var go = new GameObject("AddTubeButton");
-            addTubeButton = go.AddComponent<ButtonView>();
-            addTubeButton.Initialize(ButtonView.ButtonKind.AddTube);
+            prevButton.Initialize();
         }
 
         /// <summary>
@@ -405,10 +387,9 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// Butonları görüş alanının üst köşelerine dizer. Sol küme (soldan sağa):
-        /// geri al, restart, +tüp — oyun aksiyonları. Sağ küme (sağdan sola):
-        /// skip, önceki — level navigasyonu. Üst-orta level başlığından ayrık.
-        /// Butonlar tahtanın çocuğu değil; tahta ölçeklense de sabit kalırlar.
+        /// Level nav butonlarını (test) sağ üst köşeye ve LEVEL başlığını üst-ortaya
+        /// dizer. Sağdan sola: sonraki, önceki. Butonlar tahtanın çocuğu değil;
+        /// tahta ölçeklense de sabit kalırlar. (Undo/restart/+tüp artık alt çubukta.)
         /// </summary>
         private void PositionButtons()
         {
@@ -417,15 +398,9 @@ namespace TubeSort.Game
             float inset = ButtonView.Size;
             float gap = ButtonView.Size * 1.15f;
             float topY = cam.y + view.y * 0.5f - inset;
-            float leftX = cam.x - view.x * 0.5f + inset;
             float rightX = cam.x + view.x * 0.5f - inset;
 
-            // Sol küme: geri al, restart, +tüp (soldan sağa).
-            PlaceButton(undoButton, leftX, topY);
-            PlaceButton(restartButton, leftX + gap, topY);
-            PlaceButton(addTubeButton, leftX + 2f * gap, topY);
-
-            // Sağ küme: skip, önceki (sağdan sola).
+            // Sağ küme: sonraki, önceki (sağdan sola).
             PlaceButton(pilotNextButton, rightX, topY);
             PlaceButton(prevButton, rightX - gap, topY);
 
@@ -508,6 +483,8 @@ namespace TubeSort.Game
             {
                 LoadBoard(next);
                 UpdateLevelTitle();
+                // Yeni level: aksiyon hakları 3/3/3'e döner (restart değil, geçiş).
+                if (buttonBar != null) buttonBar.ResetRights();
             }
         }
 
@@ -562,12 +539,17 @@ namespace TubeSort.Game
         /// Son hamleyi geri alır. Animasyon sürerken ve geçmiş boşken çağrı
         /// yok sayılır. Tıpa (varsa) anında kalkar ama sıvı ışınlanmaz:
         /// seviyeler dökmedeki gibi kademeli akar. Kayma/eğilme/akış görseli
-        /// yok — geri alma bir hamle değil düzeltmedir.
+        /// yok — geri alma bir hamle değil düzeltmedir. Çıkmaz pop-up'ı ve aksiyon
+        /// çubuğu aynı kapıyı kullanır (çubuk ayrıca hak tüketir).
         /// </summary>
-        public void UndoLastMove()
+        public void UndoLastMove() => TryUndoLastMove();
+
+        /// <summary>UndoLastMove'un gövdesi; bir hamle gerçekten geri alındıysa
+        /// true döner (aksiyon çubuğu hak tüketimini buna bağlar).</summary>
+        private bool TryUndoLastMove()
         {
-            if (AnyAnimating) return;
-            if (!history.TryUndo(board, out PourResult undone)) return;
+            if (AnyAnimating) return false;
+            if (!history.TryUndo(board, out PourResult undone)) return false;
 
             ClearSelection();
             // Veri geri alındı: çözülebilirliği tazele ve uyarıyı KOŞULLU
@@ -576,6 +558,7 @@ namespace TubeSort.Game
             RecomputeSolvability();
             RefreshDeadlockPopup();
             StartCoroutine(AnimateUndo(undone));
+            return true;
         }
 
         /// <summary>
@@ -618,14 +601,20 @@ namespace TubeSort.Game
         /// <summary>
         /// Mevcut leveli baştan yükler (çıkmaz/kötü gidişten kaçış). Levelin
         /// yüklenirken saklanan bozulmamış kopyasını geri kurar; hamleler ve
-        /// eklenen +tüp geri alınır (LoadBoard geçmişi de temizler).
+        /// eklenen +tüp geri alınır (LoadBoard geçmişi de temizler). Restart
+        /// hakları SIFIRLAMAZ (o yalnız yeni level'e geçişte olur).
         /// </summary>
-        public void RestartLevel()
+        public void RestartLevel() => TryRestartLevel();
+
+        /// <summary>RestartLevel'in gövdesi; baştan yükleme yapıldıysa true döner
+        /// (çubuğun shuffle=restart hakkı buna bağlı).</summary>
+        private bool TryRestartLevel()
         {
-            if (AnyAnimating) return;
-            if (pristineBoard == null) return;
+            if (AnyAnimating) return false;
+            if (pristineBoard == null) return false;
 
             LoadBoard(pristineBoard.Clone());
+            return true;
         }
 
         /// <summary>
@@ -634,10 +623,14 @@ namespace TubeSort.Game
         /// geri alınabilir (yeni tüp sona eklendi, indeksler kaymadı). +tüp'ün
         /// kendisi geri alınmaz; restart onu da temizler (pristine kopyada yok).
         /// </summary>
-        public void AddEmptyTube()
+        public void AddEmptyTube() => TryAddEmptyTube();
+
+        /// <summary>AddEmptyTube'un gövdesi; tüp gerçekten eklendiyse true döner
+        /// (çubuğun +tüp hakkı buna bağlı).</summary>
+        private bool TryAddEmptyTube()
         {
-            if (AnyAnimating) return;
-            if (board.TubeCount == 0) return;
+            if (AnyAnimating) return false;
+            if (board.TubeCount == 0) return false;
 
             board.AddTube(board[0].Capacity);
             ClearSelection();
@@ -646,6 +639,7 @@ namespace TubeSort.Game
             // pop-up geri gelir (undo'daki koşullu temizlemenin aynısı).
             if (initialized)
                 RebuildViews();
+            return true;
         }
 
         /// <summary>Mevcut tüp görünümlerini yıkıp tahtayı baştan kurar.</summary>
@@ -701,6 +695,19 @@ namespace TubeSort.Game
             }
 
             return sprite;
+        }
+
+        /// <summary>Tam ekran arka planı kurar (koddan; collider yok, sahne işi
+        /// gerektirmez). Sprite yoksa sessizce atlanır — arka plansız oyun çalışır.</summary>
+        private void BuildBackground()
+        {
+            var go = new GameObject("Background");
+            background = go.AddComponent<BackgroundView>();
+            if (!background.Initialize())
+            {
+                Destroy(go);
+                background = null;
+            }
         }
 
         private void BuildViews()
@@ -777,6 +784,8 @@ namespace TubeSort.Game
 
             // Buton görüş alanına bağlı: yerleşim her tazelendiğinde o da tazelenir.
             PositionButtons();
+            if (buttonBar != null) buttonBar.Layout(mainCamera);
+            if (background != null) background.Layout(mainCamera);
         }
 
         /// <summary>
@@ -896,14 +905,33 @@ namespace TubeSort.Game
         /// levellerde tahta LEVEL başlığının altında kalır.</summary>
         private float BoardCeiling => CameraView.y * TitleFraction - TitleClearance;
 
-        /// <summary>Tahtaya ayrılan alan: yatayda tüm görüş, dikeyde ekran
-        /// altından tavana kadar. FitScale bu alana sığdırır.</summary>
+        /// <summary>Alt aksiyon çubuğu ile tahta arasında bırakılacak pay (dünya
+        /// birimi). Tahta tabanı çubuğun üst kenarının bu kadar üstünde durur.</summary>
+        private const float BottomBandClearance = 0.35f;
+
+        /// <summary>Tahta tabanı, kamera merkezine göre: aksiyon çubuğu varsa onun
+        /// üst kenarının payla üstü, yoksa ekran altı. Uzun tüplü/çok tüplü
+        /// levellerde tahta çubuğun üstünde kalır (panele taşmaz).</summary>
+        private float BoardFloor
+        {
+            get
+            {
+                float screenBottom = -CameraView.y * 0.5f;
+                if (buttonBar == null) return screenBottom;
+
+                float barTop = buttonBar.TopEdgeY(mainCamera) - mainCamera.transform.position.y;
+                return Mathf.Max(screenBottom, barTop + BottomBandClearance);
+            }
+        }
+
+        /// <summary>Tahtaya ayrılan alan: yatayda tüm görüş, dikeyde tabandan
+        /// (BoardFloor) tavana kadar. FitScale bu alana sığdırır.</summary>
         private Vector2 BoardAreaSize =>
-            new Vector2(CameraView.x, BoardCeiling + CameraView.y * 0.5f);
+            new Vector2(CameraView.x, BoardCeiling - BoardFloor);
 
         /// <summary>Ayrılan alanın dikey ortası (kamera merkezine göre) —
         /// tahta buraya ortalanır, ekran merkezine değil.</summary>
-        private float BoardAreaCenterY => (BoardCeiling - CameraView.y * 0.5f) * 0.5f;
+        private float BoardAreaCenterY => (BoardCeiling + BoardFloor) * 0.5f;
 
         /// <summary>Kameranın dünya birimindeki görüş alanı: yerleşimin tek girdisi.</summary>
         private Vector2 CameraView
@@ -937,12 +965,16 @@ namespace TubeSort.Game
         /// </summary>
         private void OnDestroy()
         {
-            // Butonlar tahtanın çocuğu olmadığı için kendiliğinden yok olmaz.
-            if (undoButton != null)
-                Destroy(undoButton.gameObject);
-
+            // Nav butonları tahtanın çocuğu olmadığı için kendiliğinden yok olmaz.
             if (pilotNextButton != null)
                 Destroy(pilotNextButton.gameObject);
+
+            if (prevButton != null)
+                Destroy(prevButton.gameObject);
+
+            // Arka plan da tahtanın çocuğu değil (root nesne); elle yok edilmeli.
+            if (background != null)
+                Destroy(background.gameObject);
 
             Destroy(liquidMaterial);
             Destroy(streamMaterial);
@@ -1007,15 +1039,22 @@ namespace TubeSort.Game
                 return;
             }
 
+            // Aksiyon çubuğu (alt-orta panel) tüplerin üstünde ve önceliklidir:
+            // dünya noktası bir butonun collider'ına denk geliyorsa onu işleriz.
+            if (buttonBar != null && buttonBar.TryGetAction(worldPoint, out ButtonBarView.ActionKind action))
+            {
+                HandleBarAction(action);
+                return;
+            }
+
             Collider2D[] hits = Physics2D.OverlapPointAll(worldPoint);
 
-            // Butonlar tüplerin/akışın üstünde; herhangi bir collider buysa öncelikli.
+            // Level ileri/geri nav butonları (test amaçlı, sağ üst) tüplerin
+            // üstünde ve önceliklidir.
             foreach (Collider2D hit in hits)
             {
-                if (hit.GetComponent<UndoButtonView>() != null) { UndoLastMove(); return; }
                 if (hit.GetComponent<PilotNextButtonView>() != null) { StepPilot(1); return; }
-                var button = hit.GetComponent<ButtonView>();
-                if (button != null) { HandleActionButton(button.Kind); return; }
+                if (hit.GetComponent<ButtonView>() != null) { StepPilot(-1); return; }
             }
 
             // Gerçek şekline (SDF) dokunulan tüp: asılı kaynak üstte olsa da
@@ -1034,14 +1073,23 @@ namespace TubeSort.Game
             ClearSelection();
         }
 
-        private void HandleActionButton(ButtonView.ButtonKind kind)
+        /// <summary>Aksiyon çubuğundaki butonun işi. Yalnız BAŞARILI aksiyon hak
+        /// tüketir (boşa tıklama — ör. animasyon sürerken — hak yakmaz). Shuffle
+        /// şimdilik restart'a bağlı (gerçek karıştırma sonra); prev/skip nav
+        /// kaldırıldı — level gezinme yalnız kazanma pop-up'ıyla. Çıkmaz
+        /// pop-up'ındaki kurtarma butonları bu haklara dokunmaz (ayrı emniyet).</summary>
+        private void HandleBarAction(ButtonBarView.ActionKind action)
         {
-            switch (kind)
+            bool used;
+            switch (action)
             {
-                case ButtonView.ButtonKind.Previous: StepPilot(-1); break;   // önceki level
-                case ButtonView.ButtonKind.Restart: RestartLevel(); break;
-                case ButtonView.ButtonKind.AddTube: AddEmptyTube(); break;
+                case ButtonBarView.ActionKind.Undo: used = TryUndoLastMove(); break;
+                case ButtonBarView.ActionKind.Shuffle: used = TryRestartLevel(); break;
+                case ButtonBarView.ActionKind.AddTube: used = TryAddEmptyTube(); break;
+                default: return;
             }
+
+            if (used) buttonBar.ConsumeRight(action);
         }
 
         private void HandleTubeClick(int index)
