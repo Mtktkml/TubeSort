@@ -69,11 +69,8 @@ namespace TubeSort.Game
         private readonly List<StreamView> streamPool = new List<StreamView>();
         private readonly HashSet<StreamView> streamsInUse = new HashSet<StreamView>();
 
-        private UndoButtonView undoButton;
-        private PilotNextButtonView pilotNextButton;
-        private ButtonView prevButton;      // önceki level (nav)
-        private ButtonView restartButton;   // leveli baştan
-        private ButtonView addTubeButton;   // +boş tüp
+        private PilotNextButtonView pilotNextButton;   // sonraki level (test nav)
+        private ButtonView prevButton;                 // önceki level (test nav)
         private ButtonBarView buttonBar;    // alt-orta aksiyon çubuğu (asset görselli panel)
         private BackgroundView background;  // tam ekran arka plan (koddan, en arkada)
         private PopupView deadlockPopup;    // çıkmaz pop-up'ı (gizli başlar)
@@ -278,19 +275,8 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// Geri al butonunu kurar. Buton tahtanın çocuğu değildir: ApplyLayout
-        /// tahtayı ekrana sığdırmak için ölçeklerken buton sabit kalmalı.
-        /// </summary>
-        private void BuildUndoButton()
-        {
-            var go = new GameObject("UndoButton");
-            undoButton = go.AddComponent<UndoButtonView>();
-            undoButton.Initialize();
-        }
-
-        /// <summary>
-        /// Pilot önizlemede sıradaki level butonunu kurar (sağ üst). Yalnız
-        /// pilot modunda; telefonda ok tuşu olmadığı için level gezmenin yolu.
+        /// Sıradaki level butonunu kurar (sağ üst köşe, test nav). Telefonda ok
+        /// tuşu olmadığı için level gezmenin yolu; üretimde kaldırılabilir.
         /// </summary>
         private void BuildPilotNextButton()
         {
@@ -299,25 +285,12 @@ namespace TubeSort.Game
             pilotNextButton.Initialize();
         }
 
+        /// <summary>Önceki level butonunu kurar (sağ üst köşe, test nav).</summary>
         private void BuildPrevButton()
         {
             var go = new GameObject("PrevButton");
             prevButton = go.AddComponent<ButtonView>();
-            prevButton.Initialize(ButtonView.ButtonKind.Previous);
-        }
-
-        private void BuildRestartButton()
-        {
-            var go = new GameObject("RestartButton");
-            restartButton = go.AddComponent<ButtonView>();
-            restartButton.Initialize(ButtonView.ButtonKind.Restart);
-        }
-
-        private void BuildAddTubeButton()
-        {
-            var go = new GameObject("AddTubeButton");
-            addTubeButton = go.AddComponent<ButtonView>();
-            addTubeButton.Initialize(ButtonView.ButtonKind.AddTube);
+            prevButton.Initialize();
         }
 
         /// <summary>
@@ -414,10 +387,9 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// Butonları görüş alanının üst köşelerine dizer. Sol küme (soldan sağa):
-        /// geri al, restart, +tüp — oyun aksiyonları. Sağ küme (sağdan sola):
-        /// skip, önceki — level navigasyonu. Üst-orta level başlığından ayrık.
-        /// Butonlar tahtanın çocuğu değil; tahta ölçeklense de sabit kalırlar.
+        /// Level nav butonlarını (test) sağ üst köşeye ve LEVEL başlığını üst-ortaya
+        /// dizer. Sağdan sola: sonraki, önceki. Butonlar tahtanın çocuğu değil;
+        /// tahta ölçeklense de sabit kalırlar. (Undo/restart/+tüp artık alt çubukta.)
         /// </summary>
         private void PositionButtons()
         {
@@ -426,15 +398,9 @@ namespace TubeSort.Game
             float inset = ButtonView.Size;
             float gap = ButtonView.Size * 1.15f;
             float topY = cam.y + view.y * 0.5f - inset;
-            float leftX = cam.x - view.x * 0.5f + inset;
             float rightX = cam.x + view.x * 0.5f - inset;
 
-            // Sol küme: geri al, restart, +tüp (soldan sağa).
-            PlaceButton(undoButton, leftX, topY);
-            PlaceButton(restartButton, leftX + gap, topY);
-            PlaceButton(addTubeButton, leftX + 2f * gap, topY);
-
-            // Sağ küme: skip, önceki (sağdan sola).
+            // Sağ küme: sonraki, önceki (sağdan sola).
             PlaceButton(pilotNextButton, rightX, topY);
             PlaceButton(prevButton, rightX - gap, topY);
 
@@ -999,10 +965,7 @@ namespace TubeSort.Game
         /// </summary>
         private void OnDestroy()
         {
-            // Butonlar tahtanın çocuğu olmadığı için kendiliğinden yok olmaz.
-            if (undoButton != null)
-                Destroy(undoButton.gameObject);
-
+            // Nav butonları tahtanın çocuğu olmadığı için kendiliğinden yok olmaz.
             if (pilotNextButton != null)
                 Destroy(pilotNextButton.gameObject);
 
@@ -1091,8 +1054,7 @@ namespace TubeSort.Game
             foreach (Collider2D hit in hits)
             {
                 if (hit.GetComponent<PilotNextButtonView>() != null) { StepPilot(1); return; }
-                var nav = hit.GetComponent<ButtonView>();
-                if (nav != null && nav.Kind == ButtonView.ButtonKind.Previous) { StepPilot(-1); return; }
+                if (hit.GetComponent<ButtonView>() != null) { StepPilot(-1); return; }
             }
 
             // Gerçek şekline (SDF) dokunulan tüp: asılı kaynak üstte olsa da

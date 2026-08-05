@@ -5,10 +5,11 @@ namespace TubeSort.Game
 {
     /// <summary>
     /// Alt-orta aksiyon çubuğu: panel + 3 sprite buton (geri al / karıştır / +tüp),
-    /// her butonda sağ-altta sayı rozeti (kalan hak). Koddan çizilen eski butonların
-    /// (UndoButtonView / ButtonView / PilotNextButtonView) yerine geçer; görselleri
-    /// Resources/UI'den asset olarak gelir — "her şey koddan çizilir" kuralının
-    /// bilinçli istisnası (kullanıcı kararı, pop-up'lardaki gibi).
+    /// her butonda sağ-altta sayı rozeti (kalan hak). Koddan çizilen eski
+    /// undo/restart/+tüp butonlarının yerine geçer; görselleri Resources/UI'den
+    /// asset olarak gelir — "her şey koddan çizilir" kuralının bilinçli istisnası
+    /// (kullanıcı kararı, pop-up'lardaki gibi). Level ileri/geri nav butonları bu
+    /// çubuğun dışında ayrı durur (ButtonView / PilotNextButtonView, test amaçlı).
     ///
     /// Diğer görünümlerin aksine bu bileşen SAHNE NESNESİNE bağlıdır (kullanıcı
     /// kararı): buton GameObject'leri sahnede kalıcıdır ve BoxCollider2D'leri elle
