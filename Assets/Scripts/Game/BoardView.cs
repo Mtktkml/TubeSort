@@ -74,6 +74,8 @@ namespace TubeSort.Game
         private ButtonView prevButton;      // önceki level (nav)
         private ButtonView restartButton;   // leveli baştan
         private ButtonView addTubeButton;   // +boş tüp
+        private ButtonBarView buttonBar;    // alt-orta aksiyon çubuğu (asset görselli panel)
+        private BackgroundView background;  // tam ekran arka plan (koddan, en arkada)
         private PopupView deadlockPopup;    // çıkmaz pop-up'ı (gizli başlar)
         private PopupView winPopup;         // kazanma pop-up'ı (gizli başlar)
         // Tahta VERİSİNİN çözülebilirliği (cache): her veri değişiminde
@@ -252,11 +254,16 @@ namespace TubeSort.Game
             pristineBoard = board.Clone();   // restart bu kopyayı geri yükler
 
             BuildViews();
-            BuildUndoButton();
-            BuildRestartButton();
-            BuildAddTubeButton();
-            BuildPilotNextButton();
-            BuildPrevButton();
+            BuildBackground();
+            // Aksiyon butonları artık sahnedeki ButtonBarView (asset görselli
+            // alt-orta panel). Eski koddan-çizilen butonlar (undo/restart/+tüp +
+            // prev/skip nav) kaldırıldı: level gezinme yalnız kazanma pop-up'ının
+            // "Sonraki" butonuyla. Çubuk sahne nesnesi; burada bulunur,
+            // ApplyLayout ekrana göre konumlar.
+            buttonBar = FindFirstObjectByType<ButtonBarView>();
+            if (buttonBar == null)
+                Debug.LogWarning("Sahnede ButtonBarView yok; aksiyon çubuğu görünmez. " +
+                                 "Kurulum: sahneye ActionBar nesnesi + 3 buton çocuğu ekle.");
             BuildDeadlockPopup();
             BuildWinPopup();
             BuildLevelTitle();
@@ -703,6 +710,19 @@ namespace TubeSort.Game
             return sprite;
         }
 
+        /// <summary>Tam ekran arka planı kurar (koddan; collider yok, sahne işi
+        /// gerektirmez). Sprite yoksa sessizce atlanır — arka plansız oyun çalışır.</summary>
+        private void BuildBackground()
+        {
+            var go = new GameObject("Background");
+            background = go.AddComponent<BackgroundView>();
+            if (!background.Initialize())
+            {
+                Destroy(go);
+                background = null;
+            }
+        }
+
         private void BuildViews()
         {
             for (int i = 0; i < board.TubeCount; i++)
@@ -777,6 +797,8 @@ namespace TubeSort.Game
 
             // Buton görüş alanına bağlı: yerleşim her tazelendiğinde o da tazelenir.
             PositionButtons();
+            if (buttonBar != null) buttonBar.Layout(mainCamera);
+            if (background != null) background.Layout(mainCamera);
         }
 
         /// <summary>
@@ -944,6 +966,10 @@ namespace TubeSort.Game
             if (pilotNextButton != null)
                 Destroy(pilotNextButton.gameObject);
 
+            // Arka plan da tahtanın çocuğu değil (root nesne); elle yok edilmeli.
+            if (background != null)
+                Destroy(background.gameObject);
+
             Destroy(liquidMaterial);
             Destroy(streamMaterial);
 
@@ -1007,16 +1033,15 @@ namespace TubeSort.Game
                 return;
             }
 
-            Collider2D[] hits = Physics2D.OverlapPointAll(worldPoint);
-
-            // Butonlar tüplerin/akışın üstünde; herhangi bir collider buysa öncelikli.
-            foreach (Collider2D hit in hits)
+            // Aksiyon çubuğu (alt-orta panel) tüplerin üstünde ve önceliklidir:
+            // dünya noktası bir butonun collider'ına denk geliyorsa onu işleriz.
+            if (buttonBar != null && buttonBar.TryGetAction(worldPoint, out ButtonBarView.ActionKind action))
             {
-                if (hit.GetComponent<UndoButtonView>() != null) { UndoLastMove(); return; }
-                if (hit.GetComponent<PilotNextButtonView>() != null) { StepPilot(1); return; }
-                var button = hit.GetComponent<ButtonView>();
-                if (button != null) { HandleActionButton(button.Kind); return; }
+                HandleBarAction(action);
+                return;
             }
+
+            Collider2D[] hits = Physics2D.OverlapPointAll(worldPoint);
 
             // Gerçek şekline (SDF) dokunulan tüp: asılı kaynak üstte olsa da
             // altındaki durağan tüp doğru bulunur.
@@ -1034,13 +1059,16 @@ namespace TubeSort.Game
             ClearSelection();
         }
 
-        private void HandleActionButton(ButtonView.ButtonKind kind)
+        /// <summary>Aksiyon çubuğundaki butonun işi. Shuffle şimdilik restart'a
+        /// bağlı (gerçek karıştırma sonra, kullanıcı kararı); prev/skip nav
+        /// kaldırıldı — level gezinme yalnız kazanma pop-up'ıyla.</summary>
+        private void HandleBarAction(ButtonBarView.ActionKind action)
         {
-            switch (kind)
+            switch (action)
             {
-                case ButtonView.ButtonKind.Previous: StepPilot(-1); break;   // önceki level
-                case ButtonView.ButtonKind.Restart: RestartLevel(); break;
-                case ButtonView.ButtonKind.AddTube: AddEmptyTube(); break;
+                case ButtonBarView.ActionKind.Undo: UndoLastMove(); break;
+                case ButtonBarView.ActionKind.Shuffle: RestartLevel(); break;
+                case ButtonBarView.ActionKind.AddTube: AddEmptyTube(); break;
             }
         }
 
