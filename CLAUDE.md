@@ -72,32 +72,39 @@ Statik parçalar (cam tüp, bej yaka, mantar tıpa) PNG sprite'lardır; dinamik 
 için asset'le yapılamazlar. `Resources` altındalar çünkü her şey koddan kurulur:
 sahnede/prefab'da referans yok, `Resources` dışında build'e girmezlerdi.
 
-Katman sırası (sortingOrder), tüp içi: sıvı 0 < akış-alt 1 < tıpa 2 <
-collar 3 < pus perdesi 4 < cam gövde 5. SIVI VE TIPA, COLLAR'IN VE CAMIN
-ARKASINDADIR (cam yarı saydam olduğundan içerik içinden görünür; camın
-gömülü parlamaları içeriğin üstüne kendiliğinden düşer — dolu tüpün
-parlaması boş tüple tanımı gereği birebir). Tıpanın başı collar'ın üstünde
-serbest; gövdesi deliğe collar'ın arkasından girer ve TIPALIYKEN COLLAR
-YARI SAYDAM ÇİZİLİR (renderer rengi, `CorkedRingAlpha` — asset değişmez):
-collar önde durur ama tıpa içinden görünür. Tıpasız tüpte collar OPAK —
-dökmede dudağa tırmanan sıvıyı gizleme görevi bozulmaz (tıpalı tüp zaten
-dökülemez). Tıpanın tüp içine giren kısmı cam + pus (shadow.png, YALNIZ
-tüp-içi bölgede, dikeyde sıkıştırılmış) ile buzlanır. Cam gövde (tube.png)
-ve collar (collar.png) AYRI asset'lerdir: ekipten gelen birleşik tüp
-görselinden İÇERİĞE GÖRE ayrıldılar, kanvasları dikiş çevresinde örtüşür.
-Akışın alt parçası hedefin camının/collar'ının arkasına (1) çizilir — kolon
-deliğe girip camın içinden süzülerek yüzeye iner; üst parça her şeyin önüne
-(kaynak offset+7, havuz varsayılanı 15). Dökülen tüp bu değerlere +10
-offset alır (`SetSortingOffset`). Butonlar 100, level başlığı ve banner 101.
+Katman sırası (sortingOrder), tüp içi: sıvı 0 < akış-alt 1 < ring/yaka 2 <
+cam gövde 5 < tıpa 6. Cam yarı saydam olduğundan sıvı içinden görünür ve camın
+gömülü parlamaları içeriğin üstüne kendiliğinden düşer — dolu tüpün parlaması
+boş tüple tanımı gereği birebir. Cam gövde (`tube.png`) ve ring/yaka
+(`collar.png`) AYRI asset'lerdir: ekipten gelen birleşik tüp görselinden İÇERİĞE
+GÖRE ayrıldılar, kanvasları dikiş çevresinde örtüşür (dikişsiz bağlı).
 
-- `Sprites/tube.png` — cam tüp (PPU 247.5, pivot Bottom, **9-slice** alt border 88:
-  dip kavisi sabit kalır, düz gövde kapasiteyle uzar).
-- `Sprites/collar.png` — bej yaka (PPU 244; tam genişliği = `FullWidth` yerleşim
-  çapası). Tıpa sandviçinin ön parçaları bu görselden çalışma anında **eğri alfa
-  maskesiyle** üretilir (`TubeView.CreateCollarFront*`; bu yüzden Read/Write açık).
-  Maske dışı pikselde yalnız alfa sıfırlanır, RGB korunur — yoksa bilinear filtre
-  kenarda koyu çizgi bırakır.
-- `Sprites/cork.png` — mantar tıpa (PPU 229); yalnız `Tube.IsComplete` tüpte görünür.
+TIPA (yalnız tamamlanan tüpte): yaka hep OPAK ring'tir; tıpa onun ve her şeyin
+ÖNÜNE (order 6, opak) biner. Tıpa = `cork_seated`: takım referansından
+(`tube reference.png` ağzı) tıpa SİLÜETİNE kırpılmış tek sprite — camsı-mat alt
+tonu referanstan gelir. Ağza oturan bir mantar gibidir; kenarı doğal mantar
+kenarı, "iki farklı şekli uç uca birleştirme" çizgisi YOK (yakayı ring verir, o
+cama zaten dikişsiz bağlı; tıpa yalnız ağza oturur). Düşüş animasyonunda ham
+`cork.png`, oturunca `cork_seated` (ikisi de 90×97, aynı HESAPLI merkezde →
+oturmada tıpa oynamaz; tıpanın gri yaka bandı ring'in yakasıyla çakışır,
+`CorkSeatedCenterBelowRingTop = 31.5px` bunu hesaplar). Tıpasız tüpte ring OPAK —
+dökmede dudağa tırmanan sıvıyı gizler. (Eski boyama/pus yaklaşımı —
+`CreateSeatedCorkSprite` + `shadow.png` perdesi — kaldırıldı: iki şekli boyayla
+birleştirme sınırda çizgi bırakıyordu; referans-kırpma çözdü.)
+
+Akışın alt parçası hedefin ring'inin/camının arkasına (1) çizilir; üst parça her
+şeyin önüne (kaynak offset+7, havuz varsayılanı 15). Dökülen tüp bu değerlere +10
+offset alır (`SetSortingOffset`). Butonlar 100, level başlığı 101.
+
+- `Sprites/tube.png` — cam gövde (PPU 126.67, pivot Bottom, **9-slice**: dip
+  kavisi sabit kalır, düz gövde kapasiteyle uzar).
+- `Sprites/collar.png` — ring/yaka (PPU 126.67; tam genişliği = `FullWidth`
+  yerleşim çapası). Cama dikişsiz bağlanır; tıpalı tüpte de açık kalır (yakayı verir).
+- `Sprites/cork.png` — ham mantar tıpa (PPU 126.67, pivot Center); yalnız düşüş
+  animasyonunda görünür.
+- `Sprites/cork_seated.png` — oturmuş tıpa (cork silüeti + referansın camsı-mat
+  alt tonu; `tube reference.png` ağzından kırpma). `Tube.IsComplete` tüpte ham
+  tıpanın yerine geçer (order 6, opak).
 - `TubeShape.hlsl` — sıvının şekil matematiği (SDF).
 - `Liquid.shader` — sıvı: katmanlar, doluluk, 2.5D yüzey diski + damla halkaları
   (yalnız dökme sırasında; boşta yüzey durgun), eğim.
