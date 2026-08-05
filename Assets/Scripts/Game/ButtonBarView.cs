@@ -209,25 +209,13 @@ namespace TubeSort.Game
         /// </summary>
         public void Layout(Camera cam)
         {
-            if (!ready || cam == null) return;
+            if (!ComputePanelPlacement(cam, out float centerY, out float panelH, out float scale)) return;
 
-            float viewH = cam.orthographicSize * 2f;
-            float viewW = viewH * cam.aspect;
-            Vector3 c = cam.transform.position;
-
-            // Ölçeklenmemiş panel boyu (birim); PPU ne olursa olsun sprite.bounds
-            // gerçek dünya boyunu verir, oran hesabı buna dayanır.
-            Vector2 native = panelRenderer.sprite.bounds.size;
-            float scale = WidthFraction * viewW / native.x;
             transform.localScale = Vector3.one * scale;
-
-            float panelH = native.y * scale;
-            float bottom = c.y - viewH * 0.5f;
-            float centerY = bottom + BottomMarginFraction * viewH + panelH * 0.5f;
-            transform.position = new Vector3(c.x, centerY, 0f);
+            transform.position = new Vector3(cam.transform.position.x, centerY, 0f);
 
             // Butonları panel-yerel konumlarına diz + collider'ı sprite'a boyutla.
-            float halfWidth = native.x * 0.5f;
+            float halfWidth = panelRenderer.sprite.bounds.size.x * 0.5f;
             for (int i = 0; i < 3; i++)
             {
                 buttons[i].localScale = Vector3.one;   // panel ölçeğini miras alsın
@@ -236,6 +224,38 @@ namespace TubeSort.Game
                 if (colliders[i] is BoxCollider2D box)
                     box.size = buttonRenderers[i].sprite.bounds.size;   // yerel; sprite'ı tam kaplar
             }
+        }
+
+        /// <summary>Panelin merkez-Y'si, yüksekliği ve ölçeğini kameradan hesaplar
+        /// (Layout ve <see cref="TopEdgeY"/> paylaşır — twin formül kaçınılır).
+        /// Ölçeklenmemiş panel boyu sprite.bounds'tan gelir (PPU'dan bağımsız).
+        /// Hazır değilse false.</summary>
+        private bool ComputePanelPlacement(Camera cam, out float centerY, out float panelH, out float scale)
+        {
+            centerY = 0f;
+            panelH = 0f;
+            scale = 0f;
+            if (!ready || cam == null) return false;
+
+            float viewH = cam.orthographicSize * 2f;
+            float viewW = viewH * cam.aspect;
+
+            Vector2 native = panelRenderer.sprite.bounds.size;
+            scale = WidthFraction * viewW / native.x;
+            panelH = native.y * scale;
+            float bottom = cam.transform.position.y - viewH * 0.5f;
+            centerY = bottom + BottomMarginFraction * viewH + panelH * 0.5f;
+            return true;
+        }
+
+        /// <summary>Çubuğun ÜST kenarının dünya Y'si — tahta yerleşimi bunun
+        /// üstünde kalmalı (BoardView alt bandı buna göre boşaltır). Hazır
+        /// değilse -sonsuz (rezervasyon yok, tahta ekran altına kadar iner).</summary>
+        public float TopEdgeY(Camera cam)
+        {
+            if (!ComputePanelPlacement(cam, out float centerY, out float panelH, out _))
+                return float.NegativeInfinity;
+            return centerY + panelH * 0.5f;
         }
 
         /// <summary>Tüm hakları level başı değerine (3/3/3) döndürür. Yeni level'e

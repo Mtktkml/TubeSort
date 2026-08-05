@@ -939,14 +939,33 @@ namespace TubeSort.Game
         /// levellerde tahta LEVEL başlığının altında kalır.</summary>
         private float BoardCeiling => CameraView.y * TitleFraction - TitleClearance;
 
-        /// <summary>Tahtaya ayrılan alan: yatayda tüm görüş, dikeyde ekran
-        /// altından tavana kadar. FitScale bu alana sığdırır.</summary>
+        /// <summary>Alt aksiyon çubuğu ile tahta arasında bırakılacak pay (dünya
+        /// birimi). Tahta tabanı çubuğun üst kenarının bu kadar üstünde durur.</summary>
+        private const float BottomBandClearance = 0.35f;
+
+        /// <summary>Tahta tabanı, kamera merkezine göre: aksiyon çubuğu varsa onun
+        /// üst kenarının payla üstü, yoksa ekran altı. Uzun tüplü/çok tüplü
+        /// levellerde tahta çubuğun üstünde kalır (panele taşmaz).</summary>
+        private float BoardFloor
+        {
+            get
+            {
+                float screenBottom = -CameraView.y * 0.5f;
+                if (buttonBar == null) return screenBottom;
+
+                float barTop = buttonBar.TopEdgeY(mainCamera) - mainCamera.transform.position.y;
+                return Mathf.Max(screenBottom, barTop + BottomBandClearance);
+            }
+        }
+
+        /// <summary>Tahtaya ayrılan alan: yatayda tüm görüş, dikeyde tabandan
+        /// (BoardFloor) tavana kadar. FitScale bu alana sığdırır.</summary>
         private Vector2 BoardAreaSize =>
-            new Vector2(CameraView.x, BoardCeiling + CameraView.y * 0.5f);
+            new Vector2(CameraView.x, BoardCeiling - BoardFloor);
 
         /// <summary>Ayrılan alanın dikey ortası (kamera merkezine göre) —
         /// tahta buraya ortalanır, ekran merkezine değil.</summary>
-        private float BoardAreaCenterY => (BoardCeiling - CameraView.y * 0.5f) * 0.5f;
+        private float BoardAreaCenterY => (BoardCeiling + BoardFloor) * 0.5f;
 
         /// <summary>Kameranın dünya birimindeki görüş alanı: yerleşimin tek girdisi.</summary>
         private Vector2 CameraView
