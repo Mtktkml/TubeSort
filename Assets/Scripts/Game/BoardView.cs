@@ -1129,8 +1129,9 @@ namespace TubeSort.Game
             selectedIndex = -1;
         }
 
-        /// <summary>Level tamamlanınca kazanma pop-up'ından önceki bekleme (sn):
-        /// oyuncu tamamlanan tahtayı ve damla halkası patlamasını görsün.</summary>
+        /// <summary>Kazanma pop-up'ından önceki KISA nefes (sn). Asıl bekleme
+        /// bu değil: bundan sonra son tüpün tamamlanma efekti (AnyCompletionPlaying)
+        /// bitene kadar da beklenir — pop-up efektin üstüne binmesin.</summary>
         private const float WinPopupDelay = 0.7f;
 
         private void ReportBoardState()
@@ -1197,6 +1198,10 @@ namespace TubeSort.Game
         private IEnumerator ShowWinPopupAfterDelay()
         {
             yield return new WaitForSeconds(WinPopupDelay);
+            // Son tüpün TAMAMLANMA animasyonu (büyülü efekt ~3s) bitene kadar
+            // bekle — pop-up onun üstüne binmesin (sabit sayı yerine gerçek bitiş).
+            while (AnyCompletionPlaying())
+                yield return null;
             if (winPopup == null || winPopup.Visible) yield break;
 
             // YER TUTUCU (bilinçli): hamle/süre henüz sayılmıyor — rastgele
@@ -1211,6 +1216,16 @@ namespace TubeSort.Game
                 $"Süre: {seconds / 60}:{seconds % 60:00}");
 
             winPopup.Show();
+        }
+
+        /// <summary>Herhangi bir tüpün tamamlanma efekti hâlâ oynuyor mu?
+        /// Kazanma pop-up'ı hepsinin bitmesini bekler (bitiş ~3s içinde garanti:
+        /// AnimateCompletion süresi dolunca completionRoutine null olur).</summary>
+        private bool AnyCompletionPlaying()
+        {
+            foreach (TubeView view in tubeViews)
+                if (view != null && view.IsCompletionPlaying) return true;
+            return false;
         }
 
         /// <summary>

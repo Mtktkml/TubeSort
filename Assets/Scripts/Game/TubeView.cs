@@ -200,6 +200,55 @@ namespace TubeSort.Game
         private Vector3 corkRestPosition;
         private bool corkSuppressed;
         private Coroutine corkRoutine;
+        private Coroutine completionRoutine;   // tamamlanma efekti (~3s zarf; halka/spiral/kıvılcım — adım B-F)
+        private float completionProgress;      // 0..1: tamamlanma efekt zarfı (B-F shader'lara gönderir)
+        /// <summary>Tamamlanma efektinin toplam süresi (sn; video ~3s).</summary>
+        private const float CompletionDuration = 3f;
+        /// <summary>Tıpanın düşmeye başladığı efekt ilerlemesi: spiral RiseEnd=0.60'da
+        /// tepeye ulaşır; düşüş ~0.16s (~0.05 progress) sürdüğü için buradan başlarsa
+        /// "tak" anı ~spiral zirvesine denk gelir (adım E re-time).</summary>
+        private const float CorkStartProgress = 0.55f;
+        private static readonly int ProgressId = Shader.PropertyToID("_Progress");
+        private static readonly int FlashId = Shader.PropertyToID("_Flash");
+        private static readonly int CompletionProgressId = Shader.PropertyToID("_CompletionProgress");
+
+        // Tamamlanma efekti quad'ları (koddan; materyalleri TubeView SAHİPLENİR,
+        // OnDestroy temizler — Initialize/BoardView'e her adımda dokunmamak için).
+        // Adım B: dip halkası (büyü çemberi).
+        private SpriteRenderer completionRing;
+        private Material ringMaterial;
+        /// <summary>Dip halkası quad'ı: FullWidth'in bu katı geniş (yassı elips).
+        /// GÖZLE AYARLANABİLİR (boyut/oran/konum).</summary>
+        private const float CompletionRingWidthScale = 1.7f;
+        private const float CompletionRingAspect = 0.42f;   // yükseklik/genişlik (yassı)
+        private const float CompletionRingBaseY = 0.18f;    // dipten yükseklik (dünya birimi)
+
+        // Adım C: ışık spirali (tüpü saran helis, dipten tepeye tırmanır).
+        private SpriteRenderer completionSpiral;
+        private Material spiralMaterial;
+        /// <summary>Spiral quad'ı: FullWidth'in bu katı geniş (helis tüp kenarında
+        /// sarılsın). GÖZLE AYARLANABİLİR.</summary>
+        private const float CompletionSpiralWidthScale = 1.3f;
+
+        // Adım D: yükselen kıvılcımlar (tüp boyunca akan altın yıldızlar).
+        private SpriteRenderer completionSparkles;
+        private Material sparklesMaterial;
+        /// <summary>Kıvılcım quad'ı: FullWidth'in bu katı geniş (tüpü biraz taşsın,
+        /// kenarlarda da parlasın). GÖZLE AYARLANABİLİR.</summary>
+        private const float CompletionSparklesWidthScale = 1.4f;
+
+        // Adım E: oturma flaşı (tıpa "tak" ettiği an yıldız patlaması, tek atışlık).
+        private SpriteRenderer completionFlash;
+        private Material flashMaterial;
+        private Coroutine flashRoutine;
+        /// <summary>Flaş quad'ı: FullWidth'in bu katı (ağzın çevresine taşsın).</summary>
+        private const float CompletionFlashWidthScale = 1.9f;
+        /// <summary>Flaş süresi (sn): tek "tak" patlaması, kısa.</summary>
+        private const float FlashDuration = 0.4f;
+
+        /// <summary>Tamamlanma efekti (~3s büyülü) hâlâ oynuyor mu? Kazanma
+        /// pop-up'ı bunun bitmesini bekler (BoardView).</summary>
+        public bool IsCompletionPlaying => completionRoutine != null;
         /// <summary>İlk Refresh (kurulum) tamamlandı mı? Kurulumda tıpa
         /// animasyonsuz oturur; oyun sırasında belirince animasyon oynar.</summary>
         private bool viewReady;
@@ -245,6 +294,10 @@ namespace TubeSort.Game
             corkSeatedSprite = seatedCorkSprite;
             CreateRing(ringSprite);
             CreateCork(corkSprite);
+            CreateCompletionRing();
+            CreateCompletionSpiral();
+            CreateCompletionSparkles();
+            CreateCompletionFlash();
             CreateClickArea();
             Refresh();
             viewReady = true;
@@ -329,6 +382,122 @@ namespace TubeSort.Game
             // oynamaz, yalnız camsı-mat alt belirir.
             corkRestPosition = new Vector3(0f, CorkSeatedCenterY, 0f);
             go.transform.localPosition = corkRestPosition;
+        }
+
+        /// <summary>
+        /// Tamamlanma efekti — DİP HALKASI (adım B): tüpün dibine, zeminde altın
+        /// parlayan yassı elips (CompletionRing shader). Tüpün çocuğu (onunla
+        /// ölçeklenir), sortingOrder −10 ile içeriğin ARKASINDA (zemin). Gizli
+        /// başlar; SetCompletionProgress yoğunluğu (_Progress) sürer. Materyal
+        /// TubeView'e ait (OnDestroy temizler).
+        /// </summary>
+        private void CreateCompletionRing()
+        {
+            var shader = Resources.Load<Shader>("CompletionRing");
+            if (shader == null)
+            {
+                Debug.LogError("CompletionRing shader bulunamadı (Assets/Resources/CompletionRing.shader).");
+                return;
+            }
+            ringMaterial = new Material(shader);
+
+            var go = new GameObject("CompletionRing");
+            go.transform.SetParent(transform, false);
+            completionRing = go.AddComponent<SpriteRenderer>();
+            completionRing.sprite = unitSprite;
+            completionRing.sharedMaterial = ringMaterial;
+            completionRing.sortingOrder = -10;   // zeminde, sıvının/camın arkasında
+            completionRing.enabled = false;
+
+            float w = FullWidth * CompletionRingWidthScale;
+            go.transform.localScale = new Vector3(w, w * CompletionRingAspect, 1f);
+            go.transform.localPosition = new Vector3(0f, CompletionRingBaseY, 0f);
+        }
+
+        /// <summary>
+        /// Tamamlanma efekti — IŞIK SPİRALİ (adım C): tüpü saran altın helis,
+        /// dipten (0) ağza (RingTop) uzanan quad. Tüpün ÖNÜNDE (sortingOrder 7),
+        /// gizli başlar; _Progress ile tırmanır/söner. Materyal TubeView'e ait.
+        /// </summary>
+        private void CreateCompletionSpiral()
+        {
+            var shader = Resources.Load<Shader>("CompletionSpiral");
+            if (shader == null)
+            {
+                Debug.LogError("CompletionSpiral shader bulunamadı (Assets/Resources/CompletionSpiral.shader).");
+                return;
+            }
+            spiralMaterial = new Material(shader);
+
+            var go = new GameObject("CompletionSpiral");
+            go.transform.SetParent(transform, false);
+            completionSpiral = go.AddComponent<SpriteRenderer>();
+            completionSpiral.sprite = unitSprite;
+            completionSpiral.sharedMaterial = spiralMaterial;
+            completionSpiral.sortingOrder = 7;   // tüpün önünde (cam/tıpa üstünde ışıldar)
+            completionSpiral.enabled = false;
+
+            float h = RingTop;   // dipten ağza
+            go.transform.localScale = new Vector3(FullWidth * CompletionSpiralWidthScale, h, 1f);
+            go.transform.localPosition = new Vector3(0f, h * 0.5f, 0f);
+        }
+
+        /// <summary>
+        /// Tamamlanma efekti — YÜKSELEN KIVILCIMLAR (adım D): tüp boyunca akan
+        /// altın yıldızlar. Spiralle aynı dikey açıklık (dipten RingTop'a), tüpün
+        /// ÖNÜNDE (sortingOrder 8 — spiralin de önünde parıldar). Gizli başlar;
+        /// _Progress ile belirir/söner. Materyal TubeView'e ait.
+        /// </summary>
+        private void CreateCompletionSparkles()
+        {
+            var shader = Resources.Load<Shader>("CompletionSparkles");
+            if (shader == null)
+            {
+                Debug.LogError("CompletionSparkles shader bulunamadı (Assets/Resources/CompletionSparkles.shader).");
+                return;
+            }
+            sparklesMaterial = new Material(shader);
+
+            var go = new GameObject("CompletionSparkles");
+            go.transform.SetParent(transform, false);
+            completionSparkles = go.AddComponent<SpriteRenderer>();
+            completionSparkles.sprite = unitSprite;
+            completionSparkles.sharedMaterial = sparklesMaterial;
+            completionSparkles.sortingOrder = 8;   // spiralin (7) de önünde
+            completionSparkles.enabled = false;
+
+            float h = RingTop;   // dipten ağza (spiralle aynı açıklık)
+            go.transform.localScale = new Vector3(FullWidth * CompletionSparklesWidthScale, h, 1f);
+            go.transform.localPosition = new Vector3(0f, h * 0.5f, 0f);
+        }
+
+        /// <summary>
+        /// Tamamlanma efekti — OTURMA FLAŞI (adım E): tıpa ağza oturduğu an patlayan
+        /// kısa yıldız flaşı. Tıpanın oturduğu yere (CorkSeatedCenterY) merkezli
+        /// kare quad, HER ŞEYİN önünde (sortingOrder 9). Gizli başlar; PlayFlash tek
+        /// atışlık _Flash (0..1) sürer. Materyal TubeView'e ait.
+        /// </summary>
+        private void CreateCompletionFlash()
+        {
+            var shader = Resources.Load<Shader>("CompletionFlash");
+            if (shader == null)
+            {
+                Debug.LogError("CompletionFlash shader bulunamadı (Assets/Resources/CompletionFlash.shader).");
+                return;
+            }
+            flashMaterial = new Material(shader);
+
+            var go = new GameObject("CompletionFlash");
+            go.transform.SetParent(transform, false);
+            completionFlash = go.AddComponent<SpriteRenderer>();
+            completionFlash.sprite = unitSprite;
+            completionFlash.sharedMaterial = flashMaterial;
+            completionFlash.sortingOrder = 9;   // kıvılcımların (8) ve tıpanın (6) önünde
+            completionFlash.enabled = false;
+
+            float w = FullWidth * CompletionFlashWidthScale;   // kare patlama
+            go.transform.localScale = new Vector3(w, w, 1f);
+            go.transform.localPosition = new Vector3(0f, CorkSeatedCenterY, 0f);
         }
 
         /// <summary>
@@ -529,6 +698,18 @@ namespace TubeSort.Game
                 StopCoroutine(corkRoutine);
                 corkRoutine = null;
             }
+            if (completionRoutine != null)
+            {
+                StopCoroutine(completionRoutine);
+                completionRoutine = null;
+                SetCompletionProgress(0f);   // yarıda kalan tamamlanma efektini temizle
+            }
+            if (flashRoutine != null)
+            {
+                StopCoroutine(flashRoutine);
+                flashRoutine = null;
+                if (completionFlash != null) completionFlash.enabled = false;
+            }
 
             if (!shouldCork)
             {
@@ -540,12 +721,15 @@ namespace TubeSort.Game
             cork.transform.localPosition = corkRestPosition;
             cork.transform.localScale = Vector3.one;
 
-            // Oyun sırasında AÇILIRKEN takılma animasyonu; kurulum/kapanışta anlık.
+            // Oyun sırasında AÇILIRKEN tamamlanma efekti (~3s: dip halkası + kıvılcım
+            // + spiral + tıpa + flaş — adım B-F). Kurulum/kapanışta anlık (else).
             if (viewReady)
             {
-                // Ham tıpa düşer, oturunca cork_seated'e geçer (AnimateCorkIn).
+                // Tıpa spiral tepesine dek GİZLİ (AnimateCorkIn belirtip düşürür);
+                // rest pozisyonunda erkenden görünmesin (re-time, adım E).
                 cork.sprite = corkRawSprite;
-                corkRoutine = StartCoroutine(AnimateCorkIn());
+                cork.enabled = false;
+                completionRoutine = StartCoroutine(AnimateCompletion());
             }
             else
             {
@@ -686,6 +870,10 @@ namespace TubeSort.Game
             const float dropDuration = 0.16f;
             const float settleDuration = 0.12f;
 
+            // Re-time (adım E): tıpa spiral tepesine dek gizliydi; şimdi belirip düşer.
+            cork.enabled = true;
+            cork.sprite = corkRawSprite;   // düşerken ham tıpa
+
             float elapsed = 0f;
             while (elapsed < dropDuration)
             {
@@ -698,8 +886,9 @@ namespace TubeSort.Game
             cork.transform.localPosition = corkRestPosition;
 
             // "tak" anı: ham tıpa yerini cork_seated'e bırakır (camsı-mat alt gelir;
-            // aynı 90×97, aynı merkez → tıpa oynamaz).
+            // aynı 90×97, aynı merkez → tıpa oynamaz). Aynı an yıldız flaşı patlar.
             cork.sprite = corkSeatedSprite;
+            flashRoutine = StartCoroutine(PlayFlash());
 
             // Oturma esnemesi: %8, abartısız.
             elapsed = 0f;
@@ -713,6 +902,111 @@ namespace TubeSort.Game
             }
             cork.transform.localScale = Vector3.one;
             corkRoutine = null;
+        }
+
+        /// <summary>Tıpa oturma flaşı (adım E): tek atışlık yıldız patlaması. _Flash'ı
+        /// 0→1 sürer (shader hızlı parlar, genişleyerek söner), sonra quad'ı kapatır.
+        /// Tamamlanma zarfından BAĞIMSIZ (kendi kısa süresi) — "tak" anına demirli.</summary>
+        private IEnumerator PlayFlash()
+        {
+            if (completionFlash == null || flashMaterial == null)
+                yield break;
+
+            completionFlash.enabled = true;
+
+            float elapsed = 0f;
+            while (elapsed < FlashDuration)
+            {
+                elapsed += Time.deltaTime;
+                flashMaterial.SetFloat(FlashId, Mathf.Clamp01(elapsed / FlashDuration));
+                yield return null;
+            }
+
+            completionFlash.enabled = false;
+            flashRoutine = null;
+        }
+
+        /// <summary>
+        /// Tüp TAMAMLANDIĞINDA oynayan büyülü efekt (~3s, videoya sadık): dip
+        /// halkası + yükselen kıvılcım + tüpü saran ışık spirali + tıpa oturuşu +
+        /// yıldız flaşı, sonra sönümlenme. Zarf ilerlemesini (completionProgress
+        /// 0→1) sürer; görsel efektler bu ilerlemeyi shader quad'larına gönderir.
+        /// Tıpa CorkStartProgress'e (spiral tepesi) kadar gizli, sonra düşer ve
+        /// oturunca flaş patlar (adım E). Sıvı içinde kabarcıklar yükselir (F).
+        /// Tortu YOK (kullanıcı isteği).
+        /// </summary>
+        private IEnumerator AnimateCompletion()
+        {
+            bool corkStarted = false;
+
+            float t = 0f;
+            while (t < CompletionDuration)
+            {
+                t += Time.deltaTime;
+                float p = Mathf.Clamp01(t / CompletionDuration);
+                SetCompletionProgress(p);
+
+                // Tıpa spiral tepeye ulaşırken (CorkStartProgress) düşmeye başlar;
+                // "tak" ~spiral zirvesine denk gelir ve oturunca flaş patlar.
+                if (!corkStarted && p >= CorkStartProgress)
+                {
+                    corkStarted = true;
+                    corkRoutine = StartCoroutine(AnimateCorkIn());
+                }
+
+                yield return null;
+            }
+
+            SetCompletionProgress(0f);
+            completionRoutine = null;
+        }
+
+        /// <summary>Tamamlanma efekt zarfını (0..1) günceller ve görsel efektleri
+        /// sürer: dip halkası (B), spiral (C), kıvılcımlar (D) quad'ları (görünürlük
+        /// + _Progress) ve sıvı içi kabarcıklar (F, _CompletionProgress). Flaş (E)
+        /// buradan DEĞİL, "tak" anına demirli ayrı PlayFlash ile.</summary>
+        private void SetCompletionProgress(float p)
+        {
+            completionProgress = p;
+
+            if (completionRing != null)
+            {
+                completionRing.enabled = p > 0.001f;
+                if (ringMaterial != null) ringMaterial.SetFloat(ProgressId, p);
+            }
+            if (completionSpiral != null)
+            {
+                completionSpiral.enabled = p > 0.001f;
+                if (spiralMaterial != null) spiralMaterial.SetFloat(ProgressId, p);
+            }
+            if (completionSparkles != null)
+            {
+                completionSparkles.enabled = p > 0.001f;
+                if (sparklesMaterial != null) sparklesMaterial.SetFloat(ProgressId, p);
+            }
+            SetLiquidCompletion(p);   // sıvı içi kabarcıklar (adım F)
+        }
+
+        /// <summary>Tamamlanma ilerlemesini SIVI shader'ına gönderir (kabarcıklar).
+        /// Property block ile (tüp-tüp): SetSwaySlope kalıbı — mevcut değerleri
+        /// koruyarak yalnız _CompletionProgress'i günceller.</summary>
+        private void SetLiquidCompletion(float p)
+        {
+            if (liquid == null) return;
+            liquid.GetPropertyBlock(properties);
+            properties.SetFloat(CompletionProgressId, p);
+            liquid.SetPropertyBlock(properties);
+        }
+
+        /// <summary>Tamamlanma efekt materyalleri koddan üretildi (TubeView'e
+        /// ait); tüp yok edilince (level geçişi/test) elle temizlenmeli — Unity
+        /// nesnelerini C#'ın çöp toplayıcısı toplamaz.</summary>
+        private void OnDestroy()
+        {
+            if (ringMaterial != null) Destroy(ringMaterial);
+            if (spiralMaterial != null) Destroy(spiralMaterial);
+            if (sparklesMaterial != null) Destroy(sparklesMaterial);
+            if (flashMaterial != null) Destroy(flashMaterial);
         }
 
         /// <summary>Tube'un güncel verisine göre doluluk seviyesinin olması gereken değer.</summary>

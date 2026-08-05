@@ -109,6 +109,9 @@ Shader "TubeSort/Liquid"
             // Level başı çalkantı eğimi (normalize): TubeView sönümleyerek
             // sürer; yüzey ve katmanlar birlikte sallanır.
             float _SwaySlope;
+            // Tamamlanma efekti ilerlemesi (0-1): tüp tamamlanınca TubeView sürer.
+            // >0 iken sıvı içinde yükselen kabarcıklar çizilir (tortu YOK). Boşta 0.
+            float _CompletionProgress;
 
             struct Attributes
             {
@@ -121,6 +124,14 @@ Shader "TubeSort/Liquid"
                 float4 positionCS : SV_POSITION;
                 float2 uv : TEXCOORD0;
             };
+
+            // Kabarcık ızgarası için yalancı-rastgele 2B (hücre → konum + boy + faz).
+            float2 BubbleHash(float2 p)
+            {
+                p = float2(dot(p, float2(127.1, 311.7)),
+                           dot(p, float2(269.5, 183.3)));
+                return frac(sin(p) * 43758.5453123);
+            }
 
             Varyings Vertex(Attributes input)
             {
@@ -352,6 +363,44 @@ Shader "TubeSort/Liquid"
                     (1.0 - rings) * ringMask * 0.5);
 
                 color.rgb = lerp(color.rgb, discColor, inDisc);
+
+                // ── Kabarcıklar (tamamlanma efekti): sıvı içinde dipten yüzeye
+                // yükselen küçük kabarcıklar. Yalnız _CompletionProgress>0 iken ve
+                // yüzeyin ALTINDA (inside). Yüzeye yaklaşınca söner (patlar). TORTU
+                // YOK — sadece yukarı akan kabarcıklar (kullanıcı isteği).
+                if (_CompletionProgress > 0.001 && inside > 0.001)
+                {
+                    // Zarf: efektin ortasında yoğun, başta/sonda sön.
+                    float bubEnv = smoothstep(0.0, 0.15, _CompletionProgress)
+                                 * (1.0 - smoothstep(0.75, 1.0, _CompletionProgress));
+
+                    // Izgara-hash kabarcıklar; hücreler aşağı kayar → yukarı akış.
+                    const float bcols = 4.0;
+                    const float brows = 7.0;
+                    float brise = _Time.y * 0.5 + _CompletionProgress * 0.7;
+                    float2 bg = float2(uv.x * bcols, (uv.y - brise) * brows);
+                    float2 bcell = floor(bg);
+                    float2 bf = frac(bg) - 0.5;
+
+                    float2 bh = BubbleHash(bcell);
+                    float bpresent = step(0.5, bh.x);   // seyreklik
+
+                    // Hücre-yerel konumu dünya oranına çevir → yuvarlak kabarcık.
+                    float2 bq = (bf - (bh - 0.5) * 0.5)
+                        * float2(_BodySize.x / bcols, _BodySize.y / brows);
+                    float bd = length(bq);
+
+                    float bubR = 0.020 + 0.012 * bh.y;   // kabarcık boyu değişir
+                    float bcore = 1.0 - smoothstep(0.0, bubR, bd);
+                    float brim = 1.0 - smoothstep(0.0, 0.008, abs(bd - bubR));
+                    float bub = (bcore * 0.3 + brim) * bpresent;
+
+                    // Yüzeye yaklaşınca sön (üst %10'da patlar).
+                    float bubFade = 1.0 - smoothstep(surface - 0.10, surface, uv.y);
+
+                    float bubAmount = saturate(bub * bubEnv * bubFade) * 0.5;
+                    color.rgb = lerp(color.rgb, float3(1.0, 1.0, 1.0), bubAmount);
+                }
 
                 // Damlacıklar yüzey tonunda: sıvının üstünde kaldıkları yerde
                 // (inside≈0) renk katman döngüsünden gelir, açık tona çekilir.
