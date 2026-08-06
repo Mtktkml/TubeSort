@@ -17,6 +17,7 @@ Shader "TubeSort/CompletionSpiral"
         _RiseEnd ("Tirmanma bitisi (progress)", Range(0, 1)) = 0.68
         _TailLen ("Kuyruk uzunlugu (uv)", Range(0.1, 0.7)) = 0.34
         _BottomAnchor ("Kuyruk dip demiri (uv)", Range(0, 0.2)) = 0.04
+        _SideBlend ("Arka (uzak) yariyi gizle - siluet gecis yumusakligi", Range(0.01, 0.4)) = 0.12
 
         // Script'ten surulur (TubeView). UnityPerMaterial'de OLMALI: yoksa SRP Batcher
         // global sayar, iki tup ayni anda tamamlaninca paylasilir (bkz. CompletionRing).
@@ -60,6 +61,10 @@ Shader "TubeSort/CompletionSpiral"
                 // = landingY/RingTop gonderir. 0 gelirse (ayarsiz) tam tepe: guvenli
                 // varsayilan icin max ile 0.82 tabanla.
                 float _HeadMax;
+                // SARMA: helis acisinin cos'u derinligi verir. cosT>=0 ON (yakin) yari
+                // cizilir; cosT<0 ARKA (uzak) yari GORUNMEZ (cizilmez) -> serit tupun
+                // arkasina gecince kaybolur. _SideBlend siluet kenarinda yumusak kaybolus.
+                float _SideBlend;
             CBUFFER_END
 
             struct Attributes { float4 positionOS : POSITION; float2 uv : TEXCOORD0; };
@@ -129,6 +134,17 @@ Shader "TubeSort/CompletionSpiral"
                 float flow = 0.8 + 0.2 * sin(uv.y * 20.0 - _Time.y * 6.0);
 
                 float intensity = (body * flow * 0.85 + headGlow * 1.25) * env;
+
+                // SARMA: bu satirin (uv.y) helis acisinin cos'u derinligi verir.
+                // cosT>=0 ON (yakin) yari -> gorunur; cosT<0 ARKA (uzak) yari ->
+                // GORUNMEZ (kaybolur). Siluet kenarinda (_SideBlend) yumusak kaybolus.
+                // Boylece serit tupun onunden gecer, arkasina donunce kaybolur, sonraki
+                // yarim-turda onden yeniden belirir (opak silindir sarma hissi).
+                float cosT = cos(uv.y * _Turns * 6.2831853 + anchorPhase);
+                float sideMask = smoothstep(-_SideBlend, _SideBlend, cosT);
+                intensity *= sideMask;
+                if (intensity <= 0.0005)
+                    discard;
 
                 float3 col = _SpiralColor.rgb * intensity;
                 return half4(col, intensity);

@@ -224,7 +224,11 @@ namespace TubeSort.Game
         private const float CompletionRingAspect = 0.42f;   // yükseklik/genişlik (yassı)
         private const float CompletionRingBaseY = 0.18f;    // dipten yükseklik (dünya birimi)
 
-        // Adım C: ışık spirali (tüpü saran helis, dipten tepeye tırmanır).
+        // Adım C: ışık spirali (tüpü saran helis, dipten tepeye tırmanır). Yalnız
+        // ÖNE bakan yarısı (kameraya yakın, cos>=0) çizilir; ARKA yarısı (uzak,
+        // cos<0) GÖRÜNMEZ (çizilmez) → şerit tüpün arkasına geçince kaybolur, sonraki
+        // yarım-turda önden yeniden belirir; opak bir silindiri sarıyormuş hissi verir
+        // (shader'da _SideBlend siluet kenarında yumuşak kaybolma sağlar).
         private SpriteRenderer completionSpiral;
         private Material spiralMaterial;
         /// <summary>Spiral quad'ı: FullWidth'in bu katı geniş (helis tüp kenarında
