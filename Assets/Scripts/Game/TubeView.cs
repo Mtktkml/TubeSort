@@ -253,7 +253,7 @@ namespace TubeSort.Game
         private Material sparklesMaterial;
         /// <summary>Kıvılcım quad'ı: FullWidth'in bu katı geniş (tüpü biraz taşsın,
         /// kenarlarda da parlasın). GÖZLE AYARLANABİLİR.</summary>
-        private const float CompletionSparklesWidthScale = 1.4f;
+        private const float CompletionSparklesWidthScale = 1.3f;   // şeritle AYNI (yol örtüşsün)
 
         // Collar yıldızı: yükselen şeridin ucu collar sağ-köşeye varınca orada
         // patlayan tek 4-uçlu yıldız (eski "flaş" yeniden amaçlandı — büyüyüp
