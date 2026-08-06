@@ -12,8 +12,11 @@ Shader "TubeSort/CompletionFlash"
         _CoreTight ("Cekirdek sikiligi", Float) = 13
         _RayLen ("Isin uzunlugu (eksende)", Float) = 2.0
         _RayThin ("Isin inceligi (eksene dik)", Float) = 55
-        _StarStart ("Belirme (progress)", Range(0, 1)) = 0.66
-        _StarPeak ("Tepe (progress)", Range(0, 1)) = 0.76
+        // _StarStart, seridin basi collar sag-uste VARDIGI ana (spiral _RiseEnd=0.68)
+        // demirlenir: bas orada dururken yildiz tam o noktada patlar. Inspector'dan
+        // ince ayar yapilabilir (spiral _RiseEnd ile birlikte).
+        _StarStart ("Belirme (progress)", Range(0, 1)) = 0.68
+        _StarPeak ("Tepe (progress)", Range(0, 1)) = 0.78
         _StarEnd ("Bitis (progress)", Range(0, 1)) = 0.95
 
         // Script'ten surulur (TubeView). UnityPerMaterial'de OLMALI: yoksa SRP Batcher

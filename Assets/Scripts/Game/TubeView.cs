@@ -205,9 +205,10 @@ namespace TubeSort.Game
         /// <summary>Tamamlanma efektinin toplam süresi (sn; video ~3s).</summary>
         private const float CompletionDuration = 3f;
         /// <summary>Tıpanın DÖNEREK inmeye başladığı efekt ilerlemesi: iniş ~0.45s
-        /// (~0.15 progress) sürer, "tak" ~0.57'ye denk gelir — şerit collar'a
-        /// varmadan (0.68) hemen önce oturur, sonra yıldız patlar (referans sırası).</summary>
-        private const float CorkStartProgress = 0.42f;
+        /// (~0.15 progress) sürer, "tak" ~0.78'e denk gelir — şerit sağ-üste varıp
+        /// (0.68) beklerken tıpa TAM PARLAMA anında (yıldız tepesi _StarPeak=0.78)
+        /// oturur (kullanıcı isteği: tıpa parlamayla aynı anda takılsın).</summary>
+        private const float CorkStartProgress = 0.63f;
         private static readonly int ProgressId = Shader.PropertyToID("_Progress");
         private static readonly int HeadMaxId = Shader.PropertyToID("_HeadMax");
         private static readonly int CompletionProgressId = Shader.PropertyToID("_CompletionProgress");
@@ -244,6 +245,18 @@ namespace TubeSort.Game
         private Material flashMaterial;
         /// <summary>Yıldız quad'ı: FullWidth'in bu katı (yerel yıldız kanvası).</summary>
         private const float CompletionStarWidthScale = 0.95f;
+
+        /// <summary>Yükselen şeridin ucunun VE collar yıldızının indiği ORTAK nokta
+        /// (collar SAĞ-ÜST köşesi). Şeridin başı helisin DOĞAL sağ-tepesinde
+        /// (uv.x = 0.5 + genlik) biter; yıldız TAM oraya konur → ikisi tek kaynaktan
+        /// türediği için her kapasitede birebir çakışır (dikey GlassTop'la ölçeklenir).
+        /// GÖZLE AYARLANABİLİR (Y: collar bandı içi oran; X: swirl genliğiyle gelir).
+        /// NOT: CompletionSwirlAmplitude, CompletionSpiral.shader'daki _Amplitude ile
+        /// TWIN olmalı (0.30) — yıldız helisin doğal sağ-tepesine oturur.</summary>
+        private const float CompletionSwirlAmplitude = 0.30f;
+        private const float CompletionLandingYFactor = 0.32f;
+        private float CompletionLandingX => CompletionSwirlAmplitude * (FullWidth * CompletionSpiralWidthScale);
+        private float CompletionLandingY => GlassTop + RingHeight * CompletionLandingYFactor;
 
         /// <summary>Tamamlanma efekti (~3s büyülü) hâlâ oynuyor mu? Kazanma
         /// pop-up'ı bunun bitmesini bekler (BoardView).</summary>
@@ -427,9 +440,11 @@ namespace TubeSort.Game
                 return;
             }
             spiralMaterial = new Material(shader);
-            // Şerit başı collar sağ-altında (GlassTop) dursun, mouth'un üstüne
-            // çıkmasın: quad 0..RingTop olduğundan oran GlassTop/RingTop.
-            spiralMaterial.SetFloat(HeadMaxId, RingTop > 0f ? GlassTop / RingTop : 0.82f);
+            // Şeridin başı collar SAĞ-ÜST köşesine iner: quad 0..RingTop olduğundan
+            // dikey hedef oranı landingY/RingTop. Yatay: shader fazı DEMİRLER, baş
+            // helisin DOĞAL sağ-tepesinde (uv.x = 0.5 + genlik) durur — yıldız da tam
+            // orada (CompletionLandingX). Yol değişmez, ani dönüş yok. Her kapasitede.
+            spiralMaterial.SetFloat(HeadMaxId, RingTop > 0f ? CompletionLandingY / RingTop : 0.82f);
 
             var go = new GameObject("CompletionSpiral");
             go.transform.SetParent(transform, false);
@@ -459,8 +474,8 @@ namespace TubeSort.Game
                 return;
             }
             sparklesMaterial = new Material(shader);
-            // Işıltılar şerit başını takip etsin: aynı head-cap oranı.
-            sparklesMaterial.SetFloat(HeadMaxId, RingTop > 0f ? GlassTop / RingTop : 0.82f);
+            // Işıltılar şerit başını takip etsin: şeritle AYNI head-cap (landingY oranı).
+            sparklesMaterial.SetFloat(HeadMaxId, RingTop > 0f ? CompletionLandingY / RingTop : 0.82f);
 
             var go = new GameObject("CompletionSparkles");
             go.transform.SetParent(transform, false);
@@ -501,11 +516,9 @@ namespace TubeSort.Game
 
             float w = FullWidth * CompletionStarWidthScale;   // yerel yıldız kanvası
             go.transform.localScale = new Vector3(w, w, 1f);
-            // Collar SAĞ-ALT köşesi: şeridin ucunun durduğu yer. RingHalfWidth sağ
-            // kenar; GlassTop collar dibi (yıldız onun biraz üstünde).
-            float starX = RingHalfWidth * 0.72f;
-            float starY = GlassTop + RingHeight * 0.32f;
-            go.transform.localPosition = new Vector3(starX, starY, 0f);
+            // Şeridin ucunun indiği ORTAK nokta (CompletionLandingX/Y): yıldız tam
+            // ORADA patlar → şeridin başıyla her kapasitede birebir çakışır.
+            go.transform.localPosition = new Vector3(CompletionLandingX, CompletionLandingY, 0f);
         }
 
         /// <summary>
@@ -935,8 +948,9 @@ namespace TubeSort.Game
                 float p = Mathf.Clamp01(t / CompletionDuration);
                 SetCompletionProgress(p);
 
-                // Tıpa CorkStartProgress'te dönerek düşmeye başlar; "tak" ~0.57'ye
-                // denk gelir (şerit collar'a 0.68'de varmadan hemen önce oturur).
+                // Tıpa CorkStartProgress'te dönerek düşmeye başlar; "tak" ~0.78'e
+                // denk gelir — şerit sağ-üste varıp beklerken tıpa TAM PARLAMA
+                // (yıldız tepesi) anında oturur.
                 if (!corkStarted && p >= CorkStartProgress)
                 {
                     corkStarted = true;

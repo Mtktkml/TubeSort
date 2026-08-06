@@ -13,7 +13,6 @@ Shader "TubeSort/CompletionSpiral"
         _Amplitude ("Yatay genlik (uv)", Range(0.1, 0.5)) = 0.30
         _Width ("Serit kalinligi (uv)", Range(0.01, 0.2)) = 0.055
         _Softness ("Yumusaklik", Range(0.005, 0.2)) = 0.06
-        _SpinSpeed ("Donme hizi", Float) = 1.5
         _RiseStart ("Tirmanma baslangici (progress)", Range(0, 1)) = 0.12
         _RiseEnd ("Tirmanma bitisi (progress)", Range(0, 1)) = 0.68
         _TailLen ("Kuyruk uzunlugu (uv)", Range(0.1, 0.7)) = 0.34
@@ -52,14 +51,13 @@ Shader "TubeSort/CompletionSpiral"
                 float _Amplitude;
                 float _Width;
                 float _Softness;
-                float _SpinSpeed;
                 float _RiseStart;
                 float _RiseEnd;
                 float _TailLen;
                 float _BottomAnchor;
                 float _Progress;
-                // Basin ulasabilecegi en yuksek uv.y (collar sag-alti orani); TubeView
-                // = GlassTop/RingTop gonderir. 0 gelirse (ayarsiz) tam tepe: guvenli
+                // Basin ulasabilecegi en yuksek uv.y (collar sag-usti orani); TubeView
+                // = landingY/RingTop gonderir. 0 gelirse (ayarsiz) tam tepe: guvenli
                 // varsayilan icin max ile 0.82 tabanla.
                 float _HeadMax;
             CBUFFER_END
@@ -89,9 +87,15 @@ Shader "TubeSort/CompletionSpiral"
                 // Tirmanan bas: collar'da (headMax) durur.
                 float head = smoothstep(_RiseStart, _RiseEnd, _Progress) * headMax;
 
-                // Helis: serit merkezi x (sarilma), zamanla doner.
+                // Helis: serit merkezi x. Faz DEMIRLI (zamanla donme YOK): bas
+                // (uv.y = _HeadMax) tam sag-tepede (sin = +1) bitecek sekilde sabit
+                // faz secilir. Boylece komet YOLUNU degistirmeden dogal olarak
+                // sag-uste kivrilip ORADA durur (ani duzeltme/donus yok). _Turns
+                // kivrim sikligini (iki kivrim arasi mesafeyi) belirler; faz, tepeyi
+                // her _Turns/kapasitede saga sabitler. Yildiz da tam o noktada (TubeView).
+                float anchorPhase = 1.5707963 - _HeadMax * _Turns * 6.2831853;
                 float helixX = 0.5 + _Amplitude
-                    * sin(uv.y * _Turns * 6.2831853 + _Time.y * _SpinSpeed);
+                    * sin(uv.y * _Turns * 6.2831853 + anchorPhase);
                 // Kuyruk tabani: dipte bir noktada demirli (BottomAnchor); bas
                 // yeterince yukselince kalkar (komet yukselirken dipten kopar).
                 float tailBottom = max(head - _TailLen, _BottomAnchor);
