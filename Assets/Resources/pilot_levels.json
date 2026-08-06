@@ -17,8 +17,8 @@
       "label": "2",
       "capacity": 4,
       "tubes": [
-        "0,0",
-        "0,0"
+        "2,2",
+        "2,2"
       ],
       "shortest": 1,
       "states": 1,
