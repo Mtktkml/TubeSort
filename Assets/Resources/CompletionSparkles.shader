@@ -16,7 +16,7 @@ Shader "TubeSort/CompletionSparkles"
         _Amplitude ("Yatay genlik (SERITLE AYNI, 0.38)", Range(0.1, 0.6)) = 0.38
         _SparkOffset ("Seridin DISINA offset (uv)", Range(0, 0.2)) = 0.07
         _RiseStart ("Baslangic (progress)", Range(0, 1)) = 0.12
-        _RiseEnd ("Bitis (progress)", Range(0, 1)) = 0.68
+        _RiseEnd ("Bitis (progress)", Range(0, 1)) = 0.78
 
         // Script'ten surulur (TubeView). UnityPerMaterial'de OLMALI (SRP Batcher).
         [HideInInspector] _Progress ("Progress (script)", Float) = 0

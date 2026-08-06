@@ -12,7 +12,7 @@ Shader "TubeSort/CompletionSpiral"
         _Width ("Serit kalinligi (uv)", Range(0.01, 0.2)) = 0.055
         _Softness ("Yumusaklik", Range(0.005, 0.2)) = 0.06
         _RiseStart ("Tirmanma baslangici (progress)", Range(0, 1)) = 0.12
-        _RiseEnd ("Tirmanma bitisi (progress)", Range(0, 1)) = 0.68
+        _RiseEnd ("Tirmanma bitisi (progress)", Range(0, 1)) = 0.78
         _TailLen ("Kuyruk uzunlugu (uv)", Range(0.1, 0.7)) = 0.34
         _BottomAnchor ("Kuyruk dip demiri (uv)", Range(0, 0.2)) = 0.04
 
@@ -77,8 +77,10 @@ Shader "TubeSort/CompletionSpiral"
             {
                 // Serit ANCAK kendi tirmanma zamani (_RiseStart) gelince gorunur -> tup
                 // tamamlanir tamamlanmaz erken FLAS/gorunme YOK. Sonra soner.
+                // Belir (_RiseStart'ta); tepeye varinca (0.78) PARLAMAYLA BIRLIKTE hizli
+                // sonup dagilir (0.78->0.88), yildiz bitmeden (0.92) gider -> takilmaz.
                 float env = smoothstep(_RiseStart, _RiseStart + 0.06, _Progress)
-                          * (1.0 - smoothstep(0.72, 0.90, _Progress));
+                          * (1.0 - smoothstep(0.78, 0.88, _Progress));
                 if (env <= 0.001)
                     discard;
 
@@ -101,7 +103,9 @@ Shader "TubeSort/CompletionSpiral"
                 float s = saturate((uv.y - tailBottom) / tailLen);
 
                 // Genislik ucta 0'a daralir -> KALEM UCU gibi sivri baslangic.
-                float wProfile = smoothstep(0.0, 0.25, s);
+                // Genislik IKI UCTA da 0'a daralir -> kalem-ucu sivri kuyruk VE sivri
+                // BAS (bas artik DUZ YATAY KESIK degil; sivrilerek biter -> dogal).
+                float wProfile = smoothstep(0.0, 0.2, s) * (1.0 - smoothstep(0.72, 1.0, s));
                 float halfW = _Width * wProfile;
                 float edge = _Softness * wProfile + 0.004;
                 float dx = abs(uv.x - helixX);
@@ -115,9 +119,12 @@ Shader "TubeSort/CompletionSpiral"
                 float lengthBright = 0.3 + 0.7 * s;
                 float body = ribbon * band * lengthBright;
 
-                // Parlak KOMET BASI: bas hizasinda keskin parlama.
-                float hd = (uv.y - head) / 0.045;
-                float headGlow = ribbon * exp(-hd * hd);
+                // Parlak KOMET BASI: bas NOKTASINDA (headX, head) YUVARLAK blob (sivri
+                // govde ucunun ustune biner -> duz cizgi degil, dogal kubbe bas).
+                float headX = 0.5 + _Amplitude
+                    * sin(head * _Turns * 6.2831853 + anchorPhase);
+                float2 toHead = float2(uv.x - headX, uv.y - head);
+                float headGlow = exp(-dot(toHead, toHead) / (0.035 * 0.035));
 
                 // Akis parlamasi.
                 float flow = 0.8 + 0.2 * sin(uv.y * 20.0 - _Time.y * 6.0);
