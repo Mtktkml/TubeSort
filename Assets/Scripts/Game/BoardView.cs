@@ -301,17 +301,20 @@ namespace TubeSort.Game
                     new PopupView.PopupAction
                     {
                         Label = "Geri Al", IconPath = "UI/icon_undo",
-                        AdBadge = true, OnClick = UndoLastMove,
+                        AdBadge = true,
+                        OnClick = () => HandleRecoveryAction(ButtonBarView.ActionKind.Undo),
                     },
                     new PopupView.PopupAction
                     {
                         Label = "+1 Tüp", IconPath = "UI/icon_add_tube",
-                        AdBadge = true, OnClick = AddEmptyTube,
+                        AdBadge = true,
+                        OnClick = () => HandleRecoveryAction(ButtonBarView.ActionKind.AddTube),
                     },
                     new PopupView.PopupAction
                     {
                         Label = "Baştan Al", IconPath = "UI/icon_restart",
-                        AdBadge = true, OnClick = RestartLevel,
+                        AdBadge = true,
+                        OnClick = () => HandleRecoveryAction(ButtonBarView.ActionKind.Shuffle),
                     },
                 });
         }
@@ -531,7 +534,7 @@ namespace TubeSort.Game
         /// yok sayılır. Tıpa (varsa) anında kalkar ama sıvı ışınlanmaz:
         /// seviyeler dökmedeki gibi kademeli akar. Kayma/eğilme/akış görseli
         /// yok — geri alma bir hamle değil düzeltmedir. Çıkmaz pop-up'ı ve aksiyon
-        /// çubuğu aynı kapıyı kullanır (çubuk ayrıca hak tüketir).
+        /// çubuğu aynı kapıyı kullanır; ikisi de hak tüketir (pop-up hak 0'da da kurtarır).
         /// </summary>
         public void UndoLastMove() => TryUndoLastMove();
 
@@ -1065,7 +1068,8 @@ namespace TubeSort.Game
         /// tüketir (boşa tıklama — ör. animasyon sürerken — hak yakmaz). Shuffle
         /// şimdilik restart'a bağlı (gerçek karıştırma sonra); prev/skip nav
         /// kaldırıldı — level gezinme yalnız kazanma pop-up'ıyla. Çıkmaz
-        /// pop-up'ındaki kurtarma butonları bu haklara dokunmaz (ayrı emniyet).</summary>
+        /// pop-up'ındaki kurtarma butonları da aynı hakları tüketir
+        /// (HandleRecoveryAction; fark: pop-up hak 0'da da kurtarır).</summary>
         private void HandleBarAction(ButtonBarView.ActionKind action)
         {
             // Aksiyon butonları şu hâllerde İŞLEVSİZ olur (tıklama yok sayılır ama
@@ -1088,6 +1092,26 @@ namespace TubeSort.Game
             }
 
             if (used) buttonBar.ConsumeRight(action);
+        }
+
+        /// <summary>Çıkmaz pop-up'ındaki kurtarma butonunun işi. Çubukla AYNI Try* +
+        /// ConsumeRight yolunu kullanır (kullanıcı isteği: pop-up seçimi de hak
+        /// tüketsin). Kritik fark: pop-up HER ZAMAN kurtarır — Try* haktan bağımsız
+        /// çalışır ve ConsumeRight hak 0'da no-op olduğundan (ButtonBarView), hak
+        /// bitse bile aksiyon iş görür; çıkmazdan çıkış garantisi (soft-lock önlemi)
+        /// korunur, yalnız sayaç hak varken düşer.</summary>
+        private void HandleRecoveryAction(ButtonBarView.ActionKind action)
+        {
+            bool used;
+            switch (action)
+            {
+                case ButtonBarView.ActionKind.Undo: used = TryUndoLastMove(); break;
+                case ButtonBarView.ActionKind.Shuffle: used = TryRestartLevel(); break;
+                case ButtonBarView.ActionKind.AddTube: used = TryAddEmptyTube(); break;
+                default: return;
+            }
+
+            if (used && buttonBar != null) buttonBar.ConsumeRight(action);
         }
 
         private void HandleTubeClick(int index)
