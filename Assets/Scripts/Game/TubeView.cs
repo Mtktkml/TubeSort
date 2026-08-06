@@ -200,6 +200,71 @@ namespace TubeSort.Game
         private Vector3 corkRestPosition;
         private bool corkSuppressed;
         private Coroutine corkRoutine;
+        private Coroutine completionRoutine;   // tamamlanma efekti (~3s zarf; halka/spiral/kıvılcım — adım B-F)
+        private float completionProgress;      // 0..1: tamamlanma efekt zarfı (B-F shader'lara gönderir)
+        /// <summary>Tamamlanma efektinin toplam süresi (sn; video ~3s).</summary>
+        private const float CompletionDuration = 3f;
+        /// <summary>Tıpanın DÖNEREK inmeye başladığı efekt ilerlemesi: iniş ~0.45s
+        /// (~0.15 progress) sürer, "tak" ~0.78'e denk gelir — şerit sağ-üste varıp
+        /// (0.68) beklerken tıpa TAM PARLAMA anında (yıldız tepesi _StarPeak=0.78)
+        /// oturur (kullanıcı isteği: tıpa parlamayla aynı anda takılsın).</summary>
+        private const float CorkStartProgress = 0.63f;
+        private static readonly int ProgressId = Shader.PropertyToID("_Progress");
+        private static readonly int HeadMaxId = Shader.PropertyToID("_HeadMax");
+        private static readonly int CompletionProgressId = Shader.PropertyToID("_CompletionProgress");
+
+        // Tamamlanma efekti quad'ları (koddan; materyalleri TubeView SAHİPLENİR,
+        // OnDestroy temizler — Initialize/BoardView'e her adımda dokunmamak için).
+        // Adım B: dip halkası (büyü çemberi).
+        private SpriteRenderer completionRing;
+        private Material ringMaterial;
+        /// <summary>Dip halkası quad'ı: FullWidth'in bu katı geniş (yassı elips).
+        /// GÖZLE AYARLANABİLİR (boyut/oran/konum).</summary>
+        private const float CompletionRingWidthScale = 1.7f;
+        private const float CompletionRingAspect = 0.42f;   // yükseklik/genişlik (yassı)
+        private const float CompletionRingBaseY = 0.18f;    // dipten yükseklik (dünya birimi)
+
+        // Adım C: ışık spirali (tüpü saran helis, dipten tepeye tırmanır). Yalnız
+        // ÖNE bakan yarısı (kameraya yakın, cos>=0) çizilir; ARKA yarısı (uzak,
+        // cos<0) GÖRÜNMEZ (çizilmez) → şerit tüpün arkasına geçince kaybolur, sonraki
+        // yarım-turda önden yeniden belirir; opak bir silindiri sarıyormuş hissi verir
+        // (shader'da _SideBlend siluet kenarında yumuşak kaybolma sağlar).
+        private SpriteRenderer completionSpiral;
+        private Material spiralMaterial;
+        /// <summary>Spiral quad'ı: FullWidth'in bu katı geniş (helis tüp kenarında
+        /// sarılsın). GÖZLE AYARLANABİLİR.</summary>
+        private const float CompletionSpiralWidthScale = 1.3f;
+
+        // Adım D: yükselen kıvılcımlar (tüp boyunca akan altın yıldızlar).
+        private SpriteRenderer completionSparkles;
+        private Material sparklesMaterial;
+        /// <summary>Kıvılcım quad'ı: FullWidth'in bu katı geniş (tüpü biraz taşsın,
+        /// kenarlarda da parlasın). GÖZLE AYARLANABİLİR.</summary>
+        private const float CompletionSparklesWidthScale = 1.4f;
+
+        // Collar yıldızı: yükselen şeridin ucu collar sağ-köşeye varınca orada
+        // patlayan tek 4-uçlu yıldız (eski "flaş" yeniden amaçlandı — büyüyüp
+        // dikdörtgen olan flaş kaldırıldı). _Progress zarfıyla sürülür.
+        private SpriteRenderer completionFlash;
+        private Material flashMaterial;
+        /// <summary>Yıldız quad'ı: FullWidth'in bu katı (yerel yıldız kanvası).</summary>
+        private const float CompletionStarWidthScale = 0.95f;
+
+        /// <summary>Yükselen şeridin ucunun VE collar yıldızının indiği ORTAK nokta
+        /// (collar SAĞ-ÜST köşesi). Şeridin başı helisin DOĞAL sağ-tepesinde
+        /// (uv.x = 0.5 + genlik) biter; yıldız TAM oraya konur → ikisi tek kaynaktan
+        /// türediği için her kapasitede birebir çakışır (dikey GlassTop'la ölçeklenir).
+        /// GÖZLE AYARLANABİLİR (Y: collar bandı içi oran; X: swirl genliğiyle gelir).
+        /// NOT: CompletionSwirlAmplitude, CompletionSpiral.shader'daki _Amplitude ile
+        /// TWIN olmalı (0.30) — yıldız helisin doğal sağ-tepesine oturur.</summary>
+        private const float CompletionSwirlAmplitude = 0.30f;
+        private const float CompletionLandingYFactor = 0.32f;
+        private float CompletionLandingX => CompletionSwirlAmplitude * (FullWidth * CompletionSpiralWidthScale);
+        private float CompletionLandingY => GlassTop + RingHeight * CompletionLandingYFactor;
+
+        /// <summary>Tamamlanma efekti (~3s büyülü) hâlâ oynuyor mu? Kazanma
+        /// pop-up'ı bunun bitmesini bekler (BoardView).</summary>
+        public bool IsCompletionPlaying => completionRoutine != null;
         /// <summary>İlk Refresh (kurulum) tamamlandı mı? Kurulumda tıpa
         /// animasyonsuz oturur; oyun sırasında belirince animasyon oynar.</summary>
         private bool viewReady;
@@ -245,6 +310,10 @@ namespace TubeSort.Game
             corkSeatedSprite = seatedCorkSprite;
             CreateRing(ringSprite);
             CreateCork(corkSprite);
+            CreateCompletionRing();
+            CreateCompletionSpiral();
+            CreateCompletionSparkles();
+            CreateCompletionFlash();
             CreateClickArea();
             Refresh();
             viewReady = true;
@@ -329,6 +398,131 @@ namespace TubeSort.Game
             // oynamaz, yalnız camsı-mat alt belirir.
             corkRestPosition = new Vector3(0f, CorkSeatedCenterY, 0f);
             go.transform.localPosition = corkRestPosition;
+        }
+
+        /// <summary>
+        /// Tamamlanma efekti — DİP HALKASI (adım B): tüpün dibine, zeminde altın
+        /// parlayan yassı elips (CompletionRing shader). Tüpün çocuğu (onunla
+        /// ölçeklenir), sortingOrder −10 ile içeriğin ARKASINDA (zemin). Gizli
+        /// başlar; SetCompletionProgress yoğunluğu (_Progress) sürer. Materyal
+        /// TubeView'e ait (OnDestroy temizler).
+        /// </summary>
+        private void CreateCompletionRing()
+        {
+            var shader = Resources.Load<Shader>("CompletionRing");
+            if (shader == null)
+            {
+                Debug.LogError("CompletionRing shader bulunamadı (Assets/Resources/CompletionRing.shader).");
+                return;
+            }
+            ringMaterial = new Material(shader);
+
+            var go = new GameObject("CompletionRing");
+            go.transform.SetParent(transform, false);
+            completionRing = go.AddComponent<SpriteRenderer>();
+            completionRing.sprite = unitSprite;
+            completionRing.sharedMaterial = ringMaterial;
+            completionRing.sortingOrder = -10;   // zeminde, sıvının/camın arkasında
+            completionRing.enabled = false;
+
+            float w = FullWidth * CompletionRingWidthScale;
+            go.transform.localScale = new Vector3(w, w * CompletionRingAspect, 1f);
+            go.transform.localPosition = new Vector3(0f, CompletionRingBaseY, 0f);
+        }
+
+        /// <summary>
+        /// Tamamlanma efekti — IŞIK SPİRALİ (adım C): tüpü saran altın helis,
+        /// dipten (0) ağza (RingTop) uzanan quad. Tüpün ÖNÜNDE (sortingOrder 7),
+        /// gizli başlar; _Progress ile tırmanır/söner. Materyal TubeView'e ait.
+        /// </summary>
+        private void CreateCompletionSpiral()
+        {
+            var shader = Resources.Load<Shader>("CompletionSpiral");
+            if (shader == null)
+            {
+                Debug.LogError("CompletionSpiral shader bulunamadı (Assets/Resources/CompletionSpiral.shader).");
+                return;
+            }
+            spiralMaterial = new Material(shader);
+            // Şeridin başı collar SAĞ-ÜST köşesine iner: quad 0..RingTop olduğundan
+            // dikey hedef oranı landingY/RingTop. Yatay: shader fazı DEMİRLER, baş
+            // helisin DOĞAL sağ-tepesinde (uv.x = 0.5 + genlik) durur — yıldız da tam
+            // orada (CompletionLandingX). Yol değişmez, ani dönüş yok. Her kapasitede.
+            spiralMaterial.SetFloat(HeadMaxId, RingTop > 0f ? CompletionLandingY / RingTop : 0.82f);
+
+            var go = new GameObject("CompletionSpiral");
+            go.transform.SetParent(transform, false);
+            completionSpiral = go.AddComponent<SpriteRenderer>();
+            completionSpiral.sprite = unitSprite;
+            completionSpiral.sharedMaterial = spiralMaterial;
+            completionSpiral.sortingOrder = 7;   // tüpün önünde (cam/tıpa üstünde ışıldar)
+            completionSpiral.enabled = false;
+
+            float h = RingTop;   // dipten ağza
+            go.transform.localScale = new Vector3(FullWidth * CompletionSpiralWidthScale, h, 1f);
+            go.transform.localPosition = new Vector3(0f, h * 0.5f, 0f);
+        }
+
+        /// <summary>
+        /// Tamamlanma efekti — YÜKSELEN KIVILCIMLAR (adım D): tüp boyunca akan
+        /// altın yıldızlar. Spiralle aynı dikey açıklık (dipten RingTop'a), tüpün
+        /// ÖNÜNDE (sortingOrder 8 — spiralin de önünde parıldar). Gizli başlar;
+        /// _Progress ile belirir/söner. Materyal TubeView'e ait.
+        /// </summary>
+        private void CreateCompletionSparkles()
+        {
+            var shader = Resources.Load<Shader>("CompletionSparkles");
+            if (shader == null)
+            {
+                Debug.LogError("CompletionSparkles shader bulunamadı (Assets/Resources/CompletionSparkles.shader).");
+                return;
+            }
+            sparklesMaterial = new Material(shader);
+            // Işıltılar şerit başını takip etsin: şeritle AYNI head-cap (landingY oranı).
+            sparklesMaterial.SetFloat(HeadMaxId, RingTop > 0f ? CompletionLandingY / RingTop : 0.82f);
+
+            var go = new GameObject("CompletionSparkles");
+            go.transform.SetParent(transform, false);
+            completionSparkles = go.AddComponent<SpriteRenderer>();
+            completionSparkles.sprite = unitSprite;
+            completionSparkles.sharedMaterial = sparklesMaterial;
+            completionSparkles.sortingOrder = 8;   // spiralin (7) de önünde
+            completionSparkles.enabled = false;
+
+            float h = RingTop;   // dipten ağza (spiralle aynı açıklık)
+            go.transform.localScale = new Vector3(FullWidth * CompletionSparklesWidthScale, h, 1f);
+            go.transform.localPosition = new Vector3(0f, h * 0.5f, 0f);
+        }
+
+        /// <summary>
+        /// Tamamlanma efekti — COLLAR YILDIZI: yükselen şeridin ucu collar sağ-alt
+        /// köşeye varınca ORADA patlayan tek 4-uçlu yıldız (referans). Collar sağ
+        /// kenarına konumlu yerel kare quad, HER ŞEYİN önünde (sortingOrder 9).
+        /// Gizli başlar; SetCompletionProgress _Progress sürer (geç zarf ~0.66-0.95).
+        /// </summary>
+        private void CreateCompletionFlash()
+        {
+            var shader = Resources.Load<Shader>("CompletionFlash");
+            if (shader == null)
+            {
+                Debug.LogError("CompletionFlash shader bulunamadı (Assets/Resources/CompletionFlash.shader).");
+                return;
+            }
+            flashMaterial = new Material(shader);
+
+            var go = new GameObject("CompletionStar");
+            go.transform.SetParent(transform, false);
+            completionFlash = go.AddComponent<SpriteRenderer>();
+            completionFlash.sprite = unitSprite;
+            completionFlash.sharedMaterial = flashMaterial;
+            completionFlash.sortingOrder = 9;   // kıvılcımların (8) ve tıpanın (6) önünde
+            completionFlash.enabled = false;
+
+            float w = FullWidth * CompletionStarWidthScale;   // yerel yıldız kanvası
+            go.transform.localScale = new Vector3(w, w, 1f);
+            // Şeridin ucunun indiği ORTAK nokta (CompletionLandingX/Y): yıldız tam
+            // ORADA patlar → şeridin başıyla her kapasitede birebir çakışır.
+            go.transform.localPosition = new Vector3(CompletionLandingX, CompletionLandingY, 0f);
         }
 
         /// <summary>
@@ -529,23 +723,34 @@ namespace TubeSort.Game
                 StopCoroutine(corkRoutine);
                 corkRoutine = null;
             }
+            if (completionRoutine != null)
+            {
+                StopCoroutine(completionRoutine);
+                completionRoutine = null;
+                SetCompletionProgress(0f);   // yarıda kalan efekti temizle (yıldız dahil)
+            }
 
             if (!shouldCork)
             {
                 cork.enabled = false;   // tıpa kalktı (yaka=ring zaten hep açık)
+                cork.transform.localRotation = Quaternion.identity;   // yarım kalan dönme sıfırlansın
                 return;
             }
 
             cork.enabled = true;
             cork.transform.localPosition = corkRestPosition;
             cork.transform.localScale = Vector3.one;
+            cork.transform.localRotation = Quaternion.identity;   // dönerek inişten kalan açı sıfırlansın
 
-            // Oyun sırasında AÇILIRKEN takılma animasyonu; kurulum/kapanışta anlık.
+            // Oyun sırasında AÇILIRKEN tamamlanma efekti (~3s: dip halkası + kıvılcım
+            // + şerit + tıpa + collar yıldızı). Kurulum/kapanışta anlık (else).
             if (viewReady)
             {
-                // Ham tıpa düşer, oturunca cork_seated'e geçer (AnimateCorkIn).
+                // Tıpa collar'a dek GİZLİ (AnimateCorkIn dönerek belirtip düşürür);
+                // rest pozisyonunda erkenden görünmesin (re-time).
                 cork.sprite = corkRawSprite;
-                corkRoutine = StartCoroutine(AnimateCorkIn());
+                cork.enabled = false;
+                completionRoutine = StartCoroutine(AnimateCompletion());
             }
             else
             {
@@ -675,44 +880,145 @@ namespace TubeSort.Game
         }
 
         /// <summary>
-        /// Tıpanın takılma animasyonu: yukarıdan hızlanarak düşer (ease-in,
-        /// yerçekimi hissi), oturunca pus perdesi açılır ve kısa bir
-        /// ezilme-esneme oynar. Süreler kısa tutulur: tıpa "tak" diye
-        /// oturmalı, süzülmemeli.
+        /// Tıpanın takılma animasyonu (referans): yukarıdan DÖNEREK iner (inişte
+        /// tam turlar atar, otururken dönme 0'a çözülür → dik biter) ve ağızda
+        /// minik SALINIM (sönümlü açı wobble'ı) yaparak yerine oturur. "tak"
+        /// anında ham tıpa cork_seated'e döner. Collar yıldızı ayrı (progress
+        /// sürülü), buradan tetiklenmez.
         /// </summary>
         private IEnumerator AnimateCorkIn()
         {
-            const float dropHeight = 0.5f;
-            const float dropDuration = 0.16f;
-            const float settleDuration = 0.12f;
+            const float dropHeight = 0.55f;      // ağzın üstünden iniş
+            const float dropDuration = 0.45f;    // dönerek iniş (biraz uzun)
+            const float settleDuration = 0.22f;  // ağızda salınım
+            const float spinTurns = 2f;          // iniş sırasında tam tur
+            const float wobbleAmplitude = 7f;    // oturma salınımı (derece)
+
+            // Re-time: tıpa collar'a dek gizliydi; şimdi yukarıdan dönerek belirir.
+            cork.enabled = true;
+            cork.sprite = corkRawSprite;   // düşerken ham tıpa
 
             float elapsed = 0f;
             while (elapsed < dropDuration)
             {
                 elapsed += Time.deltaTime;
                 float t = Mathf.Clamp01(elapsed / dropDuration);
+                // Yükseklik: ease-in düşüş (yerçekimi hissi).
                 cork.transform.localPosition =
                     corkRestPosition + Vector3.up * (dropHeight * (1f - t * t));
+                // Dönme: inerken döner, otururken 0'a çözülür (dik oturur).
+                cork.transform.localRotation =
+                    Quaternion.Euler(0f, 0f, spinTurns * 360f * (1f - t));
                 yield return null;
             }
             cork.transform.localPosition = corkRestPosition;
+            cork.transform.localRotation = Quaternion.identity;
 
             // "tak" anı: ham tıpa yerini cork_seated'e bırakır (camsı-mat alt gelir;
             // aynı 90×97, aynı merkez → tıpa oynamaz).
             cork.sprite = corkSeatedSprite;
 
-            // Oturma esnemesi: %8, abartısız.
+            // Ağızda minik SALINIM: sönümlü açı wobble'ı (±wobbleAmplitude°, ~1.5 sarsıntı).
             elapsed = 0f;
             while (elapsed < settleDuration)
             {
                 elapsed += Time.deltaTime;
                 float t = Mathf.Clamp01(elapsed / settleDuration);
-                float squash = Mathf.Sin(t * Mathf.PI) * 0.08f;
-                cork.transform.localScale = new Vector3(1f + squash, 1f - squash, 1f);
+                float wob = Mathf.Sin(t * Mathf.PI * 3f) * (1f - t) * wobbleAmplitude;
+                cork.transform.localRotation = Quaternion.Euler(0f, 0f, wob);
                 yield return null;
             }
-            cork.transform.localScale = Vector3.one;
+            cork.transform.localRotation = Quaternion.identity;
             corkRoutine = null;
+        }
+
+        /// <summary>
+        /// Tüp TAMAMLANDIĞINDA oynayan büyülü efekt (~3s, videoya sadık): dip
+        /// halkası + şerit başını takip eden kıvılcımlar + dipten collar'a tırmanan
+        /// KOMET şerit + dönerek oturan tıpa + collar sağ-köşesinde YILDIZ, sonra
+        /// sönümlenme. Zarf (completionProgress 0→1) shader quad'larına gider; her
+        /// efektin zamanlaması kendi shader zarfında. Tıpa CorkStartProgress'te
+        /// dönerek düşer (şerit collar'a varmadan hemen önce oturur). Sıvı içinde
+        /// çeşitli boyutta kabarcıklar yükselir. Tortu YOK (kullanıcı isteği).
+        /// </summary>
+        private IEnumerator AnimateCompletion()
+        {
+            bool corkStarted = false;
+
+            float t = 0f;
+            while (t < CompletionDuration)
+            {
+                t += Time.deltaTime;
+                float p = Mathf.Clamp01(t / CompletionDuration);
+                SetCompletionProgress(p);
+
+                // Tıpa CorkStartProgress'te dönerek düşmeye başlar; "tak" ~0.78'e
+                // denk gelir — şerit sağ-üste varıp beklerken tıpa TAM PARLAMA
+                // (yıldız tepesi) anında oturur.
+                if (!corkStarted && p >= CorkStartProgress)
+                {
+                    corkStarted = true;
+                    corkRoutine = StartCoroutine(AnimateCorkIn());
+                }
+
+                yield return null;
+            }
+
+            SetCompletionProgress(0f);
+            completionRoutine = null;
+        }
+
+        /// <summary>Tamamlanma efekt zarfını (0..1) günceller ve TÜM quad efektlerini
+        /// _Progress ile sürer: dip halkası, şerit (komet), kıvılcımlar, collar
+        /// yıldızı (geç zarf shader'da) + sıvı içi kabarcıklar (_CompletionProgress).
+        /// Her efektin belirme/sönme zamanlaması kendi shader zarfında.</summary>
+        private void SetCompletionProgress(float p)
+        {
+            completionProgress = p;
+
+            if (completionRing != null)
+            {
+                completionRing.enabled = p > 0.001f;
+                if (ringMaterial != null) ringMaterial.SetFloat(ProgressId, p);
+            }
+            if (completionSpiral != null)
+            {
+                completionSpiral.enabled = p > 0.001f;
+                if (spiralMaterial != null) spiralMaterial.SetFloat(ProgressId, p);
+            }
+            if (completionSparkles != null)
+            {
+                completionSparkles.enabled = p > 0.001f;
+                if (sparklesMaterial != null) sparklesMaterial.SetFloat(ProgressId, p);
+            }
+            if (completionFlash != null)   // collar yıldızı (geç zarf, shader'da)
+            {
+                completionFlash.enabled = p > 0.001f;
+                if (flashMaterial != null) flashMaterial.SetFloat(ProgressId, p);
+            }
+            SetLiquidCompletion(p);   // sıvı içi kabarcıklar (adım F)
+        }
+
+        /// <summary>Tamamlanma ilerlemesini SIVI shader'ına gönderir (kabarcıklar).
+        /// Property block ile (tüp-tüp): SetSwaySlope kalıbı — mevcut değerleri
+        /// koruyarak yalnız _CompletionProgress'i günceller.</summary>
+        private void SetLiquidCompletion(float p)
+        {
+            if (liquid == null) return;
+            liquid.GetPropertyBlock(properties);
+            properties.SetFloat(CompletionProgressId, p);
+            liquid.SetPropertyBlock(properties);
+        }
+
+        /// <summary>Tamamlanma efekt materyalleri koddan üretildi (TubeView'e
+        /// ait); tüp yok edilince (level geçişi/test) elle temizlenmeli — Unity
+        /// nesnelerini C#'ın çöp toplayıcısı toplamaz.</summary>
+        private void OnDestroy()
+        {
+            if (ringMaterial != null) Destroy(ringMaterial);
+            if (spiralMaterial != null) Destroy(spiralMaterial);
+            if (sparklesMaterial != null) Destroy(sparklesMaterial);
+            if (flashMaterial != null) Destroy(flashMaterial);
         }
 
         /// <summary>Tube'un güncel verisine göre doluluk seviyesinin olması gereken değer.</summary>

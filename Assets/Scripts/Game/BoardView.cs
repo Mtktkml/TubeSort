@@ -301,17 +301,20 @@ namespace TubeSort.Game
                     new PopupView.PopupAction
                     {
                         Label = "Geri Al", IconPath = "UI/icon_undo",
-                        AdBadge = true, OnClick = UndoLastMove,
+                        AdBadge = true,
+                        OnClick = () => HandleRecoveryAction(ButtonBarView.ActionKind.Undo),
                     },
                     new PopupView.PopupAction
                     {
                         Label = "+1 Tüp", IconPath = "UI/icon_add_tube",
-                        AdBadge = true, OnClick = AddEmptyTube,
+                        AdBadge = true,
+                        OnClick = () => HandleRecoveryAction(ButtonBarView.ActionKind.AddTube),
                     },
                     new PopupView.PopupAction
                     {
                         Label = "Baştan Al", IconPath = "UI/icon_restart",
-                        AdBadge = true, OnClick = RestartLevel,
+                        AdBadge = true,
+                        OnClick = () => HandleRecoveryAction(ButtonBarView.ActionKind.Shuffle),
                     },
                 });
         }
@@ -531,7 +534,7 @@ namespace TubeSort.Game
         /// yok sayılır. Tıpa (varsa) anında kalkar ama sıvı ışınlanmaz:
         /// seviyeler dökmedeki gibi kademeli akar. Kayma/eğilme/akış görseli
         /// yok — geri alma bir hamle değil düzeltmedir. Çıkmaz pop-up'ı ve aksiyon
-        /// çubuğu aynı kapıyı kullanır (çubuk ayrıca hak tüketir).
+        /// çubuğu aynı kapıyı kullanır; ikisi de hak tüketir (pop-up hak 0'da da kurtarır).
         /// </summary>
         public void UndoLastMove() => TryUndoLastMove();
 
@@ -540,6 +543,11 @@ namespace TubeSort.Game
         private bool TryUndoLastMove()
         {
             if (AnyAnimating) return false;
+            // Tamamlanma efekti (~3s) activeJobs'ta DEĞİL, yani AnyAnimating onu
+            // kapsamaz. Efekt oynarken undo, tamamlanan tüpün AnimateUndo->Refresh
+            // yoluyla RefreshCork'unu tetikleyip efekti "başa sarıp keserdi". Undo'nun
+            // HER yolunu (çubuk + çıkmaz pop-up'ının "Geri Al"ı) burada kapatıyoruz.
+            if (AnyCompletionPlaying()) return false;
             if (!history.TryUndo(board, out PourResult undone)) return false;
 
             ClearSelection();
@@ -1060,9 +1068,20 @@ namespace TubeSort.Game
         /// tüketir (boşa tıklama — ör. animasyon sürerken — hak yakmaz). Shuffle
         /// şimdilik restart'a bağlı (gerçek karıştırma sonra); prev/skip nav
         /// kaldırıldı — level gezinme yalnız kazanma pop-up'ıyla. Çıkmaz
-        /// pop-up'ındaki kurtarma butonları bu haklara dokunmaz (ayrı emniyet).</summary>
+        /// pop-up'ındaki kurtarma butonları da aynı hakları tüketir
+        /// (HandleRecoveryAction; fark: pop-up hak 0'da da kurtarır).</summary>
         private void HandleBarAction(ButtonBarView.ActionKind action)
         {
+            // Aksiyon butonları şu hâllerde İŞLEVSİZ olur (tıklama yok sayılır ama
+            // buton PASİF GÖRÜNMEZ: hak tüketilmez, görünüm değişmez):
+            //  • Dizilim tamamlandı (board.IsSolved) — kazanan hamlede hemen true;
+            //    kazanma pop-up'ı ~3s sonra dokunuşları yutana dek pencereyi kapatır.
+            //  • Dökme animasyonu sürüyor (AnyAnimating) — Try* zaten reddeder,
+            //    burada da erkenden keser (netlik).
+            //  • Bir tüpün TAMAMLANMA efekti (~3s) oynuyor — ara oyunda kazanmayan
+            //    tüp tamamlanınca da butonlar bloklu; efekt bitmeden basılamaz.
+            if (board.IsSolved || AnyAnimating || AnyCompletionPlaying()) return;
+
             bool used;
             switch (action)
             {
@@ -1073,6 +1092,26 @@ namespace TubeSort.Game
             }
 
             if (used) buttonBar.ConsumeRight(action);
+        }
+
+        /// <summary>Çıkmaz pop-up'ındaki kurtarma butonunun işi. Çubukla AYNI Try* +
+        /// ConsumeRight yolunu kullanır (kullanıcı isteği: pop-up seçimi de hak
+        /// tüketsin). Kritik fark: pop-up HER ZAMAN kurtarır — Try* haktan bağımsız
+        /// çalışır ve ConsumeRight hak 0'da no-op olduğundan (ButtonBarView), hak
+        /// bitse bile aksiyon iş görür; çıkmazdan çıkış garantisi (soft-lock önlemi)
+        /// korunur, yalnız sayaç hak varken düşer.</summary>
+        private void HandleRecoveryAction(ButtonBarView.ActionKind action)
+        {
+            bool used;
+            switch (action)
+            {
+                case ButtonBarView.ActionKind.Undo: used = TryUndoLastMove(); break;
+                case ButtonBarView.ActionKind.Shuffle: used = TryRestartLevel(); break;
+                case ButtonBarView.ActionKind.AddTube: used = TryAddEmptyTube(); break;
+                default: return;
+            }
+
+            if (used && buttonBar != null) buttonBar.ConsumeRight(action);
         }
 
         private void HandleTubeClick(int index)
@@ -1129,8 +1168,9 @@ namespace TubeSort.Game
             selectedIndex = -1;
         }
 
-        /// <summary>Level tamamlanınca kazanma pop-up'ından önceki bekleme (sn):
-        /// oyuncu tamamlanan tahtayı ve damla halkası patlamasını görsün.</summary>
+        /// <summary>Kazanma pop-up'ından önceki KISA nefes (sn). Asıl bekleme
+        /// bu değil: bundan sonra son tüpün tamamlanma efekti (AnyCompletionPlaying)
+        /// bitene kadar da beklenir — pop-up efektin üstüne binmesin.</summary>
         private const float WinPopupDelay = 0.7f;
 
         private void ReportBoardState()
@@ -1197,6 +1237,10 @@ namespace TubeSort.Game
         private IEnumerator ShowWinPopupAfterDelay()
         {
             yield return new WaitForSeconds(WinPopupDelay);
+            // Son tüpün TAMAMLANMA animasyonu (büyülü efekt ~3s) bitene kadar
+            // bekle — pop-up onun üstüne binmesin (sabit sayı yerine gerçek bitiş).
+            while (AnyCompletionPlaying())
+                yield return null;
             if (winPopup == null || winPopup.Visible) yield break;
 
             // YER TUTUCU (bilinçli): hamle/süre henüz sayılmıyor — rastgele
@@ -1211,6 +1255,16 @@ namespace TubeSort.Game
                 $"Süre: {seconds / 60}:{seconds % 60:00}");
 
             winPopup.Show();
+        }
+
+        /// <summary>Herhangi bir tüpün tamamlanma efekti hâlâ oynuyor mu?
+        /// Kazanma pop-up'ı hepsinin bitmesini bekler (bitiş ~3s içinde garanti:
+        /// AnimateCompletion süresi dolunca completionRoutine null olur).</summary>
+        private bool AnyCompletionPlaying()
+        {
+            foreach (TubeView view in tubeViews)
+                if (view != null && view.IsCompletionPlaying) return true;
+            return false;
         }
 
         /// <summary>
