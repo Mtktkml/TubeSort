@@ -16,6 +16,11 @@ Shader "TubeSort/CompletionRing"
         _SwaySpeed ("Salinim/donme hizi", Float) = 1.6
         _PulseSpeed ("Nabiz hizi", Float) = 4
         _PulseAmount ("Nabiz genligi", Range(0, 0.3)) = 0.08
+
+        // Script'ten surulur (TubeView.SetCompletionProgress). UnityPerMaterial'de
+        // OLMALI: yoksa SRP Batcher bunu global sayar, iki tup ayni anda tamamlaninca
+        // _Progress paylasilir (son yazan kazanir) ve efektler birbirine karisir.
+        [HideInInspector] _Progress ("Progress (script)", Float) = 0
     }
 
     SubShader
@@ -49,9 +54,8 @@ Shader "TubeSort/CompletionRing"
                 float _SwaySpeed;
                 float _PulseSpeed;
                 float _PulseAmount;
+                float _Progress;   // TubeView materyale yazar (tup-basina; bkz. Properties notu)
             CBUFFER_END
-
-            float _Progress;   // TubeView materyale yazar
 
             struct Attributes { float4 positionOS : POSITION; float2 uv : TEXCOORD0; };
             struct Varyings { float4 positionCS : SV_POSITION; float2 uv : TEXCOORD0; };

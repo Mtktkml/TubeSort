@@ -15,6 +15,10 @@ Shader "TubeSort/CompletionFlash"
         _StarStart ("Belirme (progress)", Range(0, 1)) = 0.66
         _StarPeak ("Tepe (progress)", Range(0, 1)) = 0.76
         _StarEnd ("Bitis (progress)", Range(0, 1)) = 0.95
+
+        // Script'ten surulur (TubeView). UnityPerMaterial'de OLMALI: yoksa SRP Batcher
+        // global sayar, iki tup ayni anda tamamlaninca paylasilir (bkz. CompletionRing).
+        [HideInInspector] _Progress ("Progress (script)", Float) = 0
     }
 
     SubShader
@@ -46,9 +50,8 @@ Shader "TubeSort/CompletionFlash"
                 float _StarStart;
                 float _StarPeak;
                 float _StarEnd;
+                float _Progress;
             CBUFFER_END
-
-            float _Progress;
 
             struct Attributes { float4 positionOS : POSITION; float2 uv : TEXCOORD0; };
             struct Varyings { float4 positionCS : SV_POSITION; float2 uv : TEXCOORD0; };

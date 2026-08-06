@@ -20,6 +20,11 @@ Shader "TubeSort/CompletionSparkles"
         _RiseStart ("Tirmanma baslangici (progress)", Range(0, 1)) = 0.12
         _RiseEnd ("Tirmanma bitisi (progress)", Range(0, 1)) = 0.68
         _TrailLen ("Iz uzunlugu (uv)", Range(0.1, 0.9)) = 0.55
+
+        // Script'ten surulur (TubeView). UnityPerMaterial'de OLMALI: yoksa SRP Batcher
+        // global sayar, iki tup ayni anda tamamlaninca paylasilir (bkz. CompletionRing).
+        [HideInInspector] _Progress ("Progress (script)", Float) = 0
+        [HideInInspector] _HeadMax ("Head max (script)", Float) = 0
     }
 
     SubShader
@@ -57,10 +62,9 @@ Shader "TubeSort/CompletionSparkles"
                 float _RiseStart;
                 float _RiseEnd;
                 float _TrailLen;
+                float _Progress;
+                float _HeadMax;
             CBUFFER_END
-
-            float _Progress;
-            float _HeadMax;
 
             struct Attributes { float4 positionOS : POSITION; float2 uv : TEXCOORD0; };
             struct Varyings { float4 positionCS : SV_POSITION; float2 uv : TEXCOORD0; };

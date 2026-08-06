@@ -18,6 +18,11 @@ Shader "TubeSort/CompletionSpiral"
         _RiseEnd ("Tirmanma bitisi (progress)", Range(0, 1)) = 0.68
         _TailLen ("Kuyruk uzunlugu (uv)", Range(0.1, 0.7)) = 0.34
         _BottomAnchor ("Kuyruk dip demiri (uv)", Range(0, 0.2)) = 0.04
+
+        // Script'ten surulur (TubeView). UnityPerMaterial'de OLMALI: yoksa SRP Batcher
+        // global sayar, iki tup ayni anda tamamlaninca paylasilir (bkz. CompletionRing).
+        [HideInInspector] _Progress ("Progress (script)", Float) = 0
+        [HideInInspector] _HeadMax ("Head max (script)", Float) = 0
     }
 
     SubShader
@@ -52,13 +57,12 @@ Shader "TubeSort/CompletionSpiral"
                 float _RiseEnd;
                 float _TailLen;
                 float _BottomAnchor;
+                float _Progress;
+                // Basin ulasabilecegi en yuksek uv.y (collar sag-alti orani); TubeView
+                // = GlassTop/RingTop gonderir. 0 gelirse (ayarsiz) tam tepe: guvenli
+                // varsayilan icin max ile 0.82 tabanla.
+                float _HeadMax;
             CBUFFER_END
-
-            float _Progress;
-            // Basin ulasabilecegi en yuksek uv.y (collar sag-alti orani); TubeView
-            // = GlassTop/RingTop gonderir. 0 gelirse (ayarsiz) tam tepe: guvenli
-            // varsayilan icin max ile 0.82 tabanla.
-            float _HeadMax;
 
             struct Attributes { float4 positionOS : POSITION; float2 uv : TEXCOORD0; };
             struct Varyings { float4 positionCS : SV_POSITION; float2 uv : TEXCOORD0; };
