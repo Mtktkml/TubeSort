@@ -1,28 +1,24 @@
-// Tamamlanma efekti — DUZENSIZ IŞILTILAR: dipten cikip yukari akan altin
-// yildizlar. Referans: DUZENSIZ dagilim (izgara belli olmamali) ve seridin
-// BASINI TAKIP eder — en yogun basin hemen ALTINDA, seridin x-kolonuna yakin.
-// Izgara-hash + buyuk rastgele kayma ile grid kirilir; boylar cesitli. Additive;
-// _Progress zarfiyla belirir/soner. _HeadMax (collar orani) TubeView'den.
+// Tamamlanma efekti — PARILTI YILDIZLARI: SERITLE AYNI yoldan giden ama seridin
+// DISINDA (biraz genis S) ve ARALIKLI dizilmis altin yildizlar. Yukari akar,
+// parildar. Sekiller yol boyunca BOZULMAZ (her yildiz ayrik, sabit-yuvarlak merkez;
+// warp/kayma yok). Additive; _Progress zarfiyla belirir/soner.
 Shader "TubeSort/CompletionSparkles"
 {
     Properties
     {
-        _SparkColor ("Isilti rengi (altin)", Color) = (1, 0.86, 0.46, 1)
-        _Columns ("Sutun (kaba)", Float) = 5
-        _Rows ("Satir (ince)", Float) = 15
-        _SparkSize ("Isilti boyutu (taban)", Range(0.02, 0.4)) = 0.13
-        _RiseSpeed ("Yukselme hizi", Float) = 0.45
+        _SparkColor ("Yildiz rengi (altin)", Color) = (1, 0.86, 0.46, 1)
+        _SparkSize ("Yildiz boyutu (uv)", Range(0.005, 0.08)) = 0.022
+        _Rows ("Yol boyu nokta sikligi (satir)", Float) = 22
+        _Density ("Doluluk (0..1; ARALIKLI)", Range(0, 1)) = 0.55
+        _RiseSpeed ("Yukselme hizi", Float) = 0.35
         _TwinkleSpeed ("Parildama hizi", Float) = 7
-        _Density ("Yogunluk (0..1)", Range(0, 1)) = 0.5
-        _Turns ("Serit sarim (takip icin)", Float) = 1.6
-        _Amplitude ("Serit genlik (takip icin)", Range(0.1, 0.5)) = 0.30
-        _SpinSpeed ("Serit donme (takip icin)", Float) = 1.5
-        _RiseStart ("Tirmanma baslangici (progress)", Range(0, 1)) = 0.12
-        _RiseEnd ("Tirmanma bitisi (progress)", Range(0, 1)) = 0.68
-        _TrailLen ("Iz uzunlugu (uv)", Range(0.1, 0.9)) = 0.55
+        _Turns ("Sarim (SERITLE AYNI)", Float) = 1.6
+        _Amplitude ("Yatay genlik (SERITLE AYNI, 0.38)", Range(0.1, 0.6)) = 0.38
+        _SparkOffset ("Seridin DISINA offset (uv)", Range(0, 0.2)) = 0.07
+        _RiseStart ("Baslangic (progress)", Range(0, 1)) = 0.12
+        _RiseEnd ("Bitis (progress)", Range(0, 1)) = 0.78
 
-        // Script'ten surulur (TubeView). UnityPerMaterial'de OLMALI: yoksa SRP Batcher
-        // global sayar, iki tup ayni anda tamamlaninca paylasilir (bkz. CompletionRing).
+        // Script'ten surulur (TubeView). UnityPerMaterial'de OLMALI (SRP Batcher).
         [HideInInspector] _Progress ("Progress (script)", Float) = 0
         [HideInInspector] _HeadMax ("Head max (script)", Float) = 0
     }
@@ -50,18 +46,16 @@ Shader "TubeSort/CompletionSparkles"
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _SparkColor;
-                float _Columns;
-                float _Rows;
                 float _SparkSize;
+                float _Rows;
+                float _Density;
                 float _RiseSpeed;
                 float _TwinkleSpeed;
-                float _Density;
                 float _Turns;
                 float _Amplitude;
-                float _SpinSpeed;
+                float _SparkOffset;
                 float _RiseStart;
                 float _RiseEnd;
-                float _TrailLen;
                 float _Progress;
                 float _HeadMax;
             CBUFFER_END
@@ -86,8 +80,8 @@ Shader "TubeSort/CompletionSparkles"
 
             half4 Fragment(Varyings input) : SV_Target
             {
-                float env = smoothstep(0.0, 0.12, _Progress)
-                          * (1.0 - smoothstep(0.78, 0.96, _Progress));
+                float env = smoothstep(_RiseStart, _RiseStart + 0.06, _Progress)
+                          * (1.0 - smoothstep(0.80, 0.96, _Progress));
                 if (env <= 0.001)
                     discard;
 
@@ -95,43 +89,42 @@ Shader "TubeSort/CompletionSparkles"
                 float headMax = max(_HeadMax, 0.35);
                 float head = smoothstep(_RiseStart, _RiseEnd, _Progress) * headMax;
 
-                // Basi takip: yogunluk basin hemen ALTINDA en yuksek (iz), ustunde
-                // yok. Az taban ambient birak (dipte de birkac isilti kalsin).
-                float trail = smoothstep(head - _TrailLen, head, uv.y);
-                float aboveCut = 1.0 - smoothstep(head, head + 0.05, uv.y);
-                float dens = (trail * 0.85 + 0.15) * aboveCut;
+                // SERITLE AYNI faz (ust sag-tepede biter): yildizlar seridin yolunu izler.
+                float anchorPhase = 1.5707963 - _HeadMax * _Turns * 6.2831853;
 
-                // Seridin x-kolonuna yakinlik: isiltilar serit cevresinde toplanir.
-                float rx = 0.5 + _Amplitude
-                    * sin(uv.y * _Turns * 6.2831853 + _Time.y * _SpinSpeed);
-                dens *= 0.45 + 0.55 * (1.0 - smoothstep(0.0, 0.42, abs(uv.x - rx)));
+                // Yukari akis: nokta SATIRLARI zamanla yukselir (scroll). Fragment'a en
+                // yakin satiri bul, o noktanin merkezini hesapla (yol uzerinde, ayrik).
+                float scroll = _Time.y * _RiseSpeed;
+                float rowIdx = floor((uv.y - scroll) * _Rows + 0.5);
+                float dotY = rowIdx / _Rows + scroll;
 
-                // Izgara-hash; hucreler asagi kayar -> yukari akis.
-                float brise = _Time.y * _RiseSpeed;
-                float2 g = float2(uv.x * _Columns, (uv.y - brise) * _Rows);
-                float2 cell = floor(g);
-                float2 h = Hash22(cell);
+                float2 rnd = Hash22(float2(rowIdx * 1.37, 3.1));
+                float present = step(1.0 - _Density, rnd.x);   // ARALIKLI: bazi satirlar bos
 
-                // Duzensizlik: presence combine-hash ile, BUYUK rastgele kayma ile
-                // isilti hucresinden tasar (grid deseni kirilir).
-                float present = step(1.0 - _Density, frac(h.x * 1.7 + h.y * 0.9));
-                float2 q = (frac(g) - 0.5) - (h - 0.5) * 0.9;
-                float d = length(q);
+                // Nokta x'i: seridin yolunda ama merkezden DISA offset -> serit
+                // govdesine binmez (seridin disinda kalir).
+                float sway = sin(dotY * _Turns * 6.2831853 + anchorPhase);
+                float sideSign = (sway >= 0.0) ? 1.0 : -1.0;
+                float dotX = 0.5 + _Amplitude * sway + _SparkOffset * sideSign;
 
-                float sz = _SparkSize * (0.4 + 1.3 * h.y);   // cesitli boy
+                // BOZULMAYAN yildiz: yerel koordinatta sabit yuvarlak cekirdek + hafif
+                // 4-uc capraz. warp yok -> hareket boyunca sekil ayni.
+                float2 toDot = float2(uv.x - dotX, uv.y - dotY);
+                float d = length(toDot);
+                float sz = _SparkSize * (0.7 + 0.6 * rnd.y);
                 float core = 1.0 - smoothstep(0.0, sz, d);
                 float cross =
-                    (1.0 - smoothstep(0.0, sz * 3.0, abs(q.x)))
-                        * (1.0 - smoothstep(0.0, sz * 0.25, abs(q.y)))
-                  + (1.0 - smoothstep(0.0, sz * 3.0, abs(q.y)))
-                        * (1.0 - smoothstep(0.0, sz * 0.25, abs(q.x)));
-                float spark = (core + cross * 0.5) * present;
+                      (1.0 - smoothstep(0.0, sz * 3.0, abs(toDot.x))) * (1.0 - smoothstep(0.0, sz * 0.35, abs(toDot.y)))
+                    + (1.0 - smoothstep(0.0, sz * 3.0, abs(toDot.y))) * (1.0 - smoothstep(0.0, sz * 0.35, abs(toDot.x)));
+                float shape = core + cross * 0.4;
 
                 float tw = saturate(0.4 + 0.6
-                    * sin(_Time.y * _TwinkleSpeed + h.y * 30.0 + h.x * 11.0));
+                    * sin(_Time.y * _TwinkleSpeed + rnd.y * 30.0 + rnd.x * 11.0));
 
-                float intensity = spark * tw * dens * env;
+                // Yalniz basin ALTINDA (serit gibi; hat basi takip eder).
+                float belowHead = 1.0 - smoothstep(head, head + 0.06, dotY);
 
+                float intensity = shape * present * tw * belowHead * env;
                 float3 col = _SparkColor.rgb * intensity;
                 return half4(col, intensity);
             }
