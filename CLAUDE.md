@@ -72,19 +72,39 @@ Statik parçalar (cam tüp, bej yaka, mantar tıpa) PNG sprite'lardır; dinamik 
 için asset'le yapılamazlar. `Resources` altındalar çünkü her şey koddan kurulur:
 sahnede/prefab'da referans yok, `Resources` dışında build'e girmezlerdi.
 
-Katman sırası (sortingOrder), tüp içi: cam 0 < sıvı 1 < arka yaka 2 < tıpa 3 <
-ön yaka parçaları 4. Akışın alt parçası hedefin tıpa katmanına (3), üst parçası
-her şeyin önüne (15) çizilir. Dökülen tüp bu değerlere +10 offset alır
-(`SetSortingOffset`). Butonlar 100, level başlığı ve banner 101.
+Katman sırası (sortingOrder), tüp içi: sıvı 0 < akış-alt 1 < ring/yaka 2 <
+cam gövde 5 < tıpa 6. Cam yarı saydam olduğundan sıvı içinden görünür ve camın
+gömülü parlamaları içeriğin üstüne kendiliğinden düşer — dolu tüpün parlaması
+boş tüple tanımı gereği birebir. Cam gövde (`tube.png`) ve ring/yaka
+(`collar.png`) AYRI asset'lerdir: ekipten gelen birleşik tüp görselinden İÇERİĞE
+GÖRE ayrıldılar, kanvasları dikiş çevresinde örtüşür (dikişsiz bağlı).
 
-- `Sprites/tube.png` — cam tüp (PPU 247.5, pivot Bottom, **9-slice** alt border 88:
-  dip kavisi sabit kalır, düz gövde kapasiteyle uzar).
-- `Sprites/collar.png` — bej yaka (PPU 244; tam genişliği = `FullWidth` yerleşim
-  çapası). Tıpa sandviçinin ön parçaları bu görselden çalışma anında **eğri alfa
-  maskesiyle** üretilir (`TubeView.CreateCollarFront*`; bu yüzden Read/Write açık).
-  Maske dışı pikselde yalnız alfa sıfırlanır, RGB korunur — yoksa bilinear filtre
-  kenarda koyu çizgi bırakır.
-- `Sprites/cork.png` — mantar tıpa (PPU 229); yalnız `Tube.IsComplete` tüpte görünür.
+TIPA (yalnız tamamlanan tüpte): yaka hep OPAK ring'tir; tıpa onun ve her şeyin
+ÖNÜNE (order 6, opak) biner. Tıpa = `cork_seated`: takım referansından
+(`tube reference.png` ağzı) tıpa SİLÜETİNE kırpılmış tek sprite — camsı-mat alt
+tonu referanstan gelir. Ağza oturan bir mantar gibidir; kenarı doğal mantar
+kenarı, "iki farklı şekli uç uca birleştirme" çizgisi YOK (yakayı ring verir, o
+cama zaten dikişsiz bağlı; tıpa yalnız ağza oturur). Düşüş animasyonunda ham
+`cork.png`, oturunca `cork_seated` (ikisi de 90×97, aynı HESAPLI merkezde →
+oturmada tıpa oynamaz; tıpanın gri yaka bandı ring'in yakasıyla çakışır,
+`CorkSeatedCenterBelowRingTop = 31.5px` bunu hesaplar). Tıpasız tüpte ring OPAK —
+dökmede dudağa tırmanan sıvıyı gizler. (Eski boyama/pus yaklaşımı —
+`CreateSeatedCorkSprite` + `shadow.png` perdesi — kaldırıldı: iki şekli boyayla
+birleştirme sınırda çizgi bırakıyordu; referans-kırpma çözdü.)
+
+Akışın alt parçası hedefin ring'inin/camının arkasına (1) çizilir; üst parça her
+şeyin önüne (kaynak offset+7, havuz varsayılanı 15). Dökülen tüp bu değerlere +10
+offset alır (`SetSortingOffset`). Butonlar 100, level başlığı 101.
+
+- `Sprites/tube.png` — cam gövde (PPU 126.67, pivot Bottom, **9-slice**: dip
+  kavisi sabit kalır, düz gövde kapasiteyle uzar).
+- `Sprites/collar.png` — ring/yaka (PPU 126.67; tam genişliği = `FullWidth`
+  yerleşim çapası). Cama dikişsiz bağlanır; tıpalı tüpte de açık kalır (yakayı verir).
+- `Sprites/cork.png` — ham mantar tıpa (PPU 126.67, pivot Center); yalnız düşüş
+  animasyonunda görünür.
+- `Sprites/cork_seated.png` — oturmuş tıpa (cork silüeti + referansın camsı-mat
+  alt tonu; `tube reference.png` ağzından kırpma). `Tube.IsComplete` tüpte ham
+  tıpanın yerine geçer (order 6, opak).
 - `TubeShape.hlsl` — sıvının şekil matematiği (SDF).
 - `Liquid.shader` — sıvı: katmanlar, doluluk, 2.5D yüzey diski + damla halkaları
   (yalnız dökme sırasında; boşta yüzey durgun), eğim.
@@ -108,9 +128,11 @@ işleniyor, Shader Graph'ta dizi/döngü yok.
   hata basar (sessizce yanlış çizmek yerine). (8→12 yükseltildi: daha derin/zor
   tüpler; shader piksel-döngüsü ~%50 arttı. Palet de 8→10 renge çıktı,
   `ColorPalette.cs`.)
-- **SDF formülleri** — `TubeShape.hlsl` (GPU, piksel boyama) ve `TubeView.cs` (CPU,
-  tıklama doğrulama) aynı şekli çizmeli. GPU/CPU kod paylaşamadığı için tekrar
-  kaçınılmaz. Şekil değişirse `SdRoundedBox` ve `SdTube` ikisinde birlikte güncellenir.
+- **SDF formülleri** — `SdRoundedBox` formülü `TubeShape.hlsl` (GPU) ve
+  `TubeView.cs` (CPU) tarafında aynı kalmalı; GPU/CPU kod paylaşamadığı için
+  tekrar kaçınılmaz. ŞEKİLLER ise bilerek farklı: sıvı İÇ KONTURA çizilir
+  (`Width` 86 px, taban 32 px, dip 38 px), tıklama DIŞ CAM silüetini kullanır
+  (`ClickWidth` 127 px) — parmak camın kenarına basar, sıvı kutusu dar.
 
 **Renk uzayı:** proje Linear. `SetVectorArray` renk dönüşümü yapmaz (`SetColor` yapar).
 Shader'a giden renkler `TubeView.ToShaderColor` ile çevrilmeli, yoksa kırmızı pembe çıkar.
@@ -180,6 +202,9 @@ sonra doğrulma + geri dönüş eş zamanlı. Model: **fiziksel eğim + zamanlay
 - Açı, dökme başlayana dek `SmoothDamp` ile yükselir; başladıktan sonra güncel
   fill'in dudak açısını **birebir** izler (`MoveTowards`, gecikme yok) — SmoothDamp
   gecikmesi (~6°) sıvıyı dudaktan düşürüp akış kolonundan koparıyordu.
+  Bilinen sınır: süreler test için aşırı yavaşlatılınca kapı öncesi SmoothDamp
+  kuyruğu görünür sürünür (normal hızda fark edilmez; taban-hız ve süreli rampa
+  denendi, ikisi de hissi bozduğu için geri alındı — yeniden deneme).
 - Boşalma **zamanlayıcıyla** ilerler (dudak-gating YOK): akışla birlikte tam biter,
   donma imkânsız. Watchdog yalnız emniyet.
 - Ağız her karede hedefin üstüne konumlanır (`CalculatePourPosition`); stream

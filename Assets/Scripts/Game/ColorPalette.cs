@@ -8,24 +8,25 @@ namespace TubeSort.Game
     /// </summary>
     public class ColorPalette
     {
-        // On renk (kapasite 12 / renk 10 tavanı için). Değerler Linear uzayda;
-        // shader'a TubeView.ToShaderColor ile çevrilir. Ayırt-edilebilirlik
-        // cihazda (Device Simulator) gözle doğrulanır. Sıkışık çiftler kontrol:
-        // teal(5)~mavi(2), gül(9)~somon(7)~kırmızı(0), kahve(8)~turuncu(4).
+        // On renk (kapasite 12 / renk 10 tavanı için) — tasarım ekibinin renk
+        // kartelası (color code.png, 4 Ağu), hex birebir. Değerler sRGB;
+        // shader'a giderken TubeView.ToShaderColor Linear'a çevirir.
+        // Ayırt-edilebilirlik cihazda (Device Simulator) gözle doğrulanır;
+        // sıkışık çiftler kontrol: yeşil(3)~elma(9), mavi(2)~camgöbeği(5),
+        // kırmızı(0)~turuncu(4)~pembe(7).
         private static readonly Color[] Colors =
         {
-            new Color(0.90f, 0.28f, 0.28f),   // 0 kırmızı
-            new Color(0.95f, 0.78f, 0.15f),   // 1 sarı
-            new Color(0.28f, 0.58f, 0.90f),   // 2 mavi
-            new Color(0.35f, 0.78f, 0.38f),   // 3 yeşil
-            new Color(0.95f, 0.58f, 0.22f),   // 4 turuncu
-            new Color(0.08f, 0.52f, 0.50f),   // 5 petrol (koyulaştırıldı: açık cam
-                                              // zeminde boş tüpten ayrılsın diye)
-            new Color(0.62f, 0.38f, 0.75f),   // 6 mor
-            new Color(0.88f, 0.55f, 0.48f),   // 7 somon
-            new Color(0.55f, 0.36f, 0.22f),   // 8 kahve (yeni)
-            new Color(0.86f, 0.30f, 0.55f),   // 9 gül/pembe (yeni; saf magenta hata
-                                              // renginden ayrı: G>0, B<1)
+            new Color32(0xE5, 0x12, 0x12, 0xFF),   // 0 kırmızı   E51212
+            new Color32(0xFF, 0xC3, 0x00, 0xFF),   // 1 sarı      FFC300
+            new Color32(0x1E, 0x8F, 0xFF, 0xFF),   // 2 mavi      1E8FFF
+            new Color32(0x1E, 0xD3, 0x46, 0xFF),   // 3 yeşil     1ED346
+            new Color32(0xFF, 0x7A, 0x00, 0xFF),   // 4 turuncu   FF7A00
+            new Color32(0x00, 0xD8, 0xFF, 0xFF),   // 5 camgöbeği 00D8FF (eski petrol yuvası)
+            new Color32(0x9C, 0x3B, 0xFF, 0xFF),   // 6 mor       9C3BFF
+            new Color32(0xFF, 0x4F, 0xC8, 0xFF),   // 7 pembe     FF4FC8 (eski somon yuvası;
+                                                   // saf magenta hata renginden ayrı: B<1)
+            new Color32(0x78, 0x44, 0x1B, 0xFF),   // 8 kahve     78441B
+            new Color32(0x8D, 0xB6, 0x00, 0xFF),   // 9 elma yeşili 8DB600 (eski gül yuvası)
         };
 
         public Color Get(int colorId)

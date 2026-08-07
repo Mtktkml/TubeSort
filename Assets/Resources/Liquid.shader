@@ -11,8 +11,11 @@ Shader "TubeSort/Liquid"
     {
         _EdgeSoftness ("Yüzey yumuşaklığı (dünya birimi)", Float) = 0.012
         _SideShading ("Kenar gölgesi", Range(0, 1)) = 0.35
-        _Glossiness ("Şerit parlaklığı", Range(0, 1)) = 0.5
-        _WallThickness ("Cam et kalınlığı", Float) = 0.05
+        // Sıvı kutusu (TubeView.Width) iç kontur çizgisine zaten dayanır ve
+        // CAM SIVININ ÖNÜNDE çizilir: kenar bindirmeleri kontur örter. Pay bu
+        // yüzden kozmetik düzeyde — büyütmek sıvıyla çanak arasında koyu bir
+        // "oturmamış" şerit bırakıyordu (0.02'de yaşandı).
+        _WallThickness ("Cam et kalınlığı", Float) = 0.005
         // 2.5D: hafif üstten bakış. Varsayılan, yaka perspektifiyle uyumlu:
         // sıvı yarı genişliği (0.375) × görsellerin elips oranı (0.2) ≈ 0.075.
         _SurfaceEllipse ("2.5D yüzey derinliği (dünya birimi)", Float) = 0.075
@@ -65,7 +68,6 @@ Shader "TubeSort/Liquid"
             CBUFFER_START(UnityPerMaterial)
                 float _EdgeSoftness;
                 float _SideShading;
-                float _Glossiness;
                 float _WallThickness;
                 float _SurfaceEllipse;
                 float _SurfaceLight;
@@ -85,6 +87,13 @@ Shader "TubeSort/Liquid"
             float4 _BodySize;
             float _TopRadius;
             float _BottomRadius;
+            // Sıvının gövde tepesinin ÜSTÜNE (halka arkasında ağza doğru)
+            // tırmanabildiği pay (dünya birimi): kırpma kutusu yalnız üstten
+            // bu kadar uzar, fill/katman matematiği (_BodySize) değişmez.
+            // Dökme eğiminde dudağa bastırılan sıvı (kenar 1.05) artık gövde
+            // tepesinde kırpılmaz — akış kolonuyla ağızda buluşur. Dinlenmede
+            // yüzey en fazla FillSpan'e çıktığından bu bölge hiç boyanmaz.
+            float _MouthOverflow;
             float _TiltAngle;
             // Eğik yüzeyin dudak demirlemesi (normalize, gövde oranı): düzlem
             // kaydırması dik açılarda dudaktaki sıvıyı gerçek (hacim korunumlu)
@@ -100,6 +109,9 @@ Shader "TubeSort/Liquid"
             // Level başı çalkantı eğimi (normalize): TubeView sönümleyerek
             // sürer; yüzey ve katmanlar birlikte sallanır.
             float _SwaySlope;
+            // Tamamlanma efekti ilerlemesi (0-1): tüp tamamlanınca TubeView sürer.
+            // >0 iken sıvı içinde yükselen kabarcıklar çizilir (tortu YOK). Boşta 0.
+            float _CompletionProgress;
 
             struct Attributes
             {
@@ -113,6 +125,14 @@ Shader "TubeSort/Liquid"
                 float2 uv : TEXCOORD0;
             };
 
+            // Kabarcık ızgarası için yalancı-rastgele 2B (hücre → konum + boy + faz).
+            float2 BubbleHash(float2 p)
+            {
+                p = float2(dot(p, float2(127.1, 311.7)),
+                           dot(p, float2(269.5, 183.3)));
+                return frac(sin(p) * 43758.5453123);
+            }
+
             Varyings Vertex(Attributes input)
             {
                 Varyings output;
@@ -120,6 +140,7 @@ Shader "TubeSort/Liquid"
                 output.uv = input.uv;
                 return output;
             }
+
 
             half4 Fragment(Varyings input) : SV_Target
             {
@@ -134,7 +155,11 @@ Shader "TubeSort/Liquid"
                 // içeri doğru daraltır. Böylece sıvı camın bir tık içinden başlar
                 // ve yuvarlak dibe kusursuz oturur - ayrı bir maske dokusu ve
                 // piksel hizalama derdi olmadan.
-                float glassDistance = SdTube(p, _QuadSize.xy, _BodySize.xy,
+                // Kırpma kutusu gövdeden _MouthOverflow kadar uzun (dip hizası
+                // aynı: SdTube gövdeyi dörtgenin dibine yaslar) — sıvı dökme
+                // eğiminde ağza doğru tırmanabilir.
+                float2 clipSize = float2(_BodySize.x, _BodySize.y + _MouthOverflow);
+                float glassDistance = SdTube(p, _QuadSize.xy, clipSize,
                     _TopRadius, _BottomRadius);
                 float innerDistance = glassDistance + _WallThickness;
 
@@ -302,16 +327,13 @@ Shader "TubeSort/Liquid"
                 float shade = 1.0 - distanceFromCenter * distanceFromCenter * _SideShading;
                 color.rgb *= shade;
 
-                // Cam görselindeki (tube.png) beyaz şeritlerin sıvı bölgesindeki
-                // devamı: cam arkada kaldığı için dolu bölgede şeridi sıvı
-                // çizmeli. Konum/aralıklar görselden türetilmez, şeritlere elle
-                // hizalanır; görsel değişirse birlikte ayarlanmalı.
-                float streakX = smoothstep(0.05, 0.0, abs(uv.x - 0.20));
-                float longY  = smoothstep(0.50, 0.53, uv.y) * smoothstep(0.85, 0.82, uv.y);
-                float shortY = smoothstep(0.32, 0.35, uv.y) * smoothstep(0.45, 0.42, uv.y);
-                float streak = streakX * max(longY, shortY);
-                // Mavimsi beyaz — görseldeki şerit tonuyla aynı aile.
-                color.rgb = lerp(color.rgb, float3(0.94, 0.97, 1.0), streak * _Glossiness);
+                // Parlama BURADA ÇİZİLMEZ: sıvı camın ARKASINDA durur (sıvı
+                // order 0 < cam gövde 2) ve camın gömülü parlamaları — duvar
+                // yansıma çizgileri, yumuşak bantlar, dip parlaması, iç tint —
+                // sıvının üstüne kendiliğinden düşer. Boş ve dolu tüpün
+                // parlaması böylece tanımı gereği birebir aynıdır. (Önce sıvı
+                // içinde bant taklidi denendi; 9-slice esnemesi ve algı
+                // farkları yüzünden hiza hiç birebir tutmadı — mimari değişti.)
 
                 // 2.5D yüzey diski: yüzey çizgisinin ±ellipseDepth·arc bandı,
                 // üstten görünen elips — en üst katmanın açık tonu. Gölge ve
@@ -341,6 +363,48 @@ Shader "TubeSort/Liquid"
                     (1.0 - rings) * ringMask * 0.5);
 
                 color.rgb = lerp(color.rgb, discColor, inDisc);
+
+                // ── Kabarcıklar (tamamlanma efekti): sıvı içinde dipten yüzeye
+                // yükselen küçük kabarcıklar. Yalnız _CompletionProgress>0 iken ve
+                // yüzeyin ALTINDA (inside). Yüzeye yaklaşınca söner (patlar). TORTU
+                // YOK — sadece yukarı akan kabarcıklar (kullanıcı isteği).
+                if (_CompletionProgress > 0.001 && inside > 0.001)
+                {
+                    // Zarf: efektin ortasında yoğun, başta/sonda sön.
+                    float bubEnv = smoothstep(0.0, 0.15, _CompletionProgress)
+                                 * (1.0 - smoothstep(0.75, 1.0, _CompletionProgress));
+
+                    // Izgara-hash kabarcıklar; hücreler aşağı kayar → yukarı akış.
+                    const float bcols = 4.0;
+                    const float brows = 7.0;
+                    float brise = _Time.y * 0.5 + _CompletionProgress * 0.7;
+                    float2 bg = float2(uv.x * bcols, (uv.y - brise) * brows);
+                    float2 bcell = floor(bg);
+                    float2 bf = frac(bg) - 0.5;
+
+                    float2 bh = BubbleHash(bcell);
+                    float bpresent = step(0.5, bh.x);   // seyreklik
+
+                    // Hücre-yerel konumu dünya oranına çevir → yuvarlak kabarcık.
+                    float2 bq = (bf - (bh - 0.5) * 0.5)
+                        * float2(_BodySize.x / bcols, _BodySize.y / brows);
+                    float bd = length(bq);
+
+                    // Kabarcık boyu BELİRGİN değişir (küçük..büyük): hepsi aynı
+                    // boyda görünmesin. İki hash kanalını çarparak kır. Aralık genel
+                    // olarak yukarı kaydırıldı (biraz daha iri kabarcıklar).
+                    float bszHash = frac(bh.x * 0.7 + bh.y * 1.3);
+                    float bubR = 0.014 + 0.050 * bszHash;
+                    float bcore = 1.0 - smoothstep(0.0, bubR, bd);
+                    float brim = 1.0 - smoothstep(0.0, 0.008, abs(bd - bubR));
+                    float bub = (bcore * 0.3 + brim) * bpresent;
+
+                    // Yüzeye yaklaşınca sön (üst %10'da patlar).
+                    float bubFade = 1.0 - smoothstep(surface - 0.10, surface, uv.y);
+
+                    float bubAmount = saturate(bub * bubEnv * bubFade) * 0.5;
+                    color.rgb = lerp(color.rgb, float3(1.0, 1.0, 1.0), bubAmount);
+                }
 
                 // Damlacıklar yüzey tonunda: sıvının üstünde kaldıkları yerde
                 // (inside≈0) renk katman döngüsünden gelir, açık tona çekilir.

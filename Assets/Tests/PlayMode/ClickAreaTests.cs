@@ -8,8 +8,8 @@ using UnityEngine.TestTools;
 namespace TubeSort.Tests.PlayMode
 {
     /// <summary>
-    /// Tüp tıklama alanı: cam gövde VE yaka tıklanabilir olmalı; ikisinin
-    /// dışı (yaka sprite'ının şeffaf köşeleri, tıpa bölgesi, gövdenin yanı)
+    /// Tüp tıklama alanı: cam gövde VE halka tıklanabilir olmalı; ikisinin
+    /// dışı (halkanın şeffaf köşeleri, tıpa bölgesi, gövdenin yanı)
     /// tıklanamaz kalmalı. ContainsPoint doğrudan test edilir —
     /// BoardView.HandleClick kaba collider elemesinden sonra kararı buna
     /// bırakır, yani tıklanabilirliğin gerçek kaynağı bu fonksiyondur.
@@ -20,10 +20,11 @@ namespace TubeSort.Tests.PlayMode
         private GameObject tubeObject;
         private TubeView tubeView;
 
-        // Yaka geometrisi (TubeView'daki private sabitlerin aynası):
-        // merkez y = gövde tepesi + Width·0.21; boyut 1.2 × (113/244).
-        private const float CollarCenterAboveTop = TubeView.Width * 0.21f;
-        private const float CollarHalfHeight = 113f / 244f * 0.5f;
+        // Halka geometrisi (TubeView'daki private sabitlerin aynası):
+        // halka 60 satır, dikiş tüp tepesinin 4 satır altında, PPU 126.67 →
+        // merkez y = tüp tepesi + (30−4)/PPU; yarı boy 30/PPU.
+        private const float RingCenterAboveTop = 26f / 126.67f;
+        private const float RingHalfHeight = 30f / 126.67f;
 
         [UnitySetUp]
         public IEnumerator SetUp()
@@ -63,14 +64,13 @@ namespace TubeSort.Tests.PlayMode
             var liquidShader = Resources.Load<Shader>("Liquid");
             var liquidMat = new Material(liquidShader);
 
-            var tubeSprite = Resources.Load<Sprite>(TubeView.TubeSpritePath);
-            var collarSprite = Resources.Load<Sprite>(TubeView.CollarSpritePath);
+            var bodySprite = Resources.Load<Sprite>(TubeView.TubeBodySpritePath);
+            var ringSprite = Resources.Load<Sprite>(TubeView.TubeRingSpritePath);
             var corkSprite = Resources.Load<Sprite>(TubeView.CorkSpritePath);
-            var frontTop = TubeView.CreateCollarFrontTopSprite(collarSprite);
-            var frontBottom = TubeView.CreateCollarFrontBottomSprite(collarSprite);
+            var seatedCorkSprite = Resources.Load<Sprite>(TubeView.CorkSeatedSpritePath);
 
             tubeView.Initialize(0, sourceTube, palette, sprite, liquidMat,
-                tubeSprite, collarSprite, frontTop, frontBottom, corkSprite);
+                bodySprite, ringSprite, corkSprite, seatedCorkSprite);
 
             yield return null;
         }
@@ -91,14 +91,14 @@ namespace TubeSort.Tests.PlayMode
         {
             yield return BuildTubeView(new Tube(4, 0, 0));
 
-            // Yaka gövdeden geniştir (1.2 > 0.8): x=±0.55 gövdenin tamamen
-            // dışında, yalnız yakanın üstünde — eskiden tıklanamazdı.
-            float collarY = tubeView.Height + CollarCenterAboveTop;
+            // Halka gövdeden geniştir (1.2 > 0.82): x=±0.55 gövdenin tamamen
+            // dışında, yalnız halkanın üstünde — eskiden tıklanamazdı.
+            float ringY = tubeView.Height + RingCenterAboveTop;
 
-            Assert.IsTrue(tubeView.ContainsPoint(new Vector3(0.55f, collarY)),
-                "Yakanın sağ kanadı tıklanabilir olmalı");
-            Assert.IsTrue(tubeView.ContainsPoint(new Vector3(-0.55f, collarY)),
-                "Yakanın sol kanadı tıklanabilir olmalı");
+            Assert.IsTrue(tubeView.ContainsPoint(new Vector3(0.55f, ringY)),
+                "Halkanın sağ kanadı tıklanabilir olmalı");
+            Assert.IsTrue(tubeView.ContainsPoint(new Vector3(-0.55f, ringY)),
+                "Halkanın sol kanadı tıklanabilir olmalı");
         }
 
         [UnityTest]
@@ -106,21 +106,21 @@ namespace TubeSort.Tests.PlayMode
         {
             yield return BuildTubeView(new Tube(4, 0, 0));
 
-            float collarY = tubeView.Height + CollarCenterAboveTop;
+            float ringY = tubeView.Height + RingCenterAboveTop;
 
-            // Yaka sprite sınırının köşesi: kutu içinde ama görünür silüet
+            // Halka sprite sınırının köşesi: kutu içinde ama görünür silüet
             // (stadyum) dışında — tıklama görselden taşmamalı.
             Assert.IsFalse(
-                tubeView.ContainsPoint(new Vector3(0.58f, collarY + 0.20f)),
-                "Yaka köşesindeki şeffaf bölge tıklanamaz olmalı");
+                tubeView.ContainsPoint(new Vector3(0.58f, ringY + 0.20f)),
+                "Halka köşesindeki şeffaf bölge tıklanamaz olmalı");
 
-            // Yakanın üstü (tıpa bölgesi): dahil değil.
+            // Halkanın üstü (tıpa bölgesi): dahil değil.
             Assert.IsFalse(
                 tubeView.ContainsPoint(
-                    new Vector3(0f, collarY + CollarHalfHeight + 0.07f)),
-                "Yaka üstü (tıpa bölgesi) tıklanamaz olmalı");
+                    new Vector3(0f, ringY + RingHalfHeight + 0.07f)),
+                "Halka üstü (tıpa bölgesi) tıklanamaz olmalı");
 
-            // Gövde hizasında, gövdenin yanı: yaka oraya inmez, cam da orada
+            // Gövde hizasında, gövdenin yanı: halka oraya inmez, cam da orada
             // değil — kaba kutu genişlese de SDF reddetmeli.
             Assert.IsFalse(
                 tubeView.ContainsPoint(new Vector3(0.55f, tubeView.Height * 0.5f)),

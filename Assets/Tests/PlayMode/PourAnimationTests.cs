@@ -69,16 +69,15 @@ namespace TubeSort.Tests.PlayMode
             var liquidShader = Resources.Load<Shader>("Liquid");
             var liquidMat = new Material(liquidShader);
 
-            // Cam/yaka/tıpa sprite'ları: BoardView'ın yaptığı gibi yüklenir,
-            // ön sandviç parçaları yakadan üretilir.
-            var tubeSprite = Resources.Load<Sprite>(TubeView.TubeSpritePath);
-            var collarSprite = Resources.Load<Sprite>(TubeView.CollarSpritePath);
+            // Sprite'lar BoardView'ın yaptığı gibi yüklenir (gövde+halka
+            // içeriğe göre ayrılmış ayrı asset'ler).
+            var bodySprite = Resources.Load<Sprite>(TubeView.TubeBodySpritePath);
+            var ringSprite = Resources.Load<Sprite>(TubeView.TubeRingSpritePath);
             var corkSprite = Resources.Load<Sprite>(TubeView.CorkSpritePath);
-            var frontTop = TubeView.CreateCollarFrontTopSprite(collarSprite);
-            var frontBottom = TubeView.CreateCollarFrontBottomSprite(collarSprite);
+            var seatedCorkSprite = Resources.Load<Sprite>(TubeView.CorkSeatedSpritePath);
 
-            tubeView.Initialize(0, tube, palette, sprite, liquidMat, tubeSprite,
-                collarSprite, frontTop, frontBottom, corkSprite);
+            tubeView.Initialize(0, tube, palette, sprite, liquidMat,
+                bodySprite, ringSprite, corkSprite, seatedCorkSprite);
 
             yield return null;
         }
@@ -246,33 +245,52 @@ namespace TubeSort.Tests.PlayMode
 
             tubeView.SetSortingOffset(10);
 
-            var renderers = tubeObject.GetComponentsInChildren<SpriteRenderer>();
-            bool foundGlass = false, foundLiquid = false;
+            // Katman sözleşmesi: sıvı 0 < akış-alt 1 < ring(yaka) 2 < cam 5 <
+            // tıpa 6. Tamamlanan tüpte tıpa (cork_seated) HER ŞEYİN ÖNÜNDE, opak;
+            // yakayı ring verir (arkada). Sıra bozulursa tıpa/yaka görünümü kırılır.
+            var renderers = tubeObject.GetComponentsInChildren<SpriteRenderer>(true);
+            bool foundGlass = false, foundLiquid = false, foundRing = false,
+                foundCork = false;
 
             foreach (var r in renderers)
             {
                 if (r.gameObject.name == "Glass")
                 {
-                    Assert.AreEqual(10, r.sortingOrder, "Glass sorting order yanlış");
+                    Assert.AreEqual(15, r.sortingOrder, "Glass sorting order yanlış");
                     foundGlass = true;
                 }
                 else if (r.gameObject.name == "Liquid")
                 {
-                    Assert.AreEqual(11, r.sortingOrder, "Liquid sorting order yanlış");
+                    Assert.AreEqual(10, r.sortingOrder, "Liquid sorting order yanlış");
                     foundLiquid = true;
+                }
+                else if (r.gameObject.name == "Ring")
+                {
+                    Assert.AreEqual(12, r.sortingOrder, "Ring sorting order yanlış");
+                    foundRing = true;
+                }
+                else if (r.gameObject.name == "Cork")
+                {
+                    Assert.AreEqual(16, r.sortingOrder, "Cork sorting order yanlış");
+                    foundCork = true;
                 }
             }
 
-            Assert.IsTrue(foundGlass && foundLiquid, "Renderer bulunamadı");
+            Assert.IsTrue(foundGlass && foundLiquid && foundRing && foundCork,
+                "Renderer bulunamadı");
 
             // Sıfırla ve kontrol et.
             tubeView.SetSortingOffset(0);
             foreach (var r in renderers)
             {
                 if (r.gameObject.name == "Glass")
-                    Assert.AreEqual(0, r.sortingOrder);
+                    Assert.AreEqual(5, r.sortingOrder);
                 else if (r.gameObject.name == "Liquid")
-                    Assert.AreEqual(1, r.sortingOrder);
+                    Assert.AreEqual(0, r.sortingOrder);
+                else if (r.gameObject.name == "Ring")
+                    Assert.AreEqual(2, r.sortingOrder);
+                else if (r.gameObject.name == "Cork")
+                    Assert.AreEqual(6, r.sortingOrder);
             }
         }
     }

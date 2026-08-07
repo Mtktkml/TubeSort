@@ -18,9 +18,9 @@ namespace TubeSort.Game
         private static readonly int CenterYId = Shader.PropertyToID("_CenterY");
 
         // Akış İKİ parça: kaynak tarafı her şeyin önünde, hedef tarafı hedefin
-        // yaka sandviçinin içinde (tıpa katmanı). Tek quad iki tüpün farklı
-        // katman ihtiyacını aynı anda karşılayamaz: hedef tarafı yakanın
-        // altında kalmalı, kaynak tarafı üstünde.
+        // CAMININ VE HALKASININ ARKASINDA (order 1: sıvı 0 ile cam 2 arası).
+        // Tek quad iki tüpün farklı katman ihtiyacını aynı anda karşılayamaz:
+        // hedef tarafı camın altında kalmalı, kaynak tarafı her şeyin üstünde.
         private SpriteRenderer quadTop;      // ağızdan hedef deliğe
         private SpriteRenderer quadBottom;   // hedef delikten sıvı yüzeyine
         private MaterialPropertyBlock properties;
@@ -35,9 +35,12 @@ namespace TubeSort.Game
         /// kullanır (yüzey en az bu kadar dipten yukarıda tutulur).</summary>
         public const float SurfacePlunge = 0.07f;
 
-        /// <summary>Üst kolonun ağzın içine doğru uzama payı: tepe ucu deliğin
-        /// karanlığına gömülür, kaynaktaki sıvıyla bağlantı kopuk görünmez.</summary>
-        private const float TopOverlap = 0.08f;
+        /// <summary>Üst kolonun ağzın içine doğru uzama payı: tepe ucu deliğe
+        /// gömülür, kaynaktaki sıvıyla bağlantı kopuk görünmez. Küçük tutulur
+        /// (0.08'di): kolon dudaktan bir tık AŞAĞIDA başlayınca akış daha
+        /// doğal okunuyor (kullanıcı ayarı) — sıvıyla bağlantıyı zaten
+        /// _MouthOverflow tırmanması kuruyor.</summary>
+        private const float TopOverlap = 0.02f;
 
         /// <summary>İki parçanın birleşim yerinde birbirinin üstüne binme payı:
         /// köşeli uçlar aynı renk/faz ile örtüşür, dikiş görünmez.</summary>
@@ -51,20 +54,22 @@ namespace TubeSort.Game
             properties = new MaterialPropertyBlock();
 
             // Üst parça: kaynak tüpün TÜM parçalarının önünde. Kaynak dökme
-            // sırasında bir offset bandı alır (10/20/…); üst parça o kaynağın ön
-            // dilimlerinin (offset+4) hemen üstünde olmalı. Sıra her dökmede
+            // sırasında bir offset bandı alır (10/20/…); üst parça o kaynağın
+            // en üst katmanının (pus, offset+5) üstünde olmalı. Sıra her dökmede
             // BoardView'dan SetSortingOrders ile atanır; buradaki 15 varsayılan.
             quadTop = CreateQuad(unitSprite, streamMaterial, "StreamTop", 15);
 
-            // Alt parça: hedefin yaka sandviçinde TIPA katmanı (order 3, arka
-            // yaka 2 ile ön dilimler 4 arası). Hedef offset almaz (dökülmüyor).
-            // Dökme sırasında hedefin ön dilimleri açılır (SetMouthOverlay):
-            // kolon delikten girer, bej bandın arkasında kaybolur, tüpte görünür.
-            quadBottom = CreateQuad(unitSprite, streamMaterial, "StreamBottom", 3);
+            // Alt parça: hedefin CAMININ ARKASINDA (order 1, sıvı 0 ile cam 2
+            // arası; hedef offset almaz — dökülmüyor). Kolon deliğe girip camın
+            // içinden süzülerek yüzeye iner: cam yarı saydam olduğundan kolon
+            // görünür, halkanın opak ön dudağı ve camın parlamaları onu doğal
+            // biçimde örter — hedefte hiçbir katman açıp kapamak gerekmez.
+            quadBottom = CreateQuad(unitSprite, streamMaterial, "StreamBottom", 1);
         }
 
         /// <summary>Akışın çizim sırasını kaynağın offset bandına göre ayarlar:
-        /// üst parça kaynağın önünde (offset+5), alt parça hedefin sandviçinde.</summary>
+        /// üst parça kaynağın önünde (offset+7), alt parça hedefin camının
+        /// arkasında (1).</summary>
         public void SetSortingOrders(int topOrder, int bottomOrder)
         {
             quadTop.sortingOrder = topOrder;

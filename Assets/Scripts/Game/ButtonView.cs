@@ -3,39 +3,36 @@ using UnityEngine;
 namespace TubeSort.Game
 {
     /// <summary>
-    /// Level butonları (önceki level, restart, +tüp) için ortak görsel.
-    /// Görselleri koddan çizilir (sprite asset'i yok).
+    /// "Önceki level" nav butonu (test amaçlı, sağ üst köşe). Görseli koddan
+    /// çizilen sola bakan ok (sprite asset'i yok). PilotNextButtonView'in aynası;
+    /// tıklama yakalama BoardView'dadır (buton yalnız görsel + collider taşır).
+    /// Tahtanın çocuğu değildir; tahta ölçeklense de sabit boyutta kalır.
     ///
-    /// UndoButtonView / PilotNextButtonView ile aynı desen (görsel + collider
-    /// taşır, tıklama yakalama BoardView'da); farkı birden çok butonu tek sınıfta
-    /// <see cref="Kind"/> ile toplaması.
+    /// (Eski undo/restart/+tüp aksiyonları artık alt aksiyon çubuğunda —
+    /// ButtonBarView; bu sınıf yalnız level gezinme okuna indirgendi.)
     /// </summary>
     public class ButtonView : MonoBehaviour
     {
-        public enum ButtonKind { Previous, Restart, AddTube }
-
-        /// <summary>Butonun dünya birimindeki boyu (undo/next ile aynı).</summary>
+        /// <summary>Butonun dünya birimindeki boyu (next ile aynı).</summary>
         public const float Size = 0.8f;
 
         private const int TextureSize = 32;
-
-        public ButtonKind Kind { get; private set; }
 
         private Texture2D texture;
         private Sprite sprite;
         private SpriteRenderer spriteRenderer;
 
-        public void Initialize(ButtonKind kind)
+        public void Initialize()
         {
-            Kind = kind;
-            texture = CreateTexture(kind);
+            texture = CreateTexture();
             sprite = Sprite.Create(texture,
                 new Rect(0f, 0f, TextureSize, TextureSize),
                 new Vector2(0.5f, 0.5f), TextureSize / Size);
 
             spriteRenderer = gameObject.AddComponent<SpriteRenderer>();
             spriteRenderer.sprite = sprite;
-            spriteRenderer.color = TintFor(kind);
+            // Yeşil: next ile aynı (nav çifti). SpriteRenderer.color renk uzayını Unity çevirir.
+            spriteRenderer.color = new Color(0.30f, 0.78f, 0.45f, 0.92f);
             spriteRenderer.sortingOrder = 100; // tüplerin ve akışın üstünde
 
             var collider = gameObject.AddComponent<BoxCollider2D>();
@@ -52,19 +49,7 @@ namespace TubeSort.Game
             Destroy(texture);
         }
 
-        /// <summary>Buton renkleri: her tür birbirinden ayrışsın.</summary>
-        private static Color TintFor(ButtonKind kind)
-        {
-            switch (kind)
-            {
-                case ButtonKind.Previous: return new Color(0.30f, 0.78f, 0.45f, 0.92f); // next ile ayni yesil (nav cifti)
-                case ButtonKind.Restart:  return new Color(0.95f, 0.75f, 0.30f, 0.92f); // sari
-                case ButtonKind.AddTube:  return new Color(0.40f, 0.70f, 0.95f, 0.92f); // mavi
-                default:                  return Color.white;
-            }
-        }
-
-        private static Texture2D CreateTexture(ButtonKind kind)
+        private static Texture2D CreateTexture()
         {
             var tex = new Texture2D(TextureSize, TextureSize, TextureFormat.RGBA32, false);
 
@@ -73,12 +58,7 @@ namespace TubeSort.Game
                 for (int y = 0; y < TextureSize; y++)
                     tex.SetPixel(x, y, clear);
 
-            switch (kind)
-            {
-                case ButtonKind.Previous: DrawPrevIcon(tex); break;
-                case ButtonKind.Restart:  DrawRestartIcon(tex); break;
-                case ButtonKind.AddTube:  DrawPlusIcon(tex); break;
-            }
+            DrawPrevIcon(tex);
 
             tex.Apply();
             return tex;
@@ -105,43 +85,6 @@ namespace TubeSort.Game
             // Kuyruk: okun sağında dikdörtgen.
             for (int x = 19; x <= 28; x++)
                 for (int y = centerY - 4; y <= centerY + 4; y++)
-                    tex.SetPixel(x, y, Color.white);
-        }
-
-        /// <summary>"Restart" (↻): kesikli halka + ok başı — döngü/yeniden.</summary>
-        private static void DrawRestartIcon(Texture2D tex)
-        {
-            const float cx = 16f, cy = 16f, r = 10f;
-
-            for (int x = 0; x < TextureSize; x++)
-                for (int y = 0; y < TextureSize; y++)
-                {
-                    float dx = x - cx, dy = y - cy;
-                    float dist = Mathf.Sqrt(dx * dx + dy * dy);
-                    float ang = Mathf.Atan2(dy, dx) * Mathf.Rad2Deg; // -180..180
-                    // Üst-sağda ~60°'lik boşluk (ok başına yer).
-                    bool inGap = ang > 20f && ang < 80f;
-                    if (dist >= r - 1.6f && dist <= r + 1.6f && !inGap)
-                        tex.SetPixel(x, y, Color.white);
-                }
-
-            // Ok başı: boşluğun üst ucunda küçük dolu üçgen.
-            for (int x = 20; x <= 26; x++)
-                for (int y = 22; y <= 22 + (26 - x); y++)
-                    tex.SetPixel(x, y, Color.white);
-        }
-
-        /// <summary>"+Tüp" (+): artı işareti.</summary>
-        private static void DrawPlusIcon(Texture2D tex)
-        {
-            const int c = TextureSize / 2;
-
-            for (int x = 6; x <= 25; x++)       // yatay kol
-                for (int y = c - 3; y <= c + 3; y++)
-                    tex.SetPixel(x, y, Color.white);
-
-            for (int y = 6; y <= 25; y++)       // dikey kol
-                for (int x = c - 3; x <= c + 3; x++)
                     tex.SetPixel(x, y, Color.white);
         }
     }
